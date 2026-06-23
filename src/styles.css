@@ -134,19 +134,35 @@
 
 /* Polyrhythm app tokens */
 :root {
-  --pr-bg: oklch(0.16 0.012 250);
-  --pr-panel: oklch(0.21 0.014 250);
-  --pr-panel-2: oklch(0.25 0.016 250);
-  --pr-line: oklch(0.32 0.018 250);
-  --pr-text: oklch(0.96 0.005 250);
-  --pr-muted: oklch(0.65 0.02 250);
-  --pr-lane-a: oklch(0.78 0.17 70);
-  --pr-lane-b: oklch(0.78 0.16 160);
-  --pr-lane-c: oklch(0.75 0.18 320);
-  --pr-accent: oklch(0.85 0.15 90);
-  --pr-glow-a: 0 0 24px oklch(0.78 0.17 70 / 0.55);
-  --pr-glow-b: 0 0 24px oklch(0.78 0.16 160 / 0.55);
-  --pr-glow-c: 0 0 24px oklch(0.75 0.18 320 / 0.55);
+  --pr-bg: oklch(0.13 0.012 260);
+  --pr-bg-2: oklch(0.09 0.01 260);
+  --pr-panel: oklch(0.17 0.013 260 / 0.78);
+  --pr-panel-2: oklch(0.22 0.015 260);
+  --pr-line: oklch(0.32 0.018 260 / 0.55);
+  --pr-line-soft: oklch(0.32 0.018 260 / 0.22);
+  --pr-text: oklch(0.96 0.005 260);
+  --pr-muted: oklch(0.62 0.022 260);
+  --pr-melo: oklch(0.82 0.18 195);
+  --pr-bass: oklch(0.72 0.22 310);
+  --pr-atmo: oklch(0.86 0.16 85);
+  --pr-accent: oklch(0.88 0.15 90);
+}
+
+.pr-knob-track { stroke: var(--pr-line); }
+.pr-knob-arc { stroke: var(--pr-accent); }
+
+input[type="range"].pr-slider {
+  appearance: none;
+  height: 2px;
+  background: var(--pr-line);
+  border-radius: 999px;
+}
+input[type="range"].pr-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px; height: 12px;
+  border-radius: 999px;
+  background: var(--pr-accent);
+  box-shadow: 0 0 12px oklch(0.88 0.15 90 / 0.6);
 }
 
 @layer base {

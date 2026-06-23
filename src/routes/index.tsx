@@ -1407,49 +1407,56 @@ function wheelHandleClick(wh: WheelState, px: number, py: number, W: number, H: 
 
 function drawWheelScene(
   ctx: CanvasRenderingContext2D, W: number, H: number, wh: WheelState, voices: VoiceSel,
+  _dt: number = 0, hoverRingId: string | null = null,
 ) {
   const cx = W / 2, cy = H / 2;
   const maxR = Math.min(W, H) / 2;
 
-  // 1) rings (faint stroke, brighten with flash)
+  // 1) rings — restrained 1px hairlines, brighten on flash or hover
   for (const ring of wh.rings) {
     const R = ringRadiusPx(ring, W, H);
-    const color = voiceSlotColor(ring.voiceSlot, true);
-    ctx.strokeStyle = color.replace("a", (0.18 + ring.flash * 0.5).toFixed(3));
-    ctx.lineWidth = 1 + ring.flash * 1.2;
+    const hovered = ring.id === hoverRingId;
+    const base = hovered ? 0.22 : 0.08;
+    ctx.strokeStyle = `rgba(255,255,255,${(base + ring.flash * 0.35).toFixed(3)})`;
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, TAU);
     ctx.stroke();
   }
 
-  // 2) lines (chord across the wheel)
+  // 2) trigger lines — quiet hairline chords with rim ticks
   for (const line of wh.lines) {
     const x1 = cx + Math.cos(line.angle) * maxR * 0.96;
     const y1 = cy + Math.sin(line.angle) * maxR * 0.96;
     const x2 = cx - Math.cos(line.angle) * maxR * 0.96;
     const y2 = cy - Math.sin(line.angle) * maxR * 0.96;
-    // soft glow
-    ctx.strokeStyle = `oklch(0.92 0.05 80 / ${(0.18 + line.flash * 0.55).toFixed(3)})`;
-    ctx.lineWidth = 1 + line.flash * 1.8;
+    ctx.strokeStyle = `rgba(255,255,255,${(0.12 + line.flash * 0.35).toFixed(3)})`;
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
     ctx.stroke();
-    // sparks at crossing points
+    // ink-bleed ripple at each crossing (Fluid Inversion)
     for (const s of line.sparks) {
       const sx = cx + Math.cos(s.x) * s.y * (Math.min(W, H) / 2);
       const sy = cy + Math.sin(s.x) * s.y * (Math.min(W, H) / 2);
-      const a = Math.max(0, s.t / 0.6);
-      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, 22 * a + 4);
-      g.addColorStop(0, `oklch(1 0.04 90 / ${(0.7 * a).toFixed(3)})`);
-      g.addColorStop(1, "oklch(1 0.04 90 / 0)");
+      // s.t starts at 0.6 (life). Convert to elapsed k in [0..1] (life 0.5s scaled).
+      const elapsed = 0.6 - s.t;
+      const k = Math.max(0, Math.min(1, elapsed / 0.5));
+      const radius = 40 * (1 - Math.pow(1 - k, 3)); // exp ease-out
+      const alpha = Math.pow(1 - k, 2.2) * 0.55;
+      if (alpha < 0.01) continue;
+      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, Math.max(2, radius));
+      g.addColorStop(0, `rgba(255,255,255,0)`);
+      g.addColorStop(0.55, `rgba(255,255,255,${(alpha * 0.9).toFixed(3)})`);
+      g.addColorStop(1, `rgba(255,255,255,0)`);
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.arc(sx, sy, 22 * a + 4, 0, TAU);
+      ctx.arc(sx, sy, Math.max(2, radius), 0, TAU);
       ctx.fill();
     }
   }
 
-  // 3) notes
+  // 3) notes — soft discs + kinetic trails
   for (const ring of wh.rings) {
     const R = ringRadiusPx(ring, W, H);
     const sign = ring.direction;
@@ -1459,24 +1466,100 @@ function drawWheelScene(
       const nx = cx + Math.cos(w) * R;
       const ny = cy + Math.sin(w) * R;
       const inten = n.flash;
-      // outer halo
-      const baseR = 5 + inten * 12;
-      const g = ctx.createRadialGradient(nx, ny, 0, nx, ny, baseR + 14);
-      g.addColorStop(0, color.replace("a", (0.9 * (0.45 + inten * 0.55)).toFixed(3)));
-      g.addColorStop(0.5, color.replace("a", (0.25 * (0.3 + inten * 0.7)).toFixed(3)));
+
+      // kinetic trail (6 samples behind the note)
+      const trail = getTrail(n);
+      // draw oldest → newest
+      for (let i = 0; i < trail.length; i++) {
+        const p = trail[i];
+        const tk = (i + 1) / (trail.length + 1);
+        const tr = 1.4 + tk * 2.2;
+        const ta = 0.04 + tk * 0.08;
+        ctx.fillStyle = color.replace("a", ta.toFixed(3));
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, tr, 0, TAU);
+        ctx.fill();
+      }
+      // sample current position into trail (cap length)
+      trail.push({ x: nx, y: ny });
+      if (trail.length > 6) trail.shift();
+
+      // soft note disc
+      const baseR = 3.5 + inten * 5;
+      const g = ctx.createRadialGradient(nx, ny, 0, nx, ny, baseR + 10);
+      g.addColorStop(0, color.replace("a", (0.85).toFixed(3)));
+      g.addColorStop(0.45, color.replace("a", (0.3 + inten * 0.4).toFixed(3)));
       g.addColorStop(1, color.replace("a", "0"));
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.arc(nx, ny, baseR + 14, 0, TAU);
+      ctx.arc(nx, ny, baseR + 10, 0, TAU);
       ctx.fill();
-      // crisp ring
-      ctx.strokeStyle = color.replace("a", (0.65 + inten * 0.35).toFixed(3));
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.arc(nx, ny, 4.5, 0, TAU);
-      ctx.stroke();
     }
   }
+}
+
+/* ============================================================
+ * Art surface helpers (modular for future sequencers)
+ * ============================================================ */
+
+const noteTrails = new WeakMap<WheelNote, { x: number; y: number }[]>();
+function getTrail(n: WheelNote): { x: number; y: number }[] {
+  let t = noteTrails.get(n);
+  if (!t) { t = []; noteTrails.set(n, t); }
+  return t;
+}
+
+function buildGrainPattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
+  const size = 256;
+  const off = document.createElement("canvas");
+  off.width = size; off.height = size;
+  const octx = off.getContext("2d");
+  if (!octx) return null;
+  const img = octx.createImageData(size, size);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = (Math.random() * 255) | 0;
+    img.data[i] = v;
+    img.data[i + 1] = v;
+    img.data[i + 2] = v;
+    img.data[i + 3] = 10; // ~4% alpha grain
+  }
+  octx.putImageData(img, 0, 0);
+  return ctx.createPattern(off, "repeat");
+}
+
+function paintArtBackground(
+  ctx: CanvasRenderingContext2D, W: number, H: number,
+  patternRef: { current: CanvasPattern | null },
+) {
+  // charcoal base
+  ctx.fillStyle = "#0b0b0d";
+  ctx.fillRect(0, 0, W, H);
+  // vignette
+  const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.15, W / 2, H / 2, Math.max(W, H) * 0.75);
+  vg.addColorStop(0, "rgba(0,0,0,0)");
+  vg.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+  // grain
+  if (!patternRef.current) patternRef.current = buildGrainPattern(ctx);
+  if (patternRef.current) {
+    ctx.fillStyle = patternRef.current;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function drawGhostReadout(
+  ctx: CanvasRenderingContext2D, W: number, H: number, periodSec: number, opacity: number,
+) {
+  const txt = `${periodSec.toFixed(2).padStart(5, "0")}s`;
+  const size = Math.max(120, Math.min(280, Math.min(W, H) * 0.22));
+  ctx.save();
+  ctx.fillStyle = `rgba(255,255,255,${(0.05 * opacity).toFixed(3)})`;
+  ctx.font = `300 ${size}px "Inter", system-ui, -apple-system, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(txt, W / 2, H / 2);
+  ctx.restore();
 }
 
 /* ---- Wheel DOM overlays ---- */

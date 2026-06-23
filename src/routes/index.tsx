@@ -840,6 +840,7 @@ function PhaseApp() {
   /* ---- Transport ---- */
   const togglePlay = async () => {
     const a = ensureAudio();
+    applyFxState(a, fxState);
     if (a.ctx.state === "suspended") await a.ctx.resume();
     const e = engineRef.current;
     if (!playing) {

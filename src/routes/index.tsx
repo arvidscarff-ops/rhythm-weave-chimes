@@ -1859,7 +1859,7 @@ function LineHandle({
  * ============================================================ */
 
 function ArtDock({
-  playing, bpm, onTogglePlay, onAddRing, onAddLine, onClearLines, onBpm,
+  playing, bpm, onTogglePlay, onAddRing, onAddLine, onClearLines, onBpm, fxOpen, onToggleFx,
 }: {
   playing: boolean;
   bpm: number;
@@ -1868,6 +1868,8 @@ function ArtDock({
   onAddLine: () => void;
   onClearLines: () => void;
   onBpm: (v: number) => void;
+  fxOpen: boolean;
+  onToggleFx: () => void;
 }) {
   return (
     <div
@@ -1894,6 +1896,17 @@ function ArtDock({
       </DockBtn>
       <DockBtn label="clear lines" onClick={onClearLines}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M6 6l12 12M6 18L18 6" /></svg>
+      </DockBtn>
+      <span className="h-4 w-px bg-white/10" />
+      <DockBtn label="fx" onClick={onToggleFx} active={fxOpen}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M4 7h10M18 7h2" />
+          <circle cx="16" cy="7" r="1.6" fill="currentColor" />
+          <path d="M4 12h4M12 12h8" />
+          <circle cx="10" cy="12" r="1.6" fill="currentColor" />
+          <path d="M4 17h12M20 17h0" />
+          <circle cx="18" cy="17" r="1.6" fill="currentColor" />
+        </svg>
       </DockBtn>
       <span className="h-4 w-px bg-white/10" />
       <div className="flex items-center gap-3">

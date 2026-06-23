@@ -26,7 +26,7 @@ export const Route = createFileRoute("/")({
  * ============================================================ */
 
 type VoiceKind = "chime" | "pluck" | "bell" | "pad" | "bass" | "none";
-type SceneKind = "polygon" | "sine" | "lissajous";
+type SceneKind = "wheel" | "polygon" | "sine" | "lissajous";
 type BgKind = "void" | "grid" | "drift";
 
 type Knobs = {
@@ -70,6 +70,8 @@ type EngineState = {
   // start
   startedAt: number; // audioCtx time when transport started
   paused: boolean;
+  // wheel
+  wheel: WheelState;
 };
 
 type AudioGraph = {
@@ -92,8 +94,97 @@ type AudioGraph = {
  * ============================================================ */
 
 const VOICES: VoiceKind[] = ["chime", "pluck", "bell", "pad", "bass", "none"];
-const SCENES: SceneKind[] = ["polygon", "sine", "lissajous"];
+const SCENES: SceneKind[] = ["wheel", "polygon", "sine", "lissajous"];
 const BACKGROUNDS: BgKind[] = ["void", "grid", "drift"];
+type VoiceSlot = "melo" | "bass" | "atmo";
+const VOICE_SLOTS: VoiceSlot[] = ["melo", "bass", "atmo"];
+
+type WheelNote = {
+  id: string;
+  angle: number;
+  pitchIndex: number;
+  prevWorld: number;
+  flash: number;
+};
+
+type WheelRing = {
+  id: string;
+  radiusFactor: number;
+  beats: number;
+  subdivision: number;
+  direction: 1 | -1;
+  phase: number;
+  voiceSlot: VoiceSlot;
+  notes: WheelNote[];
+  flash: number;
+};
+
+type WheelLine = {
+  id: string;
+  angle: number;
+  flash: number;
+  sparks: { x: number; y: number; t: number }[];
+};
+
+type WheelState = {
+  rings: WheelRing[];
+  lines: WheelLine[];
+  lastFire: Map<string, number>;
+};
+
+let _uid = 0;
+const uid = (p = "id") => `${p}_${++_uid}`;
+
+function voiceSlotColor(slot: VoiceSlot, withAlpha = false): string {
+  const base =
+    slot === "melo" ? "oklch(0.82 0.18 195" :
+    slot === "bass" ? "oklch(0.72 0.22 310" :
+                      "oklch(0.86 0.16 85";
+  return withAlpha ? `${base} / a)` : `${base})`;
+}
+
+function resolveVoice(slot: VoiceSlot, sel: VoiceSel): VoiceKind {
+  return slot === "melo" ? sel.melo : slot === "bass" ? sel.bass : sel.atmo;
+}
+
+function ringBeatsPerRotation(r: WheelRing) {
+  // 4/4 = 4 beats, 3/4 = 3 beats, 11/13 ≈ 3.385 beats
+  return (r.beats / r.subdivision) * 4;
+}
+
+function ringPeriodSec(r: WheelRing, bpm: number) {
+  return (ringBeatsPerRotation(r) * 60) / Math.max(1, bpm);
+}
+
+function makeSeedWheel(): WheelState {
+  const mkRing = (
+    radiusFactor: number, beats: number, subdivision: number,
+    direction: 1 | -1, voiceSlot: VoiceSlot, noteAngles: number[], pitchBase: number,
+  ): WheelRing => ({
+    id: uid("ring"),
+    radiusFactor, beats, subdivision, direction,
+    phase: 0, voiceSlot, flash: 0,
+    notes: noteAngles.map((a, i) => ({
+      id: uid("n"), angle: a, pitchIndex: pitchBase + i,
+      prevWorld: a, flash: 0,
+    })),
+  });
+  const tau = Math.PI * 2;
+  return {
+    rings: [
+      mkRing(0.78, 4, 4, 1,  "melo",
+        [0, tau * 0.25, tau * 0.5, tau * 0.75], 7),
+      mkRing(0.55, 3, 4, -1, "bass",
+        [0, tau / 3, (tau * 2) / 3], 3),
+      mkRing(0.32, 5, 8, 1,  "atmo",
+        [0, tau / 5, (tau * 2) / 5, (tau * 3) / 5, (tau * 4) / 5], 10),
+    ],
+    lines: [
+      { id: uid("ln"), angle: Math.PI / 2, flash: 0, sparks: [] }, // vertical
+    ],
+    lastFire: new Map(),
+  };
+}
 
 // pentatonic minor across octaves starting at A2
 const SCALE_DEG = [0, 3, 5, 7, 10];

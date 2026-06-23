@@ -471,8 +471,14 @@ function Dropdown<T extends string>({
 
 function PhaseApp() {
   const [playing, setPlaying] = useState(false);
-  const [scene, setScene] = useState<SceneKind>("polygon");
+  const [scene, setScene] = useState<SceneKind>("wheel");
   const [background, setBackground] = useState<BgKind>("drift");
+  const [bpm, setBpm] = useState(90);
+  // topology bump: rings/lines/notes counts so DOM overlays re-render
+  const [topo, setTopo] = useState(0);
+  const bumpTopo = useCallback(() => setTopo((x) => x + 1), []);
+  // cached canvas client rect for positioning DOM overlays
+  const [canvasRect, setCanvasRect] = useState({ w: 0, h: 0 });
   const [voices, setVoices] = useState<VoiceSel>({
     melo: "chime",
     bass: "bass",
@@ -495,6 +501,7 @@ function PhaseApp() {
   const bgRef = useRef(background); bgRef.current = background;
   const voicesRef = useRef(voices); voicesRef.current = voices;
   const knobsRef = useRef(knobs); knobsRef.current = knobs;
+  const bpmRef = useRef(bpm); bpmRef.current = bpm;
 
   const audioRef = useRef<AudioGraph | null>(null);
   const engineRef = useRef<EngineState>({

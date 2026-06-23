@@ -859,6 +859,11 @@ function PhaseApp() {
     const l = wh.lines.find((x) => x.id === id);
     if (l) { l.angle = angle; bumpTopo(); }
   };
+  const clearLines = () => {
+    const wh = engineRef.current.wheel;
+    wh.lines = [];
+    bumpTopo();
+  };
   const updateRing = (id: string, patch: Partial<WheelRing>) => {
     const wh = engineRef.current.wheel;
     const r = wh.rings.find((x) => x.id === id);

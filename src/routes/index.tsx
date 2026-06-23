@@ -519,6 +519,9 @@ function PhaseApp() {
     wheel: makeSeedWheel(),
   });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const grainPatternRef = useRef<CanvasPattern | null>(null);
+  const hoverRingIdRef = useRef<string | null>(null);
+  const hoverOpacityRef = useRef<number>(0);
 
   /* ---- Audio graph init ---- */
   const ensureAudio = useCallback((): AudioGraph => {

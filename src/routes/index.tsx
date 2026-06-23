@@ -785,6 +785,65 @@ function PhaseApp() {
   const setKnob = (key: keyof Knobs, val: number) =>
     setKnobs((k) => ({ ...k, [key]: val }));
 
+  const isWheel = scene === "wheel";
+
+  /* ---- Wheel pointer interaction ---- */
+  const onCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (sceneRef.current !== "wheel") return;
+    const c = canvasRef.current; if (!c) return;
+    const rect = c.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const handled = wheelHandleClick(engineRef.current.wheel, px, py, rect.width, rect.height);
+    if (handled) bumpTopo();
+  };
+
+  /* ---- Wheel ring/line mutators ---- */
+  const addRing = () => {
+    const wh = engineRef.current.wheel;
+    const used = new Set(wh.rings.map((r) => r.radiusFactor));
+    const candidates = [0.85, 0.7, 0.55, 0.4, 0.25, 0.95, 0.48, 0.62];
+    const rf = candidates.find((c) => !used.has(c)) ?? 0.5;
+    const slot = VOICE_SLOTS[wh.rings.length % 3];
+    wh.rings.push({
+      id: uid("ring"),
+      radiusFactor: rf,
+      beats: 4, subdivision: 4, direction: wh.rings.length % 2 === 0 ? 1 : -1,
+      phase: 0, voiceSlot: slot, notes: [], flash: 0,
+    });
+    bumpTopo();
+  };
+  const removeRing = (id: string) => {
+    const wh = engineRef.current.wheel;
+    wh.rings = wh.rings.filter((r) => r.id !== id);
+    bumpTopo();
+  };
+  const addLine = () => {
+    const wh = engineRef.current.wheel;
+    const presets = [Math.PI / 2, 0, Math.PI / 4, (3 * Math.PI) / 4, Math.PI / 6, (5 * Math.PI) / 6];
+    const used = new Set(wh.lines.map((l) => Math.round(l.angle * 1000)));
+    const a = presets.find((p) => !used.has(Math.round(p * 1000))) ?? Math.random() * Math.PI;
+    wh.lines.push({ id: uid("ln"), angle: a, flash: 0, sparks: [] });
+    bumpTopo();
+  };
+  const removeLine = (id: string) => {
+    const wh = engineRef.current.wheel;
+    wh.lines = wh.lines.filter((l) => l.id !== id);
+    bumpTopo();
+  };
+  const setLineAngle = (id: string, angle: number) => {
+    const wh = engineRef.current.wheel;
+    const l = wh.lines.find((x) => x.id === id);
+    if (l) { l.angle = angle; bumpTopo(); }
+  };
+  const updateRing = (id: string, patch: Partial<WheelRing>) => {
+    const wh = engineRef.current.wheel;
+    const r = wh.rings.find((x) => x.id === id);
+    if (!r) return;
+    Object.assign(r, patch);
+    bumpTopo();
+  };
+
   return (
     <div
       className="min-h-screen w-full flex flex-col"
@@ -823,12 +882,16 @@ function PhaseApp() {
           <Knob label="rev-size" value={knobs.revSize} min={0.05} max={1.2} defaultValue={0.55}
                 display={(v) => `${Math.round(v * 100)}`}
                 onChange={(v) => setKnob("revSize", v)} />
-          <Knob label="speed" value={knobs.speed} min={0.25} max={2.5} defaultValue={1}
-                display={(v) => v.toFixed(2)}
-                onChange={(v) => setKnob("speed", v)} />
-          <Knob label="multiply" value={knobs.multiply} min={2} max={12} step={1} integer defaultValue={5}
-                display={(v) => `${Math.round(v)}`}
-                onChange={(v) => setKnob("multiply", v)} />
+          {!isWheel && (
+            <>
+              <Knob label="speed" value={knobs.speed} min={0.25} max={2.5} defaultValue={1}
+                    display={(v) => v.toFixed(2)}
+                    onChange={(v) => setKnob("speed", v)} />
+              <Knob label="multiply" value={knobs.multiply} min={2} max={12} step={1} integer defaultValue={5}
+                    display={(v) => `${Math.round(v)}`}
+                    onChange={(v) => setKnob("multiply", v)} />
+            </>
+          )}
           <Knob label="fx-1" value={knobs.fx1} min={200} max={8000} step={10} defaultValue={2400}
                 display={(v) => `${Math.round(v / 100)}`}
                 onChange={(v) => setKnob("fx1", v)} />
@@ -859,9 +922,47 @@ function PhaseApp() {
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full block"
-          style={{ background: "oklch(0.09 0.01 260)" }}
+          style={{ background: "oklch(0.09 0.01 260)", cursor: isWheel ? "crosshair" : "default" }}
+          onPointerDown={onCanvasPointerDown}
         />
+        {isWheel && (
+          <WheelOverlays
+            wheel={engineRef.current.wheel}
+            topo={topo}
+            canvasW={canvasRect.w}
+            canvasH={canvasRect.h}
+            onAddRing={addRing}
+            onAddLine={addLine}
+            onRemoveRing={removeRing}
+            onRemoveLine={removeLine}
+            onSetLineAngle={setLineAngle}
+            onUpdateRing={updateRing}
+          />
+        )}
       </main>
+
+      {/* BOTTOM BPM DOCK */}
+      <footer
+        className="flex items-center gap-4 px-5 py-2.5 border-t"
+        style={{
+          background: "linear-gradient(0deg, oklch(0.16 0.013 260) 0%, oklch(0.13 0.012 260) 100%)",
+          borderColor: "var(--pr-line)",
+        }}
+      >
+        <div className="text-[9px] uppercase tracking-[0.2em]" style={{ color: "var(--pr-muted)" }}>
+          tempo
+        </div>
+        <input
+          type="range"
+          min={40} max={220} step={1}
+          value={bpm}
+          onChange={(e) => setBpm(parseInt(e.target.value, 10))}
+          className="pr-slider flex-1"
+        />
+        <div className="text-sm tabular-nums tracking-wider" style={{ color: "var(--pr-text)" }}>
+          {bpm} <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "var(--pr-muted)" }}>bpm</span>
+        </div>
+      </footer>
     </div>
   );
 }

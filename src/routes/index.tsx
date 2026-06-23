@@ -610,6 +610,8 @@ function PhaseApp() {
     const tick = () => {
       const a = audioRef.current;
       if (!a || !playingRef.current) return;
+      // Wheel scene has its own RAF-driven triggering; skip polygon scheduler.
+      if (sceneRef.current === "wheel") return;
       const e = engineRef.current;
       const k = knobsRef.current;
       const v = voicesRef.current;
@@ -660,6 +662,7 @@ function PhaseApp() {
       engineRef.current.w = rect.width;
       engineRef.current.h = rect.height;
       engineRef.current.dpr = dpr;
+      setCanvasRect({ w: rect.width, h: rect.height });
     };
     onResize();
     window.addEventListener("resize", onResize);
@@ -728,10 +731,22 @@ function PhaseApp() {
     }
 
     // draw scene
-    ctx2d.globalCompositeOperation = "lighter";
-    if (sceneRef.current === "polygon") drawPolygonScene(ctx2d, W, H, e, k, v, audioNow);
-    else if (sceneRef.current === "sine") drawSineScene(ctx2d, W, H, e, k, v, audioNow);
-    else drawLissajousScene(ctx2d, W, H, e, k, v, audioNow);
+    if (sceneRef.current === "wheel") {
+      // update wheel physics + trigger detection (audio + visuals)
+      if (a && playingRef.current) {
+        updateWheel(e.wheel, dt, a, bpmRef.current, voicesRef.current, knobsRef.current);
+      } else {
+        // decay flashes even when paused
+        decayWheelFlashes(e.wheel, dt);
+      }
+      ctx2d.globalCompositeOperation = "lighter";
+      drawWheelScene(ctx2d, W, H, e.wheel, voicesRef.current);
+    } else {
+      ctx2d.globalCompositeOperation = "lighter";
+      if (sceneRef.current === "polygon") drawPolygonScene(ctx2d, W, H, e, k, v, audioNow);
+      else if (sceneRef.current === "sine") drawSineScene(ctx2d, W, H, e, k, v, audioNow);
+      else drawLissajousScene(ctx2d, W, H, e, k, v, audioNow);
+    }
 
     // particles
     drawParticles(ctx2d, e, dt);

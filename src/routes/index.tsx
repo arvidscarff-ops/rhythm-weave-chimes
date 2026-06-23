@@ -1235,3 +1235,429 @@ function drawLissajousScene(
     nodeGlow(ctx, x, y, colorForVertex(i, v), intensity, 7);
   }
 }
+
+/* ============================================================
+ * Wheel — update, render, hit-testing, overlays
+ * ============================================================ */
+
+const TAU = Math.PI * 2;
+
+function norm2pi(a: number) { return ((a % TAU) + TAU) % TAU; }
+
+// Returns smallest forward distance from prev to target (prev → +ω → target).
+function fwdDist(prev: number, target: number) {
+  return ((target - prev) % TAU + TAU) % TAU;
+}
+
+function ringRadiusPx(r: WheelRing, W: number, H: number) {
+  return (r.radiusFactor * Math.min(W, H)) / 2;
+}
+
+function pitchIndexForAngle(angle: number, ringIdx: number, ringsCount: number) {
+  const buckets = 8;
+  const step = Math.floor(norm2pi(angle) / (TAU / buckets)) % SCALE_DEG.length;
+  const oct = Math.max(0, ringsCount - 1 - ringIdx); // outer ring lower
+  return step + oct * SCALE_DEG.length;
+}
+
+function decayWheelFlashes(wh: WheelState, dt: number) {
+  const k = 1 - Math.exp(-dt * 3.2);
+  for (const r of wh.rings) {
+    r.flash = Math.max(0, r.flash - k);
+    for (const n of r.notes) n.flash = Math.max(0, n.flash - k);
+  }
+  for (const l of wh.lines) {
+    l.flash = Math.max(0, l.flash - k);
+    for (let i = l.sparks.length - 1; i >= 0; i--) {
+      l.sparks[i].t -= dt;
+      if (l.sparks[i].t <= 0) l.sparks.splice(i, 1);
+    }
+  }
+}
+
+function updateWheel(
+  wh: WheelState, dt: number, audio: AudioGraph, bpm: number, voices: VoiceSel, knobs: Knobs,
+) {
+  const now = audio.ctx.currentTime;
+  const REFRACTORY = 0.04; // 40 ms
+
+  decayWheelFlashes(wh, dt);
+
+  for (const ring of wh.rings) {
+    const period = ringPeriodSec(ring, bpm);
+    const omega = TAU / Math.max(0.001, period); // rad/s
+    const sign = ring.direction;
+    const prevPhase = ring.phase;
+    ring.phase = prevPhase + sign * omega * dt;
+
+    const voice = resolveVoice(ring.voiceSlot, voices);
+
+    for (const note of ring.notes) {
+      const prevWorld = norm2pi(note.angle + prevPhase * sign);
+      const newWorld = norm2pi(note.angle + ring.phase * sign);
+
+      // For each line, two target angles: angle and angle+π
+      for (const line of wh.lines) {
+        for (let s = 0; s < 2; s++) {
+          const target = norm2pi(line.angle + s * Math.PI);
+          let crossed = false;
+          if (sign > 0) {
+            const d = fwdDist(prevWorld, newWorld);
+            const dt2 = fwdDist(prevWorld, target);
+            if (dt2 > 0 && dt2 <= d) crossed = true;
+          } else {
+            const d = fwdDist(newWorld, prevWorld);
+            const dt2 = fwdDist(newWorld, target);
+            if (dt2 > 0 && dt2 <= d) crossed = true;
+          }
+          if (crossed) {
+            const key = `${note.id}|${line.id}|${s}`;
+            const last = wh.lastFire.get(key) ?? -999;
+            if (now - last < REFRACTORY) continue;
+            wh.lastFire.set(key, now);
+
+            if (voice !== "none") {
+              const freq = vertexFreq(note.pitchIndex, knobs.pitch);
+              playVoice(audio.ctx, audio.preFx, voice, freq, knobs.fx2, now);
+            }
+            note.flash = 1;
+            ring.flash = Math.max(ring.flash, 0.7);
+            line.flash = 1;
+            // record spark location for visual (approx at target angle, radius of ring)
+            // we don't have W/H here; store in normalized polar (target, ringId)
+            line.sparks.push({ x: target, y: ring.radiusFactor, t: 0.6 });
+          }
+        }
+      }
+      note.prevWorld = newWorld;
+    }
+  }
+}
+
+function wheelHandleClick(wh: WheelState, px: number, py: number, W: number, H: number): boolean {
+  const cx = W / 2, cy = H / 2;
+  const dx = px - cx, dy = py - cy;
+  const r = Math.hypot(dx, dy);
+  const ang = norm2pi(Math.atan2(dy, dx));
+
+  // 1) try to remove an existing note (within 14px)
+  for (const ring of wh.rings) {
+    const ringR = ringRadiusPx(ring, W, H);
+    const sign = ring.direction;
+    for (let i = ring.notes.length - 1; i >= 0; i--) {
+      const n = ring.notes[i];
+      const wn = norm2pi(n.angle + ring.phase * sign);
+      const nx = cx + Math.cos(wn) * ringR;
+      const ny = cy + Math.sin(wn) * ringR;
+      if (Math.hypot(px - nx, py - ny) < 14) {
+        ring.notes.splice(i, 1);
+        return true;
+      }
+    }
+  }
+
+  // 2) add note to nearest ring (within 14px radial)
+  let best: WheelRing | null = null;
+  let bestIdx = -1;
+  let bestDist = Infinity;
+  wh.rings.forEach((ring, idx) => {
+    const ringR = ringRadiusPx(ring, W, H);
+    const d = Math.abs(r - ringR);
+    if (d < 14 && d < bestDist) { best = ring; bestIdx = idx; bestDist = d; }
+  });
+  if (best) {
+    const ring = best as WheelRing;
+    const sign = ring.direction;
+    const localAngle = norm2pi(ang - ring.phase * sign);
+    const note: WheelNote = {
+      id: uid("n"),
+      angle: localAngle,
+      pitchIndex: pitchIndexForAngle(localAngle, bestIdx, wh.rings.length),
+      prevWorld: ang,
+      flash: 0.9,
+    };
+    ring.notes.push(note);
+    return true;
+  }
+  return false;
+}
+
+function drawWheelScene(
+  ctx: CanvasRenderingContext2D, W: number, H: number, wh: WheelState, voices: VoiceSel,
+) {
+  const cx = W / 2, cy = H / 2;
+  const maxR = Math.min(W, H) / 2;
+
+  // 1) rings (faint stroke, brighten with flash)
+  for (const ring of wh.rings) {
+    const R = ringRadiusPx(ring, W, H);
+    const color = voiceSlotColor(ring.voiceSlot, true);
+    ctx.strokeStyle = color.replace("a", (0.18 + ring.flash * 0.5).toFixed(3));
+    ctx.lineWidth = 1 + ring.flash * 1.2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, TAU);
+    ctx.stroke();
+  }
+
+  // 2) lines (chord across the wheel)
+  for (const line of wh.lines) {
+    const x1 = cx + Math.cos(line.angle) * maxR * 0.96;
+    const y1 = cy + Math.sin(line.angle) * maxR * 0.96;
+    const x2 = cx - Math.cos(line.angle) * maxR * 0.96;
+    const y2 = cy - Math.sin(line.angle) * maxR * 0.96;
+    // soft glow
+    ctx.strokeStyle = `oklch(0.92 0.05 80 / ${(0.18 + line.flash * 0.55).toFixed(3)})`;
+    ctx.lineWidth = 1 + line.flash * 1.8;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.stroke();
+    // sparks at crossing points
+    for (const s of line.sparks) {
+      const sx = cx + Math.cos(s.x) * s.y * (Math.min(W, H) / 2);
+      const sy = cy + Math.sin(s.x) * s.y * (Math.min(W, H) / 2);
+      const a = Math.max(0, s.t / 0.6);
+      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, 22 * a + 4);
+      g.addColorStop(0, `oklch(1 0.04 90 / ${(0.7 * a).toFixed(3)})`);
+      g.addColorStop(1, "oklch(1 0.04 90 / 0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 22 * a + 4, 0, TAU);
+      ctx.fill();
+    }
+  }
+
+  // 3) notes
+  for (const ring of wh.rings) {
+    const R = ringRadiusPx(ring, W, H);
+    const sign = ring.direction;
+    const color = voiceSlotColor(ring.voiceSlot, true);
+    for (const n of ring.notes) {
+      const w = norm2pi(n.angle + ring.phase * sign);
+      const nx = cx + Math.cos(w) * R;
+      const ny = cy + Math.sin(w) * R;
+      const inten = n.flash;
+      // outer halo
+      const baseR = 5 + inten * 12;
+      const g = ctx.createRadialGradient(nx, ny, 0, nx, ny, baseR + 14);
+      g.addColorStop(0, color.replace("a", (0.9 * (0.45 + inten * 0.55)).toFixed(3)));
+      g.addColorStop(0.5, color.replace("a", (0.25 * (0.3 + inten * 0.7)).toFixed(3)));
+      g.addColorStop(1, color.replace("a", "0"));
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(nx, ny, baseR + 14, 0, TAU);
+      ctx.fill();
+      // crisp ring
+      ctx.strokeStyle = color.replace("a", (0.65 + inten * 0.35).toFixed(3));
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(nx, ny, 4.5, 0, TAU);
+      ctx.stroke();
+    }
+  }
+}
+
+/* ---- Wheel DOM overlays ---- */
+
+function WheelOverlays({
+  wheel, topo, canvasW, canvasH,
+  onAddRing, onAddLine, onRemoveRing, onRemoveLine, onSetLineAngle, onUpdateRing,
+}: {
+  wheel: WheelState;
+  topo: number;
+  canvasW: number;
+  canvasH: number;
+  onAddRing: () => void;
+  onAddLine: () => void;
+  onRemoveRing: (id: string) => void;
+  onRemoveLine: (id: string) => void;
+  onSetLineAngle: (id: string, angle: number) => void;
+  onUpdateRing: (id: string, patch: Partial<WheelRing>) => void;
+}) {
+  // touch topo so eslint doesn't whine and to force re-render
+  void topo;
+
+  const cx = canvasW / 2;
+  const cy = canvasH / 2;
+  const maxR = Math.min(canvasW, canvasH) / 2;
+
+  return (
+    <>
+      {/* Add buttons */}
+      <div className="absolute top-3 left-3 flex flex-col gap-1.5 select-none">
+        <button
+          onClick={onAddRing}
+          className="px-2 py-1 text-[10px] uppercase tracking-[0.2em] rounded-sm"
+          style={{ background: "var(--pr-panel-2)", color: "var(--pr-text)", boxShadow: "inset 0 0 0 1px var(--pr-line)" }}
+        >
+          + ring
+        </button>
+        <button
+          onClick={onAddLine}
+          className="px-2 py-1 text-[10px] uppercase tracking-[0.2em] rounded-sm"
+          style={{ background: "var(--pr-panel-2)", color: "var(--pr-text)", boxShadow: "inset 0 0 0 1px var(--pr-line)" }}
+        >
+          + line
+        </button>
+        <div className="mt-1 text-[9px] uppercase tracking-[0.18em] opacity-60" style={{ color: "var(--pr-muted)" }}>
+          click a ring to add a note<br />click a note to remove
+        </div>
+      </div>
+
+      {/* Ring chips on the right edge of each ring */}
+      {wheel.rings.map((r) => {
+        const R = (r.radiusFactor * Math.min(canvasW, canvasH)) / 2;
+        const left = cx + R + 8;
+        const top = cy - 12;
+        return (
+          <RingChip
+            key={r.id}
+            ring={r}
+            left={left}
+            top={top}
+            onRemove={() => onRemoveRing(r.id)}
+            onUpdate={(patch) => onUpdateRing(r.id, patch)}
+          />
+        );
+      })}
+
+      {/* Line handles at the +angle endpoint */}
+      {wheel.lines.map((l) => (
+        <LineHandle
+          key={l.id}
+          line={l}
+          cx={cx} cy={cy} maxR={maxR}
+          onSetAngle={(a) => onSetLineAngle(l.id, a)}
+          onRemove={() => onRemoveLine(l.id)}
+        />
+      ))}
+    </>
+  );
+}
+
+function RingChip({
+  ring, left, top, onRemove, onUpdate,
+}: {
+  ring: WheelRing;
+  left: number; top: number;
+  onRemove: () => void;
+  onUpdate: (patch: Partial<WheelRing>) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(`${ring.beats}/${ring.subdivision}`);
+
+  const commit = () => {
+    const m = val.trim().match(/^(\d{1,3})\s*\/\s*(\d{1,3})$/);
+    if (m) {
+      const n = Math.max(1, Math.min(32, parseInt(m[1], 10)));
+      const d = Math.max(1, Math.min(32, parseInt(m[2], 10)));
+      onUpdate({ beats: n, subdivision: d });
+    }
+    setEditing(false);
+    setVal(`${ring.beats}/${ring.subdivision}`);
+  };
+
+  const dot = ring.voiceSlot === "melo" ? "oklch(0.82 0.18 195)" :
+              ring.voiceSlot === "bass" ? "oklch(0.72 0.22 310)" : "oklch(0.86 0.16 85)";
+
+  const cycleSlot = () => {
+    const i = VOICE_SLOTS.indexOf(ring.voiceSlot);
+    onUpdate({ voiceSlot: VOICE_SLOTS[(i + 1) % VOICE_SLOTS.length] });
+  };
+
+  return (
+    <div
+      className="absolute flex items-center gap-1.5 px-1.5 py-0.5 rounded-sm text-[10px] tracking-wider select-none"
+      style={{
+        left, top,
+        background: "oklch(0.13 0.012 260 / 0.85)",
+        boxShadow: "inset 0 0 0 1px var(--pr-line)",
+        color: "var(--pr-text)",
+        fontFamily: "ui-monospace, SFMono-Regular, monospace",
+      }}
+    >
+      <button title="cycle voice" onClick={cycleSlot}
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ background: dot, boxShadow: `0 0 6px ${dot}` }} />
+      {editing ? (
+        <input
+          autoFocus
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setEditing(false); setVal(`${ring.beats}/${ring.subdivision}`); } }}
+          className="w-12 bg-transparent outline-none border-b"
+          style={{ borderColor: "var(--pr-line)", color: "var(--pr-text)" }}
+        />
+      ) : (
+        <button onClick={() => { setVal(`${ring.beats}/${ring.subdivision}`); setEditing(true); }}>
+          {ring.beats}/{ring.subdivision}
+        </button>
+      )}
+      <button
+        title="toggle direction"
+        onClick={() => onUpdate({ direction: (ring.direction === 1 ? -1 : 1) as 1 | -1 })}
+        style={{ color: "var(--pr-muted)" }}
+      >
+        {ring.direction === 1 ? "↻" : "↺"}
+      </button>
+      <span style={{ color: "var(--pr-muted)" }}>·</span>
+      <button onClick={cycleSlot} style={{ color: "var(--pr-muted)" }}>{ring.voiceSlot}</button>
+      <button onClick={onRemove} style={{ color: "var(--pr-muted)" }} title="remove ring">×</button>
+    </div>
+  );
+}
+
+function LineHandle({
+  line, cx, cy, maxR, onSetAngle, onRemove,
+}: {
+  line: WheelLine;
+  cx: number; cy: number; maxR: number;
+  onSetAngle: (a: number) => void;
+  onRemove: () => void;
+}) {
+  const dragging = useRef(false);
+
+  const hx = cx + Math.cos(line.angle) * maxR * 0.96;
+  const hy = cy + Math.sin(line.angle) * maxR * 0.96;
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    dragging.current = true;
+    e.stopPropagation();
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!dragging.current) return;
+    const target = e.currentTarget as HTMLElement;
+    const parent = target.parentElement?.getBoundingClientRect();
+    if (!parent) return;
+    const px = e.clientX - parent.left;
+    const py = e.clientY - parent.top;
+    const a = Math.atan2(py - cy, px - cx);
+    onSetAngle(a);
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    dragging.current = false;
+  };
+
+  return (
+    <>
+      <div
+        className="absolute"
+        style={{
+          left: hx - 10, top: hy - 10, width: 20, height: 20,
+          borderRadius: 999,
+          background: "oklch(0.13 0.012 260 / 0.85)",
+          boxShadow: "inset 0 0 0 1px oklch(0.92 0.05 80 / 0.7), 0 0 10px oklch(0.92 0.05 80 / 0.4)",
+          cursor: "grab",
+          touchAction: "none",
+        }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onDoubleClick={onRemove}
+        title="drag to rotate · double-click to remove"
+      />
+    </>
+  );
+}

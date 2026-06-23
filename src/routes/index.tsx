@@ -148,8 +148,10 @@ function resolveVoice(slot: VoiceSlot, sel: VoiceSel): VoiceKind {
 }
 
 function ringBeatsPerRotation(r: WheelRing) {
-  // 4/4 = 4 beats, 3/4 = 3 beats, 11/13 ≈ 3.385 beats
-  return (r.beats / r.subdivision) * 4;
+  // One "rotation" spans a full musical phrase, not a single bar — keeps
+  // wheel motion meditative even at higher tempos.
+  // 4/4 → 16 beats/rotation, 3/4 → 12, 11/13 ≈ 13.5
+  return (r.beats / r.subdivision) * 16;
 }
 
 function ringPeriodSec(r: WheelRing, bpm: number) {
@@ -954,7 +956,7 @@ function PhaseApp() {
         </div>
         <input
           type="range"
-          min={40} max={220} step={1}
+          min={20} max={180} step={1}
           value={bpm}
           onChange={(e) => setBpm(parseInt(e.target.value, 10))}
           className="pr-slider flex-1"

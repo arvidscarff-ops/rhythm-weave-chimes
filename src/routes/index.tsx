@@ -1609,7 +1609,7 @@ function drawGhostReadout(
 
 function WheelOverlays({
   wheel, topo, canvasW, canvasH,
-  onAddRing, onAddLine, onRemoveRing, onRemoveLine, onSetLineAngle, onUpdateRing,
+  onAddRing, onAddLine, onRemoveRing, onRemoveLine, onSetLineAngle, onUpdateRing, onHoverRing,
 }: {
   wheel: WheelState;
   topo: number;
@@ -1621,9 +1621,11 @@ function WheelOverlays({
   onRemoveLine: (id: string) => void;
   onSetLineAngle: (id: string, angle: number) => void;
   onUpdateRing: (id: string, patch: Partial<WheelRing>) => void;
+  onHoverRing?: (id: string | null) => void;
 }) {
   // touch topo so eslint doesn't whine and to force re-render
   void topo;
+  void onAddRing; void onAddLine;
 
   const cx = canvasW / 2;
   const cy = canvasH / 2;
@@ -1631,27 +1633,6 @@ function WheelOverlays({
 
   return (
     <>
-      {/* Add buttons */}
-      <div className="absolute top-3 left-3 flex flex-col gap-1.5 select-none">
-        <button
-          onClick={onAddRing}
-          className="px-2 py-1 text-[10px] uppercase tracking-[0.2em] rounded-sm"
-          style={{ background: "var(--pr-panel-2)", color: "var(--pr-text)", boxShadow: "inset 0 0 0 1px var(--pr-line)" }}
-        >
-          + ring
-        </button>
-        <button
-          onClick={onAddLine}
-          className="px-2 py-1 text-[10px] uppercase tracking-[0.2em] rounded-sm"
-          style={{ background: "var(--pr-panel-2)", color: "var(--pr-text)", boxShadow: "inset 0 0 0 1px var(--pr-line)" }}
-        >
-          + line
-        </button>
-        <div className="mt-1 text-[9px] uppercase tracking-[0.18em] opacity-60" style={{ color: "var(--pr-muted)" }}>
-          click a ring to add a note<br />click a note to remove
-        </div>
-      </div>
-
       {/* Ring chips on the right edge of each ring */}
       {wheel.rings.map((r) => {
         const R = (r.radiusFactor * Math.min(canvasW, canvasH)) / 2;
@@ -1665,6 +1646,7 @@ function WheelOverlays({
             top={top}
             onRemove={() => onRemoveRing(r.id)}
             onUpdate={(patch) => onUpdateRing(r.id, patch)}
+            onHover={(h) => onHoverRing?.(h ? r.id : null)}
           />
         );
       })}

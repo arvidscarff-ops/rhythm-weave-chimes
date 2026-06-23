@@ -665,6 +665,7 @@ function PhaseApp() {
       engineRef.current.h = rect.height;
       engineRef.current.dpr = dpr;
       setCanvasRect({ w: rect.width, h: rect.height });
+      grainPatternRef.current = null; // regenerate grain to match dpr
     };
     onResize();
     window.addEventListener("resize", onResize);

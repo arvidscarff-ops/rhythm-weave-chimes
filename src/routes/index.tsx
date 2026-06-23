@@ -641,6 +641,12 @@ function PhaseApp() {
     a.chorusLFOGain.gain.setTargetAtTime(0.001 + (knobs.fx2 / 40) * 0.008, t, 0.05);
   }, [knobs]);
 
+  /* ---- Sync FX state -> audio params (wins over knobs in wheel mode) ---- */
+  useEffect(() => {
+    const a = audioRef.current; if (!a) return;
+    applyFxState(a, fxState);
+  }, [fxState]);
+
   /* ---- Reset rhythm when multiply / speed changes ---- */
   useEffect(() => {
     const e = engineRef.current;

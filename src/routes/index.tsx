@@ -1,5 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
+import {
+  DEFAULT_FX_STATE,
+  applyFxState,
+  REVERB_PRESETS,
+  CHORUS_PRESETS,
+  GRAIN_PRESETS,
+  TONE_PRESETS,
+  type FxState,
+  type ReverbType,
+  type ChorusType,
+  type GrainType,
+  type ToneType,
+} from "@/lib/fx/fxState";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -79,6 +92,7 @@ type AudioGraph = {
   master: GainNode;
   preFx: GainNode;       // input bus
   filter: BiquadFilterNode;
+  shelf: BiquadFilterNode;
   chorusDelay: DelayNode;
   chorusLFO: OscillatorNode;
   chorusLFOGain: GainNode;
@@ -87,6 +101,9 @@ type AudioGraph = {
   feedback: GainNode;
   wet: GainNode;
   dryToMaster: GainNode;
+  grainDelay: DelayNode;
+  grainFeedback: GainNode;
+  grainMix: GainNode;
 };
 
 /* ============================================================
@@ -476,6 +493,8 @@ function PhaseApp() {
   const [scene, setScene] = useState<SceneKind>("wheel");
   const [background, setBackground] = useState<BgKind>("drift");
   const [bpm, setBpm] = useState(90);
+  const [fxState, setFxState] = useState<FxState>(DEFAULT_FX_STATE);
+  const [fxOpen, setFxOpen] = useState(false);
   // topology bump: rings/lines/notes counts so DOM overlays re-render
   const [topo, setTopo] = useState(0);
   const bumpTopo = useCallback(() => setTopo((x) => x + 1), []);
@@ -541,6 +560,12 @@ function PhaseApp() {
     filter.frequency.value = knobsRef.current.fx1;
     filter.Q.value = 0.6;
 
+    // tone: high-shelf right after filter
+    const shelf = ctx.createBiquadFilter();
+    shelf.type = "highshelf";
+    shelf.frequency.value = 4000;
+    shelf.gain.value = 0;
+
     // chorus: delay modulated by LFO
     const chorusDelay = ctx.createDelay(0.05);
     chorusDelay.delayTime.value = 0.012;
@@ -564,27 +589,44 @@ function PhaseApp() {
     const dryToMaster = ctx.createGain();
     dryToMaster.gain.value = 1;
 
-    // routing: preFx -> filter -> [dry+chorus] -> master, and -> delay -> wet -> master
+    // grain: secondary delay tap
+    const grainDelay = ctx.createDelay(0.4);
+    grainDelay.delayTime.value = 0.06;
+    const grainFeedback = ctx.createGain();
+    grainFeedback.gain.value = 0.0;
+    const grainMix = ctx.createGain();
+    grainMix.gain.value = 0.0;
+
+    // routing: preFx -> filter -> shelf -> [dry+chorus] -> master,
+    //          shelf -> delay -> wet -> master, shelf -> grain -> grainMix -> master
     preFx.connect(filter);
-    filter.connect(dryToMaster);
-    filter.connect(chorusDelay);
+    filter.connect(shelf);
+    shelf.connect(dryToMaster);
+    shelf.connect(chorusDelay);
     chorusDelay.connect(chorusMix);
     chorusMix.connect(dryToMaster);
     dryToMaster.connect(master);
 
-    filter.connect(delay);
+    shelf.connect(delay);
     delay.connect(feedback);
     feedback.connect(delay);
     delay.connect(wet);
     wet.connect(master);
 
+    shelf.connect(grainDelay);
+    grainDelay.connect(grainFeedback);
+    grainFeedback.connect(grainDelay);
+    grainDelay.connect(grainMix);
+    grainMix.connect(master);
+
     master.connect(ctx.destination);
 
     audioRef.current = {
-      ctx, master, preFx, filter, chorusDelay, chorusLFO, chorusLFOGain,
+      ctx, master, preFx, filter, shelf, chorusDelay, chorusLFO, chorusLFOGain,
       chorusMix, delay, feedback, wet, dryToMaster,
+      grainDelay, grainFeedback, grainMix,
     };
-    return audioRef.current;
+    return audioRef.current!;
   }, []);
 
   /* ---- Sync knobs -> audio params ---- */
@@ -598,6 +640,12 @@ function PhaseApp() {
     a.chorusMix.gain.setTargetAtTime(0.2 + (knobs.fx2 / 40) * 0.6, t, 0.05);
     a.chorusLFOGain.gain.setTargetAtTime(0.001 + (knobs.fx2 / 40) * 0.008, t, 0.05);
   }, [knobs]);
+
+  /* ---- Sync FX state -> audio params (wins over knobs in wheel mode) ---- */
+  useEffect(() => {
+    const a = audioRef.current; if (!a) return;
+    applyFxState(a, fxState);
+  }, [fxState]);
 
   /* ---- Reset rhythm when multiply / speed changes ---- */
   useEffect(() => {
@@ -792,6 +840,7 @@ function PhaseApp() {
   /* ---- Transport ---- */
   const togglePlay = async () => {
     const a = ensureAudio();
+    applyFxState(a, fxState);
     if (a.ctx.state === "suspended") await a.ctx.resume();
     const e = engineRef.current;
     if (!playing) {
@@ -1001,6 +1050,15 @@ function PhaseApp() {
             onAddLine={addLine}
             onClearLines={clearLines}
             onBpm={setBpm}
+            fxOpen={fxOpen}
+            onToggleFx={() => setFxOpen((v) => !v)}
+          />
+        )}
+        {isWheel && (
+          <FxDrawer
+            open={fxOpen}
+            state={fxState}
+            onChange={setFxState}
           />
         )}
       </main>
@@ -1801,7 +1859,7 @@ function LineHandle({
  * ============================================================ */
 
 function ArtDock({
-  playing, bpm, onTogglePlay, onAddRing, onAddLine, onClearLines, onBpm,
+  playing, bpm, onTogglePlay, onAddRing, onAddLine, onClearLines, onBpm, fxOpen, onToggleFx,
 }: {
   playing: boolean;
   bpm: number;
@@ -1810,6 +1868,8 @@ function ArtDock({
   onAddLine: () => void;
   onClearLines: () => void;
   onBpm: (v: number) => void;
+  fxOpen: boolean;
+  onToggleFx: () => void;
 }) {
   return (
     <div
@@ -1836,6 +1896,17 @@ function ArtDock({
       </DockBtn>
       <DockBtn label="clear lines" onClick={onClearLines}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M6 6l12 12M6 18L18 6" /></svg>
+      </DockBtn>
+      <span className="h-4 w-px bg-white/10" />
+      <DockBtn label="fx" onClick={onToggleFx} active={fxOpen}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M4 7h10M18 7h2" />
+          <circle cx="16" cy="7" r="1.6" fill="currentColor" />
+          <path d="M4 12h4M12 12h8" />
+          <circle cx="10" cy="12" r="1.6" fill="currentColor" />
+          <path d="M4 17h12M20 17h0" />
+          <circle cx="18" cy="17" r="1.6" fill="currentColor" />
+        </svg>
       </DockBtn>
       <span className="h-4 w-px bg-white/10" />
       <div className="flex items-center gap-3">
@@ -1876,5 +1947,176 @@ function DockBtn({
     >
       {children}
     </button>
+  );
+}
+
+/* ============================================================
+ * FX Drawer — expanding glass panel for sound effects
+ * ============================================================ */
+
+function FxDrawer({
+  open, state, onChange,
+}: {
+  open: boolean;
+  state: FxState;
+  onChange: (next: FxState) => void;
+}) {
+  const patch = <K extends keyof FxState>(k: K, p: Partial<FxState[K]>) =>
+    onChange({ ...state, [k]: { ...state[k], ...p } });
+
+  return (
+    <div
+      data-state={open ? "open" : "closed"}
+      className="fx-drawer absolute left-1/2 bottom-[88px] rounded-2xl border border-white/10 backdrop-blur-md"
+      style={{
+        width: "min(720px, calc(100vw - 48px))",
+        height: 260,
+        background: "rgba(10,10,12,0.55)",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.03)",
+        fontFamily: "'Inter', ui-sans-serif, system-ui",
+      }}
+    >
+      <div className="h-full grid grid-cols-4 divide-x divide-white/[0.07]">
+        <FxChannel
+          title="reverb"
+          types={["room", "hall", "plate", "cosmic"] as ReverbType[]}
+          activeType={state.reverb.type}
+          onType={(t) => patch("reverb", { type: t as ReverbType })}
+          bypass={state.reverb.bypass}
+          onBypass={() => patch("reverb", { bypass: !state.reverb.bypass })}
+          sliders={[
+            { label: "mix", value: state.reverb.mix, min: 0, max: 1, step: 0.01,
+              display: (v) => Math.round(v * 100).toString(),
+              onChange: (v) => patch("reverb", { mix: v }) },
+            { label: "size", value: state.reverb.size, min: 0.05, max: 1.2, step: 0.01,
+              display: (v) => v.toFixed(2),
+              onChange: (v) => patch("reverb", { size: v }) },
+          ]}
+        />
+        <FxChannel
+          title="chorus"
+          types={Object.keys(CHORUS_PRESETS) as ChorusType[]}
+          activeType={state.chorus.type}
+          onType={(t) => patch("chorus", { type: t as ChorusType, rate: CHORUS_PRESETS[t as ChorusType].rate })}
+          bypass={state.chorus.bypass}
+          onBypass={() => patch("chorus", { bypass: !state.chorus.bypass })}
+          sliders={[
+            { label: "mix", value: state.chorus.mix, min: 0, max: 1, step: 0.01,
+              display: (v) => Math.round(v * 100).toString(),
+              onChange: (v) => patch("chorus", { mix: v }) },
+            { label: "rate", value: state.chorus.rate, min: 0.1, max: 2, step: 0.01,
+              display: (v) => `${v.toFixed(2)}hz`,
+              onChange: (v) => patch("chorus", { rate: v }) },
+          ]}
+        />
+        <FxChannel
+          title="grain"
+          types={Object.keys(GRAIN_PRESETS) as GrainType[]}
+          activeType={state.grain.type}
+          onType={(t) => patch("grain", { type: t as GrainType })}
+          bypass={state.grain.bypass}
+          onBypass={() => patch("grain", { bypass: !state.grain.bypass })}
+          sliders={[
+            { label: "mix", value: state.grain.mix, min: 0, max: 1, step: 0.01,
+              display: (v) => Math.round(v * 100).toString(),
+              onChange: (v) => patch("grain", { mix: v }) },
+            { label: "density", value: state.grain.density, min: 0, max: 1, step: 0.01,
+              display: (v) => Math.round(v * 100).toString(),
+              onChange: (v) => patch("grain", { density: v }) },
+          ]}
+        />
+        <FxChannel
+          title="tone"
+          types={Object.keys(TONE_PRESETS) as ToneType[]}
+          activeType={state.tone.type}
+          onType={(t) => patch("tone", {
+            type: t as ToneType,
+            cutoff: TONE_PRESETS[t as ToneType].cutoff,
+            tilt: TONE_PRESETS[t as ToneType].tilt,
+          })}
+          bypass={state.tone.bypass}
+          onBypass={() => patch("tone", { bypass: !state.tone.bypass })}
+          sliders={[
+            { label: "cutoff", value: state.tone.cutoff, min: 200, max: 8000, step: 10,
+              display: (v) => `${(v / 1000).toFixed(1)}k`,
+              onChange: (v) => patch("tone", { cutoff: v }) },
+            { label: "tilt", value: state.tone.tilt, min: -8, max: 8, step: 0.1,
+              display: (v) => `${v > 0 ? "+" : ""}${v.toFixed(1)}`,
+              onChange: (v) => patch("tone", { tilt: v }) },
+          ]}
+        />
+      </div>
+    </div>
+  );
+}
+
+type SliderSpec = {
+  label: string;
+  value: number; min: number; max: number; step: number;
+  display: (v: number) => string;
+  onChange: (v: number) => void;
+};
+
+function FxChannel({
+  title, types, activeType, onType, bypass, onBypass, sliders,
+}: {
+  title: string;
+  types: string[];
+  activeType: string;
+  onType: (t: string) => void;
+  bypass: boolean;
+  onBypass: () => void;
+  sliders: SliderSpec[];
+}) {
+  return (
+    <div className={"flex flex-col px-4 py-4 gap-3 " + (bypass ? "opacity-50" : "opacity-100")}>
+      <div className="flex items-center justify-between">
+        <div className="text-[10px] tracking-[0.22em] uppercase text-white/70">{title}</div>
+        <button
+          onClick={onBypass}
+          title={bypass ? "enable" : "bypass"}
+          className="h-2 w-2 rounded-full transition-colors"
+          style={{
+            background: bypass ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.85)",
+            boxShadow: bypass ? "none" : "0 0 8px rgba(255,255,255,0.4)",
+          }}
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-1">
+        {types.map((t) => (
+          <button
+            key={t}
+            onClick={() => onType(t)}
+            className={
+              "px-1.5 py-0.5 rounded-sm text-[9.5px] tracking-[0.14em] uppercase transition-colors " +
+              (t === activeType
+                ? "bg-white/15 text-white"
+                : "bg-white/5 text-white/55 hover:text-white hover:bg-white/10")
+            }
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-3 mt-1">
+        {sliders.map((s) => (
+          <div key={s.label} className="flex flex-col gap-1">
+            <div className="flex items-center justify-between text-[9px] tracking-[0.18em] uppercase text-white/40">
+              <span>{s.label}</span>
+              <span className="tabular-nums text-white/70">{s.display(s.value)}</span>
+            </div>
+            <input
+              type="range"
+              min={s.min} max={s.max} step={s.step}
+              value={s.value}
+              onChange={(e) => s.onChange(parseFloat(e.target.value))}
+              className="pr-hairline-slider w-full"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

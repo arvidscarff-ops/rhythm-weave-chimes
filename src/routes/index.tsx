@@ -493,6 +493,8 @@ function PhaseApp() {
   const [scene, setScene] = useState<SceneKind>("wheel");
   const [background, setBackground] = useState<BgKind>("drift");
   const [bpm, setBpm] = useState(90);
+  const [fxState, setFxState] = useState<FxState>(DEFAULT_FX_STATE);
+  const [fxOpen, setFxOpen] = useState(false);
   // topology bump: rings/lines/notes counts so DOM overlays re-render
   const [topo, setTopo] = useState(0);
   const bumpTopo = useCallback(() => setTopo((x) => x + 1), []);

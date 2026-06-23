@@ -895,9 +895,10 @@ function PhaseApp() {
   return (
     <div
       className="min-h-screen w-full flex flex-col"
-      style={{ background: "var(--pr-bg-2)", color: "var(--pr-text)" }}
+      style={{ background: isWheel ? "#0b0b0d" : "var(--pr-bg-2)", color: "var(--pr-text)" }}
     >
-      {/* TOP CONTROL STRIP */}
+      {/* TOP CONTROL STRIP — hidden in Wheel art mode */}
+      {!isWheel && (
       <header
         className="flex items-center gap-4 px-4 py-2.5 border-b"
         style={{
@@ -964,14 +965,17 @@ function PhaseApp() {
           </button>
         </div>
       </header>
+      )}
 
       {/* CANVAS */}
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full block"
-          style={{ background: "oklch(0.09 0.01 260)", cursor: isWheel ? "crosshair" : "default" }}
+          style={{ background: isWheel ? "#0b0b0d" : "oklch(0.09 0.01 260)", cursor: isWheel ? "crosshair" : "default" }}
           onPointerDown={onCanvasPointerDown}
+          onPointerMove={onCanvasPointerMove}
+          onPointerLeave={onCanvasPointerLeave}
         />
         {isWheel && (
           <WheelOverlays
@@ -985,11 +989,24 @@ function PhaseApp() {
             onRemoveLine={removeLine}
             onSetLineAngle={setLineAngle}
             onUpdateRing={updateRing}
+            onHoverRing={(id) => { hoverRingIdRef.current = id; }}
+          />
+        )}
+        {isWheel && (
+          <ArtDock
+            playing={playing}
+            bpm={bpm}
+            onTogglePlay={togglePlay}
+            onAddRing={addRing}
+            onAddLine={addLine}
+            onClearLines={clearLines}
+            onBpm={setBpm}
           />
         )}
       </main>
 
-      {/* BOTTOM BPM DOCK */}
+      {/* BOTTOM BPM DOCK — hidden in Wheel art mode */}
+      {!isWheel && (
       <footer
         className="flex items-center gap-4 px-5 py-2.5 border-t"
         style={{
@@ -1011,6 +1028,7 @@ function PhaseApp() {
           {bpm} <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "var(--pr-muted)" }}>bpm</span>
         </div>
       </footer>
+      )}
     </div>
   );
 }

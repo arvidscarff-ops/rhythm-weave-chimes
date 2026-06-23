@@ -5,319 +5,1018 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Phase — Generative Polyrhythm Engine" },
-      { name: "description", content: "A tactile, browser-native generative ambient instrument built on three phasing polyrhythmic lanes." },
+      {
+        name: "description",
+        content:
+          "Browser-native generative ambient instrument. Polygon polyrhythms, glowing particle scenes, hardware-synth controls — pure Web Audio.",
+      },
       { property: "og:title", content: "Phase — Generative Polyrhythm Engine" },
-      { property: "og:description", content: "A tactile, browser-native generative ambient instrument built on three phasing polyrhythmic lanes." },
+      {
+        property: "og:description",
+        content:
+          "Browser-native generative ambient instrument with polygon polyrhythms and glowing particle scenes.",
+      },
     ],
   }),
-  component: Index,
+  component: PhaseApp,
 });
 
-type LaneConfig = {
-  id: "A" | "B" | "C";
-  freq: number; // base note
-  colorVar: string;
-  glowVar: string;
-  label: string;
+/* ============================================================
+ * Types
+ * ============================================================ */
+
+type VoiceKind = "chime" | "pluck" | "bell" | "pad" | "bass" | "none";
+type SceneKind = "polygon" | "sine" | "lissajous";
+type BgKind = "void" | "grid" | "drift";
+
+type Knobs = {
+  mainVol: number;   // 0..1
+  pitch: number;     // -12..12 semitones
+  revMix: number;    // 0..1
+  revSize: number;   // 0.05..1.2 (delay seconds)
+  speed: number;     // 0.25..2
+  multiply: number;  // 2..12 (integer, vertex count)
+  fx1: number;       // 200..8000 cutoff
+  fx2: number;       // 0..40 detune cents
 };
 
-const LANES: LaneConfig[] = [
-  { id: "A", freq: 261.63, colorVar: "var(--pr-lane-a)", glowVar: "var(--pr-glow-a)", label: "Node A · C4" },
-  { id: "B", freq: 392.0,  colorVar: "var(--pr-lane-b)", glowVar: "var(--pr-glow-b)", label: "Node B · G4" },
-  { id: "C", freq: 523.25, colorVar: "var(--pr-lane-c)", glowVar: "var(--pr-glow-c)", label: "Node C · C5" },
-];
+type VoiceSel = { melo: VoiceKind; bass: VoiceKind; atmo: VoiceKind };
 
-function Index() {
-  const [playing, setPlaying] = useState(false);
-  const [durations, setDurations] = useState<[number, number, number]>([4, 5, 6]);
+type TriggerEvent = {
+  vertex: number;
+  time: number;       // audioCtx time
+  freq: number;
+  voice: VoiceKind;
+  laneColor: string;
+};
 
-  // refs that the animation/audio loop reads without re-subscribing
-  const durationsRef = useRef(durations);
-  durationsRef.current = durations;
-  const playingRef = useRef(playing);
-  playingRef.current = playing;
+type Particle = {
+  x: number; y: number; vx: number; vy: number;
+  life: number; max: number; size: number; hue: string;
+};
 
-  // visual progress 0..1 per lane
-  const progressRef = useRef<[number, number, number]>([0, 0, 0]);
-  const flashRef = useRef<[number, number, number]>([0, 0, 0]);
-  const [, force] = useState(0);
+type EngineState = {
+  // canvas
+  w: number; h: number; dpr: number;
+  // rhythm
+  basePeriod: number; // seconds per full cycle at speed=1
+  nextFire: number[]; // per-vertex next audio time
+  lastFire: number[]; // per-vertex last visual time
+  pendingVisuals: TriggerEvent[]; // sorted-ish
+  // particles
+  particles: Particle[];
+  // ambient
+  dust: { x: number; y: number; vx: number; vy: number; s: number; a: number }[];
+  // start
+  startedAt: number; // audioCtx time when transport started
+  paused: boolean;
+};
 
-  // audio graph
-  const audioRef = useRef<{
-    ctx: AudioContext;
-    master: GainNode;
-    filter: BiquadFilterNode;
-    delay: DelayNode;
-    feedback: GainNode;
-    wet: GainNode;
-  } | null>(null);
+type AudioGraph = {
+  ctx: AudioContext;
+  master: GainNode;
+  preFx: GainNode;       // input bus
+  filter: BiquadFilterNode;
+  chorusDelay: DelayNode;
+  chorusLFO: OscillatorNode;
+  chorusLFOGain: GainNode;
+  chorusMix: GainNode;
+  delay: DelayNode;
+  feedback: GainNode;
+  wet: GainNode;
+  dryToMaster: GainNode;
+};
 
-  const ensureAudio = useCallback(() => {
-    if (audioRef.current) return audioRef.current;
-    const Ctx = window.AudioContext || (window as any).webkitAudioContext;
-    const ctx: AudioContext = new Ctx();
-    const master = ctx.createGain();
-    master.gain.value = 0.5;
+/* ============================================================
+ * Constants & helpers
+ * ============================================================ */
 
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = 2200;
-    filter.Q.value = 0.4;
+const VOICES: VoiceKind[] = ["chime", "pluck", "bell", "pad", "bass", "none"];
+const SCENES: SceneKind[] = ["polygon", "sine", "lissajous"];
+const BACKGROUNDS: BgKind[] = ["void", "grid", "drift"];
 
-    const delay = ctx.createDelay(5.0);
-    delay.delayTime.value = 0.55;
-    const feedback = ctx.createGain();
-    feedback.gain.value = 0.55;
-    const wet = ctx.createGain();
-    wet.gain.value = 0.45;
+// pentatonic minor across octaves starting at A2
+const SCALE_DEG = [0, 3, 5, 7, 10];
+const ROOT_HZ = 110; // A2
 
-    filter.connect(master);
-    filter.connect(delay);
-    delay.connect(feedback);
-    feedback.connect(delay);
-    delay.connect(wet);
-    wet.connect(master);
-    master.connect(ctx.destination);
+function vertexFreq(i: number, pitchSemi: number) {
+  const deg = SCALE_DEG[i % SCALE_DEG.length];
+  const oct = Math.floor(i / SCALE_DEG.length);
+  const semitones = deg + oct * 12 + pitchSemi;
+  return ROOT_HZ * Math.pow(2, semitones / 12);
+}
 
-    audioRef.current = { ctx, master, filter, delay, feedback, wet };
-    return audioRef.current;
-  }, []);
+function vertexVoice(i: number, sel: VoiceSel): VoiceKind {
+  // round-robin melo, bass, atmo
+  const slot = i % 3;
+  if (slot === 0) return sel.melo;
+  if (slot === 1) return sel.bass;
+  return sel.atmo;
+}
 
-  const trigger = useCallback((freq: number) => {
-    const a = audioRef.current;
-    if (!a) return;
-    const { ctx, filter } = a;
-    const now = ctx.currentTime;
-    // Two detuned sines + a soft fifth for a warm chime
-    const partials = [
-      { f: freq, g: 0.35 },
-      { f: freq * 2.01, g: 0.12 },
-      { f: freq * 3.0, g: 0.05 },
-    ];
-    const env = ctx.createGain();
-    env.gain.setValueAtTime(0.0001, now);
-    env.gain.exponentialRampToValueAtTime(1, now + 0.01);
-    env.gain.exponentialRampToValueAtTime(0.0001, now + 3.2);
-    env.connect(filter);
-    partials.forEach((p) => {
-      const osc = ctx.createOscillator();
-      osc.type = "sine";
-      osc.frequency.value = p.f;
-      const g = ctx.createGain();
-      g.gain.value = p.g;
-      osc.connect(g);
-      g.connect(env);
-      osc.start(now);
-      osc.stop(now + 3.3);
-    });
-  }, []);
+function vertexColor(i: number, sel: VoiceSel): string {
+  const slot = i % 3;
+  const v = slot === 0 ? sel.melo : slot === 1 ? sel.bass : sel.atmo;
+  if (v === "none") return "rgba(180,180,200,0.2)";
+  if (slot === 0) return "oklch(0.82 0.18 195)";
+  if (slot === 1) return "oklch(0.72 0.22 310)";
+  return "oklch(0.86 0.16 85)";
+}
 
-  // main loop
-  useEffect(() => {
-    let raf = 0;
-    let last = performance.now();
-    const loop = (t: number) => {
-      const dt = (t - last) / 1000;
-      last = t;
-      if (playingRef.current) {
-        const p = progressRef.current;
-        const d = durationsRef.current;
-        for (let i = 0; i < 3; i++) {
-          p[i] += dt / d[i];
-          if (p[i] >= 1) {
-            p[i] -= 1;
-            flashRef.current[i] = 1;
-            trigger(LANES[i].freq);
-          }
-        }
-      }
-      // decay flashes always
-      for (let i = 0; i < 3; i++) {
-        flashRef.current[i] = Math.max(0, flashRef.current[i] - dt * 2.2);
-      }
-      force((x) => (x + 1) % 1000000);
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [trigger]);
+// Phasing periods: vertex i fires (i+1) times per basePeriod, with a tiny irrational drift
+function vertexPeriod(i: number, basePeriod: number) {
+  const drift = 1 + i * 0.0042 * Math.SQRT2;
+  return (basePeriod / (i + 1)) * drift;
+}
 
-  const togglePlay = async () => {
-    const a = ensureAudio();
-    if (a.ctx.state === "suspended") await a.ctx.resume();
-    setPlaying((p) => !p);
+/* ============================================================
+ * Audio voices (pure oscillator)
+ * ============================================================ */
+
+function playVoice(
+  ctx: AudioContext,
+  dest: AudioNode,
+  voice: VoiceKind,
+  freq: number,
+  detuneCents: number,
+  startAt: number,
+) {
+  if (voice === "none") return;
+  const env = ctx.createGain();
+  env.gain.value = 0;
+  env.connect(dest);
+
+  const mk = (type: OscillatorType, f: number, det: number, gain: number) => {
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.value = f;
+    o.detune.value = det;
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    o.connect(g);
+    g.connect(env);
+    return o;
   };
 
+  let attack = 0.01, hold = 0, release = 2.5, peak = 0.5;
+  const oscs: OscillatorNode[] = [];
+
+  if (voice === "chime") {
+    oscs.push(mk("sine", freq, -detuneCents, 0.35));
+    oscs.push(mk("sine", freq * 2.01, detuneCents, 0.12));
+    oscs.push(mk("sine", freq * 3.0, 0, 0.05));
+    attack = 0.005; release = 3.2; peak = 0.55;
+  } else if (voice === "pluck") {
+    oscs.push(mk("triangle", freq, -detuneCents, 0.5));
+    oscs.push(mk("triangle", freq * 1.005, detuneCents, 0.3));
+    attack = 0.003; release = 1.4; peak = 0.7;
+  } else if (voice === "bell") {
+    oscs.push(mk("sine", freq, 0, 0.4));
+    oscs.push(mk("sine", freq * 3.5, 0, 0.18));
+    oscs.push(mk("sine", freq * 5.2, 0, 0.06));
+    attack = 0.008; release = 4.5; peak = 0.5;
+  } else if (voice === "pad") {
+    oscs.push(mk("triangle", freq * 0.5, -detuneCents, 0.4));
+    oscs.push(mk("sine", freq * 0.5 * 1.005, detuneCents, 0.3));
+    oscs.push(mk("sine", freq, 0, 0.18));
+    attack = 0.45; release = 3.5; peak = 0.45;
+  } else if (voice === "bass") {
+    oscs.push(mk("sine", freq * 0.5, -detuneCents, 0.55));
+    oscs.push(mk("triangle", freq * 0.5, detuneCents, 0.18));
+    attack = 0.01; release = 2.2; peak = 0.7;
+  }
+
+  const t = startAt;
+  env.gain.setValueAtTime(0.0001, t);
+  env.gain.exponentialRampToValueAtTime(peak, t + attack);
+  env.gain.exponentialRampToValueAtTime(0.0001, t + attack + hold + release);
+
+  oscs.forEach((o) => {
+    o.start(t);
+    o.stop(t + attack + hold + release + 0.1);
+  });
+}
+
+/* ============================================================
+ * Knob component
+ * ============================================================ */
+
+function Knob({
+  label,
+  value,
+  min,
+  max,
+  step = 0.01,
+  defaultValue,
+  display,
+  onChange,
+  integer = false,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  defaultValue: number;
+  display?: (v: number) => string;
+  onChange: (v: number) => void;
+  integer?: boolean;
+}) {
+  const dragging = useRef<{ y: number; v: number; fine: boolean } | null>(null);
+
+  const clamp = (v: number) => {
+    let n = Math.max(min, Math.min(max, v));
+    if (integer) n = Math.round(n);
+    else if (step) n = Math.round(n / step) * step;
+    return n;
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    dragging.current = { y: e.clientY, v: value, fine: e.shiftKey };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!dragging.current) return;
+    const d = dragging.current;
+    const dy = d.y - e.clientY;
+    const range = max - min;
+    const sens = d.fine ? 0.15 : 1;
+    const delta = (dy / 140) * range * sens;
+    onChange(clamp(d.v + delta));
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    dragging.current = null;
+  };
+  const onDouble = () => onChange(clamp(defaultValue));
+
+  const pct = (value - min) / (max - min);
+  // arc from -135deg to +135deg (270deg span)
+  const start = -135;
+  const end = -135 + 270 * pct;
+  const r = 16;
+  const cx = 22;
+  const cy = 22;
+  const polar = (deg: number) => {
+    const a = (deg * Math.PI) / 180;
+    return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  };
+  const [sx, sy] = polar(start);
+  const [ex, ey] = polar(end);
+  const large = end - start > 180 ? 1 : 0;
+  const bgTrackEnd = -135 + 270;
+  const [tex, tey] = polar(bgTrackEnd);
+
+  const display_ = display ?? ((v: number) => (integer ? `${Math.round(v)}` : v.toFixed(2)));
+
   return (
-    <div className="min-h-screen w-full" style={{ background: "var(--pr-bg)", color: "var(--pr-text)" }}>
-      <div className="mx-auto max-w-5xl px-6 py-10">
-        <header className="flex items-end justify-between mb-10">
-          <div>
-            <div className="text-[11px] tracking-[0.35em] uppercase" style={{ color: "var(--pr-muted)" }}>
-              Generative · Polyrhythm · Engine
-            </div>
-            <h1 className="text-4xl font-light tracking-tight mt-2">Phase</h1>
-          </div>
-          <button
-            onClick={togglePlay}
-            className="group relative h-14 px-7 rounded-full font-medium tracking-wide text-sm transition-all"
-            style={{
-              background: playing ? "var(--pr-accent)" : "var(--pr-panel-2)",
-              color: playing ? "var(--pr-bg)" : "var(--pr-text)",
-              boxShadow: playing ? "0 0 30px oklch(0.85 0.15 90 / 0.45)" : "inset 0 0 0 1px var(--pr-line)",
-            }}
-          >
-            {playing ? "■  PAUSE" : "▶  PLAY"}
-          </button>
-        </header>
-
-        <section
-          className="rounded-2xl p-6"
-          style={{ background: "var(--pr-panel)", boxShadow: "inset 0 0 0 1px var(--pr-line)" }}
+    <div className="flex flex-col items-center select-none">
+      <div className="relative">
+        <svg
+          width={44}
+          height={44}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onDoubleClick={onDouble}
+          style={{ touchAction: "none", cursor: "ns-resize" }}
         >
-          <div className="space-y-5">
-            {LANES.map((lane, i) => (
-              <Lane
-                key={lane.id}
-                lane={lane}
-                duration={durations[i]}
-                progress={progressRef.current[i]}
-                flash={flashRef.current[i]}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-          {LANES.map((lane, i) => (
-            <div
-              key={lane.id}
-              className="rounded-xl p-5"
-              style={{ background: "var(--pr-panel)", boxShadow: "inset 0 0 0 1px var(--pr-line)" }}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="inline-block h-2 w-2 rounded-full"
-                    style={{ background: lane.colorVar, boxShadow: lane.glowVar }}
-                  />
-                  <span className="text-xs tracking-[0.25em] uppercase" style={{ color: "var(--pr-muted)" }}>
-                    Lane {lane.id}
-                  </span>
-                </div>
-                <span className="text-sm tabular-nums" style={{ color: "var(--pr-text)" }}>
-                  {durations[i].toFixed(2)}s
-                </span>
-              </div>
-              <input
-                type="range"
-                min={0.5}
-                max={20}
-                step={0.05}
-                value={durations[i]}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  setDurations((d) => {
-                    const n = [...d] as [number, number, number];
-                    n[i] = v;
-                    return n;
-                  });
-                }}
-                className="pr-slider mt-4 w-full"
-                style={{ accentColor: "oklch(0.85 0.15 90)" }}
-              />
-            </div>
-          ))}
-        </section>
-
-        <footer className="mt-10 text-[11px] tracking-[0.3em] uppercase text-center" style={{ color: "var(--pr-muted)" }}>
-          Three lanes · phasing in irrational time · listen for the re-alignment
-        </footer>
+          <path
+            d={`M ${sx} ${sy} A ${r} ${r} 0 1 1 ${tex} ${tey}`}
+            fill="none"
+            stroke="var(--pr-line)"
+            strokeWidth={2}
+            strokeLinecap="round"
+          />
+          <path
+            d={`M ${sx} ${sy} A ${r} ${r} 0 ${large} 1 ${ex} ${ey}`}
+            fill="none"
+            stroke="var(--pr-accent)"
+            strokeWidth={2}
+            strokeLinecap="round"
+            style={{ filter: "drop-shadow(0 0 4px oklch(0.88 0.15 90 / 0.6))" }}
+          />
+          {/* indicator dot */}
+          <circle cx={ex} cy={ey} r={1.8} fill="var(--pr-accent)" />
+          <text
+            x={22}
+            y={25}
+            textAnchor="middle"
+            fontSize="9"
+            fill="var(--pr-text)"
+            style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", pointerEvents: "none" }}
+          >
+            {display_(value)}
+          </text>
+        </svg>
+      </div>
+      <div
+        className="text-[9px] uppercase tracking-[0.18em] mt-0.5"
+        style={{ color: "var(--pr-muted)" }}
+      >
+        {label}
       </div>
     </div>
   );
 }
 
-function Lane({
-  lane,
-  duration,
-  progress,
-  flash,
-}: {
-  lane: LaneConfig;
-  duration: number;
-  progress: number;
-  flash: number;
-}) {
-  // Tick marks every 1s
-  const ticks: number[] = [];
-  for (let s = 1; s < duration; s++) ticks.push(s / duration);
+/* ============================================================
+ * Dropdown
+ * ============================================================ */
 
+function Dropdown<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: readonly T[];
+  onChange: (v: T) => void;
+}) {
   return (
-    <div className="relative">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-3">
-          <span
-            className="inline-block h-2.5 w-2.5 rounded-full transition-all"
-            style={{
-              background: lane.colorVar,
-              boxShadow: flash > 0.02 ? lane.glowVar : "none",
-              opacity: 0.6 + flash * 0.4,
-            }}
-          />
-          <span className="text-xs tracking-[0.25em] uppercase" style={{ color: "var(--pr-muted)" }}>
-            {lane.label}
-          </span>
-        </div>
-        <span className="text-[10px] tabular-nums tracking-widest" style={{ color: "var(--pr-muted)" }}>
-          {(progress * duration).toFixed(2)} / {duration.toFixed(2)}s
-        </span>
-      </div>
+    <div className="flex flex-col">
       <div
-        className="relative h-16 rounded-lg overflow-hidden"
-        style={{
-          background: "var(--pr-panel-2)",
-          boxShadow: `inset 0 0 0 1px var(--pr-line)${flash > 0.02 ? `, ${lane.glowVar}` : ""}`,
-          transition: "box-shadow 60ms linear",
-        }}
+        className="text-[9px] uppercase tracking-[0.18em] mb-1"
+        style={{ color: "var(--pr-muted)" }}
       >
-        {/* flash overlay */}
-        <div
-          className="absolute inset-0 pointer-events-none"
+        {label}
+      </div>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value as T)}
+          className="appearance-none w-full pl-2.5 pr-6 py-1 text-[11px] tracking-wide rounded-sm"
           style={{
-            background: lane.colorVar,
-            opacity: flash * 0.18,
-            transition: "opacity 60ms linear",
+            background: "var(--pr-panel-2)",
+            color: "var(--pr-text)",
+            boxShadow: "inset 0 0 0 1px var(--pr-line)",
+            outline: "none",
           }}
-        />
-        {/* ticks */}
-        {ticks.map((t, idx) => (
-          <div
-            key={idx}
-            className="absolute top-0 bottom-0"
-            style={{ left: `${t * 100}%`, width: 1, background: "var(--pr-line)" }}
-          />
-        ))}
-        {/* trail */}
-        <div
-          className="absolute top-0 bottom-0 left-0"
-          style={{
-            width: `${progress * 100}%`,
-            background: `linear-gradient(90deg, transparent, color-mix(in oklab, ${lane.colorVar} 18%, transparent))`,
-          }}
-        />
-        {/* playhead */}
-        <div
-          className="absolute top-0 bottom-0"
-          style={{
-            left: `${progress * 100}%`,
-            width: 2,
-            background: lane.colorVar,
-            boxShadow: lane.glowVar,
-            transform: "translateX(-1px)",
-          }}
-        />
+        >
+          {options.map((o) => (
+            <option key={o} value={o} style={{ background: "#1a1a22" }}>
+              {o === "none" ? "—" : o}
+            </option>
+          ))}
+        </select>
+        <svg
+          width={10}
+          height={10}
+          viewBox="0 0 10 10"
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none"
+        >
+          <path d="M2 3.5 L5 7 L8 3.5" stroke="var(--pr-muted)" fill="none" strokeWidth="1" />
+        </svg>
       </div>
     </div>
   );
+}
+
+/* ============================================================
+ * Main app
+ * ============================================================ */
+
+function PhaseApp() {
+  const [playing, setPlaying] = useState(false);
+  const [scene, setScene] = useState<SceneKind>("polygon");
+  const [background, setBackground] = useState<BgKind>("drift");
+  const [voices, setVoices] = useState<VoiceSel>({
+    melo: "chime",
+    bass: "bass",
+    atmo: "pad",
+  });
+  const [knobs, setKnobs] = useState<Knobs>({
+    mainVol: 0.55,
+    pitch: 0,
+    revMix: 0.45,
+    revSize: 0.55,
+    speed: 1,
+    multiply: 5,
+    fx1: 2400,
+    fx2: 8,
+  });
+
+  // Refs mirror state so the engine doesn't re-subscribe
+  const playingRef = useRef(playing); playingRef.current = playing;
+  const sceneRef = useRef(scene); sceneRef.current = scene;
+  const bgRef = useRef(background); bgRef.current = background;
+  const voicesRef = useRef(voices); voicesRef.current = voices;
+  const knobsRef = useRef(knobs); knobsRef.current = knobs;
+
+  const audioRef = useRef<AudioGraph | null>(null);
+  const engineRef = useRef<EngineState>({
+    w: 0, h: 0, dpr: 1,
+    basePeriod: 8,
+    nextFire: [],
+    lastFire: [],
+    pendingVisuals: [],
+    particles: [],
+    dust: [],
+    startedAt: 0,
+    paused: true,
+  });
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  /* ---- Audio graph init ---- */
+  const ensureAudio = useCallback((): AudioGraph => {
+    if (audioRef.current) return audioRef.current;
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx: AudioContext = new Ctx();
+
+    const master = ctx.createGain();
+    master.gain.value = knobsRef.current.mainVol;
+
+    const preFx = ctx.createGain();
+    preFx.gain.value = 1;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = knobsRef.current.fx1;
+    filter.Q.value = 0.6;
+
+    // chorus: delay modulated by LFO
+    const chorusDelay = ctx.createDelay(0.05);
+    chorusDelay.delayTime.value = 0.012;
+    const chorusLFO = ctx.createOscillator();
+    chorusLFO.frequency.value = 0.35;
+    const chorusLFOGain = ctx.createGain();
+    chorusLFOGain.gain.value = 0.004;
+    chorusLFO.connect(chorusLFOGain);
+    chorusLFOGain.connect(chorusDelay.delayTime);
+    chorusLFO.start();
+    const chorusMix = ctx.createGain();
+    chorusMix.gain.value = 0.5;
+
+    // delay (rev)
+    const delay = ctx.createDelay(2.5);
+    delay.delayTime.value = knobsRef.current.revSize;
+    const feedback = ctx.createGain();
+    feedback.gain.value = 0.55;
+    const wet = ctx.createGain();
+    wet.gain.value = knobsRef.current.revMix;
+    const dryToMaster = ctx.createGain();
+    dryToMaster.gain.value = 1;
+
+    // routing: preFx -> filter -> [dry+chorus] -> master, and -> delay -> wet -> master
+    preFx.connect(filter);
+    filter.connect(dryToMaster);
+    filter.connect(chorusDelay);
+    chorusDelay.connect(chorusMix);
+    chorusMix.connect(dryToMaster);
+    dryToMaster.connect(master);
+
+    filter.connect(delay);
+    delay.connect(feedback);
+    feedback.connect(delay);
+    delay.connect(wet);
+    wet.connect(master);
+
+    master.connect(ctx.destination);
+
+    audioRef.current = {
+      ctx, master, preFx, filter, chorusDelay, chorusLFO, chorusLFOGain,
+      chorusMix, delay, feedback, wet, dryToMaster,
+    };
+    return audioRef.current;
+  }, []);
+
+  /* ---- Sync knobs -> audio params ---- */
+  useEffect(() => {
+    const a = audioRef.current; if (!a) return;
+    const t = a.ctx.currentTime;
+    a.master.gain.setTargetAtTime(knobs.mainVol, t, 0.04);
+    a.filter.frequency.setTargetAtTime(knobs.fx1, t, 0.04);
+    a.delay.delayTime.setTargetAtTime(knobs.revSize, t, 0.05);
+    a.wet.gain.setTargetAtTime(knobs.revMix, t, 0.05);
+    a.chorusMix.gain.setTargetAtTime(0.2 + (knobs.fx2 / 40) * 0.6, t, 0.05);
+    a.chorusLFOGain.gain.setTargetAtTime(0.001 + (knobs.fx2 / 40) * 0.008, t, 0.05);
+  }, [knobs]);
+
+  /* ---- Reset rhythm when multiply / speed changes ---- */
+  useEffect(() => {
+    const e = engineRef.current;
+    const a = audioRef.current;
+    const now = a ? a.ctx.currentTime : 0;
+    const base = 8 / knobs.speed;
+    e.basePeriod = base;
+    e.nextFire = new Array(knobs.multiply).fill(0).map((_, i) => now + vertexPeriod(i, base) * 0.3);
+    e.lastFire = new Array(knobs.multiply).fill(-999);
+  }, [knobs.multiply, knobs.speed]);
+
+  /* ---- Scheduler (look-ahead 25ms tick) ---- */
+  useEffect(() => {
+    let interval = 0;
+    const tick = () => {
+      const a = audioRef.current;
+      if (!a || !playingRef.current) return;
+      const e = engineRef.current;
+      const k = knobsRef.current;
+      const v = voicesRef.current;
+      const horizon = a.ctx.currentTime + 0.15;
+
+      // ensure arrays sized to multiply
+      if (e.nextFire.length !== k.multiply) {
+        const now = a.ctx.currentTime;
+        e.nextFire = new Array(k.multiply).fill(0).map((_, i) => now + vertexPeriod(i, e.basePeriod) * 0.3);
+        e.lastFire = new Array(k.multiply).fill(-999);
+      }
+
+      for (let i = 0; i < k.multiply; i++) {
+        const period = vertexPeriod(i, e.basePeriod);
+        while (e.nextFire[i] < horizon) {
+          const t = e.nextFire[i];
+          const voice = vertexVoice(i, v);
+          const freq = vertexFreq(i, k.pitch);
+          if (voice !== "none") {
+            playVoice(a.ctx, a.preFx, voice, freq, k.fx2, t);
+          }
+          e.pendingVisuals.push({
+            vertex: i,
+            time: t,
+            freq,
+            voice,
+            laneColor: vertexColor(i, v),
+          });
+          e.nextFire[i] = t + period;
+        }
+      }
+    };
+    interval = window.setInterval(tick, 25);
+    return () => clearInterval(interval);
+  }, []);
+
+  /* ---- RAF render loop ---- */
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+
+    const onResize = () => {
+      const c = canvasRef.current; if (!c) return;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const rect = c.getBoundingClientRect();
+      c.width = Math.floor(rect.width * dpr);
+      c.height = Math.floor(rect.height * dpr);
+      engineRef.current.w = rect.width;
+      engineRef.current.h = rect.height;
+      engineRef.current.dpr = dpr;
+    };
+    onResize();
+    window.addEventListener("resize", onResize);
+
+    // seed dust
+    const dust = engineRef.current.dust;
+    for (let i = 0; i < 90; i++) {
+      dust.push({
+        x: Math.random(),
+        y: Math.random(),
+        vx: (Math.random() - 0.5) * 0.005,
+        vy: (Math.random() - 0.5) * 0.005,
+        s: 0.4 + Math.random() * 1.6,
+        a: 0.05 + Math.random() * 0.35,
+      });
+    }
+
+    const loop = (t: number) => {
+      const dt = Math.min(0.05, (t - last) / 1000);
+      last = t;
+      render(dt);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ---- Renderer ---- */
+  const render = (dt: number) => {
+    const c = canvasRef.current; if (!c) return;
+    const ctx2d = c.getContext("2d"); if (!ctx2d) return;
+    const e = engineRef.current;
+    const k = knobsRef.current;
+    const v = voicesRef.current;
+    const a = audioRef.current;
+    const audioNow = a ? a.ctx.currentTime : 0;
+
+    const W = e.w, H = e.h;
+    ctx2d.setTransform(e.dpr, 0, 0, e.dpr, 0, 0);
+
+    // background fade (creates motion trails)
+    ctx2d.fillStyle = "oklch(0.09 0.01 260 / 0.35)";
+    ctx2d.fillRect(0, 0, W, H);
+
+    // background scene
+    drawBackground(ctx2d, W, H, bgRef.current, e, dt);
+
+    // process pending visual triggers whose time has come
+    if (a) {
+      const pv = e.pendingVisuals;
+      for (let i = pv.length - 1; i >= 0; i--) {
+        if (pv[i].time <= audioNow) {
+          const ev = pv[i];
+          if (ev.vertex < k.multiply) {
+            spawnTriggerVisual(e, ev, sceneRef.current, W, H, k);
+            e.lastFire[ev.vertex] = audioNow;
+          }
+          pv.splice(i, 1);
+        }
+      }
+    }
+
+    // draw scene
+    ctx2d.globalCompositeOperation = "lighter";
+    if (sceneRef.current === "polygon") drawPolygonScene(ctx2d, W, H, e, k, v, audioNow);
+    else if (sceneRef.current === "sine") drawSineScene(ctx2d, W, H, e, k, v, audioNow);
+    else drawLissajousScene(ctx2d, W, H, e, k, v, audioNow);
+
+    // particles
+    drawParticles(ctx2d, e, dt);
+
+    ctx2d.globalCompositeOperation = "source-over";
+
+    // wordmark
+    ctx2d.save();
+    ctx2d.fillStyle = "oklch(0.6 0.04 80 / 0.07)";
+    ctx2d.font = "600 64px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto";
+    ctx2d.textAlign = "center";
+    ctx2d.textBaseline = "middle";
+    ctx2d.letterSpacing = "12px" as unknown as string;
+    ctx2d.fillText("PHASE", W / 2, H / 2 - 16);
+    ctx2d.font = "500 18px ui-sans-serif, system-ui";
+    ctx2d.fillText("RHYTHMS", W / 2, H / 2 + 30);
+    ctx2d.restore();
+  };
+
+  /* ---- Transport ---- */
+  const togglePlay = async () => {
+    const a = ensureAudio();
+    if (a.ctx.state === "suspended") await a.ctx.resume();
+    const e = engineRef.current;
+    if (!playing) {
+      // (re)seed timers anchored at now
+      const now = a.ctx.currentTime;
+      e.nextFire = new Array(knobs.multiply).fill(0).map((_, i) => now + vertexPeriod(i, e.basePeriod) * 0.2);
+      e.lastFire = new Array(knobs.multiply).fill(-999);
+      e.pendingVisuals = [];
+      e.startedAt = now;
+    }
+    setPlaying((p) => !p);
+  };
+
+  const setKnob = (key: keyof Knobs, val: number) =>
+    setKnobs((k) => ({ ...k, [key]: val }));
+
+  return (
+    <div
+      className="min-h-screen w-full flex flex-col"
+      style={{ background: "var(--pr-bg-2)", color: "var(--pr-text)" }}
+    >
+      {/* TOP CONTROL STRIP */}
+      <header
+        className="flex items-center gap-4 px-4 py-2.5 border-b"
+        style={{
+          background: "linear-gradient(180deg, oklch(0.16 0.013 260) 0%, oklch(0.13 0.012 260) 100%)",
+          borderColor: "var(--pr-line)",
+          minHeight: 72,
+        }}
+      >
+        <div className="flex items-end gap-3 pr-3 mr-1 border-r" style={{ borderColor: "var(--pr-line-soft)" }}>
+          <Dropdown label="scene" value={scene} options={SCENES} onChange={setScene} />
+          <Dropdown label="background" value={background} options={BACKGROUNDS} onChange={setBackground} />
+        </div>
+
+        <div className="flex items-end gap-3 pr-3 mr-1 border-r" style={{ borderColor: "var(--pr-line-soft)" }}>
+          <Dropdown label="melo-sound" value={voices.melo} options={VOICES} onChange={(v) => setVoices((s) => ({ ...s, melo: v }))} />
+          <Dropdown label="bass-sound" value={voices.bass} options={VOICES} onChange={(v) => setVoices((s) => ({ ...s, bass: v }))} />
+          <Dropdown label="atmo-sound" value={voices.atmo} options={VOICES} onChange={(v) => setVoices((s) => ({ ...s, atmo: v }))} />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Knob label="main-vol" value={knobs.mainVol} min={0} max={1} defaultValue={0.55}
+                display={(v) => `${Math.round(v * 100)}`}
+                onChange={(v) => setKnob("mainVol", v)} />
+          <Knob label="pitch" value={knobs.pitch} min={-12} max={12} step={1} integer defaultValue={0}
+                display={(v) => `${v > 0 ? "+" : ""}${Math.round(v)}`}
+                onChange={(v) => setKnob("pitch", v)} />
+          <Knob label="rev-mix" value={knobs.revMix} min={0} max={1} defaultValue={0.45}
+                display={(v) => `${Math.round(v * 100)}`}
+                onChange={(v) => setKnob("revMix", v)} />
+          <Knob label="rev-size" value={knobs.revSize} min={0.05} max={1.2} defaultValue={0.55}
+                display={(v) => `${Math.round(v * 100)}`}
+                onChange={(v) => setKnob("revSize", v)} />
+          <Knob label="speed" value={knobs.speed} min={0.25} max={2.5} defaultValue={1}
+                display={(v) => v.toFixed(2)}
+                onChange={(v) => setKnob("speed", v)} />
+          <Knob label="multiply" value={knobs.multiply} min={2} max={12} step={1} integer defaultValue={5}
+                display={(v) => `${Math.round(v)}`}
+                onChange={(v) => setKnob("multiply", v)} />
+          <Knob label="fx-1" value={knobs.fx1} min={200} max={8000} step={10} defaultValue={2400}
+                display={(v) => `${Math.round(v / 100)}`}
+                onChange={(v) => setKnob("fx1", v)} />
+          <Knob label="fx-2" value={knobs.fx2} min={0} max={40} step={1} integer defaultValue={8}
+                display={(v) => `${Math.round(v)}`}
+                onChange={(v) => setKnob("fx2", v)} />
+        </div>
+
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={togglePlay}
+            className="h-9 px-4 rounded-sm text-[11px] tracking-[0.25em] uppercase transition-all"
+            style={{
+              background: playing ? "var(--pr-accent)" : "var(--pr-panel-2)",
+              color: playing ? "#1a1a22" : "var(--pr-text)",
+              boxShadow: playing
+                ? "0 0 22px oklch(0.88 0.15 90 / 0.5)"
+                : "inset 0 0 0 1px var(--pr-line)",
+            }}
+          >
+            {playing ? "■ pause" : "▶ play"}
+          </button>
+        </div>
+      </header>
+
+      {/* CANVAS */}
+      <main className="flex-1 relative" style={{ minHeight: 0 }}>
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full block"
+          style={{ background: "oklch(0.09 0.01 260)" }}
+        />
+      </main>
+    </div>
+  );
+}
+
+/* ============================================================
+ * Visual triggers — spawn particles per scene
+ * ============================================================ */
+
+function spawnTriggerVisual(
+  e: EngineState, ev: TriggerEvent, scene: SceneKind, W: number, H: number, k: Knobs,
+) {
+  const slot = ev.vertex % 3;
+  const hue = slot === 0
+    ? "oklch(0.82 0.18 195 / a)"
+    : slot === 1
+    ? "oklch(0.72 0.22 310 / a)"
+    : "oklch(0.86 0.16 85 / a)";
+
+  let cx = W / 2, cy = H / 2;
+
+  if (scene === "polygon") {
+    const r = Math.min(W, H) * 0.36;
+    const ang = (ev.vertex / k.multiply) * Math.PI * 2 - Math.PI / 2;
+    cx = W / 2 + Math.cos(ang) * r;
+    cy = H / 2 + Math.sin(ang) * r;
+  } else if (scene === "sine") {
+    const spacing = (H * 0.7) / Math.max(1, k.multiply - 1);
+    cx = W * 0.18;
+    cy = H * 0.15 + ev.vertex * spacing;
+  } else {
+    // lissajous: position on curve at vertex's phase
+    const a = 3, b = 4;
+    const phase = (ev.vertex / k.multiply) * Math.PI * 2;
+    cx = W / 2 + Math.cos(a * phase) * W * 0.32;
+    cy = H / 2 + Math.sin(b * phase + Math.PI / 4) * H * 0.32;
+  }
+
+  const count = 18 + Math.floor(Math.random() * 10);
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const spd = 30 + Math.random() * 160;
+    e.particles.push({
+      x: cx, y: cy,
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd,
+      life: 0,
+      max: 0.8 + Math.random() * 1.4,
+      size: 0.6 + Math.random() * 1.8,
+      hue,
+    });
+  }
+
+  if (e.particles.length > 2400) e.particles.splice(0, e.particles.length - 2400);
+}
+
+/* ============================================================
+ * Backgrounds
+ * ============================================================ */
+
+function drawBackground(
+  ctx: CanvasRenderingContext2D, W: number, H: number, bg: BgKind, e: EngineState, dt: number,
+) {
+  if (bg === "void") return;
+  if (bg === "grid") {
+    ctx.save();
+    ctx.strokeStyle = "oklch(0.3 0.018 260 / 0.18)";
+    ctx.lineWidth = 1;
+    const step = 60;
+    for (let x = 0; x < W; x += step) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (let y = 0; y < H; y += step) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
+  // drift
+  ctx.save();
+  for (const d of e.dust) {
+    d.x += d.vx * dt;
+    d.y += d.vy * dt;
+    if (d.x < 0) d.x = 1; if (d.x > 1) d.x = 0;
+    if (d.y < 0) d.y = 1; if (d.y > 1) d.y = 0;
+    ctx.fillStyle = `oklch(0.85 0.04 260 / ${d.a})`;
+    ctx.beginPath();
+    ctx.arc(d.x * W, d.y * H, d.s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+ * Particles
+ * ============================================================ */
+
+function drawParticles(ctx: CanvasRenderingContext2D, e: EngineState, dt: number) {
+  const ps = e.particles;
+  for (let i = ps.length - 1; i >= 0; i--) {
+    const p = ps[i];
+    p.life += dt;
+    if (p.life >= p.max) { ps.splice(i, 1); continue; }
+    // ease
+    const k = 1 - Math.pow(0.05, dt); // drag
+    p.vx *= 1 - k * 0.6;
+    p.vy *= 1 - k * 0.6;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    const lifeT = p.life / p.max;
+    const alpha = (1 - lifeT) * 0.85;
+    ctx.fillStyle = p.hue.replace("a", alpha.toFixed(3));
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * (1 - lifeT * 0.5), 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/* ============================================================
+ * Scenes
+ * ============================================================ */
+
+function nodeGlow(
+  ctx: CanvasRenderingContext2D, x: number, y: number, color: string, intensity: number, baseR: number,
+) {
+  const r = baseR + intensity * 18;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, color.replace("a", (0.9 * (0.4 + intensity * 0.6)).toFixed(3)));
+  g.addColorStop(0.4, color.replace("a", (0.3 * intensity).toFixed(3)));
+  g.addColorStop(1, color.replace("a", "0"));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // crisp ring
+  ctx.strokeStyle = color.replace("a", (0.6 + intensity * 0.4).toFixed(3));
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.arc(x, y, baseR, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function intensityFromLastFire(now: number, last: number) {
+  if (last < 0) return 0;
+  const dt = now - last;
+  if (dt < 0) return 0;
+  const decay = 0.6; // seconds
+  return Math.max(0, 1 - dt / decay);
+}
+
+function colorForVertex(i: number, v: VoiceSel): string {
+  const slot = i % 3;
+  const voice = slot === 0 ? v.melo : slot === 1 ? v.bass : v.atmo;
+  if (voice === "none") return "oklch(0.5 0.02 260 / a)";
+  if (slot === 0) return "oklch(0.82 0.18 195 / a)";
+  if (slot === 1) return "oklch(0.72 0.22 310 / a)";
+  return "oklch(0.86 0.16 85 / a)";
+}
+
+function drawPolygonScene(
+  ctx: CanvasRenderingContext2D, W: number, H: number, e: EngineState, k: Knobs, v: VoiceSel, now: number,
+) {
+  const cx = W / 2, cy = H / 2;
+  const R = Math.min(W, H) * 0.36;
+
+  // faint reference circle
+  ctx.strokeStyle = "oklch(0.5 0.03 260 / 0.15)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // collect positions
+  const positions: { x: number; y: number; intensity: number; color: string }[] = [];
+  for (let i = 0; i < k.multiply; i++) {
+    const ang = (i / k.multiply) * Math.PI * 2 - Math.PI / 2;
+    positions.push({
+      x: cx + Math.cos(ang) * R,
+      y: cy + Math.sin(ang) * R,
+      intensity: intensityFromLastFire(now, e.lastFire[i] ?? -999),
+      color: colorForVertex(i, v),
+    });
+  }
+
+  // connecting web (lines between vertices that fired recently together)
+  for (let i = 0; i < positions.length; i++) {
+    for (let j = i + 1; j < positions.length; j++) {
+      const a = Math.min(positions[i].intensity, positions[j].intensity);
+      if (a < 0.04) continue;
+      ctx.strokeStyle = `oklch(0.82 0.08 220 / ${(a * 0.45).toFixed(3)})`;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(positions[i].x, positions[i].y);
+      ctx.lineTo(positions[j].x, positions[j].y);
+      ctx.stroke();
+    }
+  }
+
+  // nodes
+  for (const p of positions) {
+    nodeGlow(ctx, p.x, p.y, p.color, p.intensity, 9);
+  }
+}
+
+function drawSineScene(
+  ctx: CanvasRenderingContext2D, W: number, H: number, e: EngineState, k: Knobs, v: VoiceSel, now: number,
+) {
+  const colX = W * 0.18;
+  const top = H * 0.15;
+  const spacing = (H * 0.7) / Math.max(1, k.multiply - 1);
+
+  // axis line
+  ctx.strokeStyle = "oklch(0.45 0.03 260 / 0.18)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(colX, top - 20);
+  ctx.lineTo(colX, top + spacing * (k.multiply - 1) + 20);
+  ctx.stroke();
+
+  for (let i = 0; i < k.multiply; i++) {
+    const x = colX;
+    const y = top + i * spacing;
+    const intensity = intensityFromLastFire(now, e.lastFire[i] ?? -999);
+    const color = colorForVertex(i, v);
+    // expanding ring on trigger
+    if (intensity > 0) {
+      const r = 12 + (1 - intensity) * 80;
+      ctx.strokeStyle = color.replace("a", (intensity * 0.4).toFixed(3));
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      // trailing streak rightward
+      const grd = ctx.createLinearGradient(x, y, W, y);
+      grd.addColorStop(0, color.replace("a", (intensity * 0.5).toFixed(3)));
+      grd.addColorStop(1, color.replace("a", "0"));
+      ctx.fillStyle = grd;
+      ctx.fillRect(x, y - 0.6 - intensity * 1.2, W - x, 1.2 + intensity * 2.4);
+    }
+    nodeGlow(ctx, x, y, color, intensity, 10);
+  }
+}
+
+function drawLissajousScene(
+  ctx: CanvasRenderingContext2D, W: number, H: number, e: EngineState, k: Knobs, v: VoiceSel, now: number,
+) {
+  const cx = W / 2, cy = H / 2;
+  const A = W * 0.32, B = H * 0.32;
+  const a = 3, b = 4;
+
+  // curve trail
+  ctx.strokeStyle = "oklch(0.7 0.08 220 / 0.18)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const steps = 220;
+  for (let s = 0; s <= steps; s++) {
+    const t = (s / steps) * Math.PI * 2;
+    const x = cx + Math.cos(a * t) * A;
+    const y = cy + Math.sin(b * t + Math.PI / 4) * B;
+    if (s === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  for (let i = 0; i < k.multiply; i++) {
+    const phase = (i / k.multiply) * Math.PI * 2;
+    const x = cx + Math.cos(a * phase) * A;
+    const y = cy + Math.sin(b * phase + Math.PI / 4) * B;
+    const intensity = intensityFromLastFire(now, e.lastFire[i] ?? -999);
+    nodeGlow(ctx, x, y, colorForVertex(i, v), intensity, 7);
+  }
 }

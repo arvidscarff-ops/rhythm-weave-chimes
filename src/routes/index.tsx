@@ -1,5 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
+import {
+  DEFAULT_FX_STATE,
+  applyFxState,
+  REVERB_PRESETS,
+  CHORUS_PRESETS,
+  GRAIN_PRESETS,
+  TONE_PRESETS,
+  type FxState,
+  type ReverbType,
+  type ChorusType,
+  type GrainType,
+  type ToneType,
+} from "@/lib/fx/fxState";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -79,6 +92,7 @@ type AudioGraph = {
   master: GainNode;
   preFx: GainNode;       // input bus
   filter: BiquadFilterNode;
+  shelf: BiquadFilterNode;
   chorusDelay: DelayNode;
   chorusLFO: OscillatorNode;
   chorusLFOGain: GainNode;
@@ -87,6 +101,9 @@ type AudioGraph = {
   feedback: GainNode;
   wet: GainNode;
   dryToMaster: GainNode;
+  grainDelay: DelayNode;
+  grainFeedback: GainNode;
+  grainMix: GainNode;
 };
 
 /* ============================================================

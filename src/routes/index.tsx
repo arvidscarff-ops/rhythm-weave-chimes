@@ -1949,3 +1949,174 @@ function DockBtn({
     </button>
   );
 }
+
+/* ============================================================
+ * FX Drawer — expanding glass panel for sound effects
+ * ============================================================ */
+
+function FxDrawer({
+  open, state, onChange,
+}: {
+  open: boolean;
+  state: FxState;
+  onChange: (next: FxState) => void;
+}) {
+  const patch = <K extends keyof FxState>(k: K, p: Partial<FxState[K]>) =>
+    onChange({ ...state, [k]: { ...state[k], ...p } });
+
+  return (
+    <div
+      data-state={open ? "open" : "closed"}
+      className="fx-drawer absolute left-1/2 bottom-[88px] rounded-2xl border border-white/10 backdrop-blur-md"
+      style={{
+        width: "min(720px, calc(100vw - 48px))",
+        height: 260,
+        background: "rgba(10,10,12,0.55)",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.03)",
+        fontFamily: "'Inter', ui-sans-serif, system-ui",
+      }}
+    >
+      <div className="h-full grid grid-cols-4 divide-x divide-white/[0.07]">
+        <FxChannel
+          title="reverb"
+          types={["room", "hall", "plate", "cosmic"] as ReverbType[]}
+          activeType={state.reverb.type}
+          onType={(t) => patch("reverb", { type: t as ReverbType })}
+          bypass={state.reverb.bypass}
+          onBypass={() => patch("reverb", { bypass: !state.reverb.bypass })}
+          sliders={[
+            { label: "mix", value: state.reverb.mix, min: 0, max: 1, step: 0.01,
+              display: (v) => Math.round(v * 100).toString(),
+              onChange: (v) => patch("reverb", { mix: v }) },
+            { label: "size", value: state.reverb.size, min: 0.05, max: 1.2, step: 0.01,
+              display: (v) => v.toFixed(2),
+              onChange: (v) => patch("reverb", { size: v }) },
+          ]}
+        />
+        <FxChannel
+          title="chorus"
+          types={Object.keys(CHORUS_PRESETS) as ChorusType[]}
+          activeType={state.chorus.type}
+          onType={(t) => patch("chorus", { type: t as ChorusType, rate: CHORUS_PRESETS[t as ChorusType].rate })}
+          bypass={state.chorus.bypass}
+          onBypass={() => patch("chorus", { bypass: !state.chorus.bypass })}
+          sliders={[
+            { label: "mix", value: state.chorus.mix, min: 0, max: 1, step: 0.01,
+              display: (v) => Math.round(v * 100).toString(),
+              onChange: (v) => patch("chorus", { mix: v }) },
+            { label: "rate", value: state.chorus.rate, min: 0.1, max: 2, step: 0.01,
+              display: (v) => `${v.toFixed(2)}hz`,
+              onChange: (v) => patch("chorus", { rate: v }) },
+          ]}
+        />
+        <FxChannel
+          title="grain"
+          types={Object.keys(GRAIN_PRESETS) as GrainType[]}
+          activeType={state.grain.type}
+          onType={(t) => patch("grain", { type: t as GrainType })}
+          bypass={state.grain.bypass}
+          onBypass={() => patch("grain", { bypass: !state.grain.bypass })}
+          sliders={[
+            { label: "mix", value: state.grain.mix, min: 0, max: 1, step: 0.01,
+              display: (v) => Math.round(v * 100).toString(),
+              onChange: (v) => patch("grain", { mix: v }) },
+            { label: "density", value: state.grain.density, min: 0, max: 1, step: 0.01,
+              display: (v) => Math.round(v * 100).toString(),
+              onChange: (v) => patch("grain", { density: v }) },
+          ]}
+        />
+        <FxChannel
+          title="tone"
+          types={Object.keys(TONE_PRESETS) as ToneType[]}
+          activeType={state.tone.type}
+          onType={(t) => patch("tone", {
+            type: t as ToneType,
+            cutoff: TONE_PRESETS[t as ToneType].cutoff,
+            tilt: TONE_PRESETS[t as ToneType].tilt,
+          })}
+          bypass={state.tone.bypass}
+          onBypass={() => patch("tone", { bypass: !state.tone.bypass })}
+          sliders={[
+            { label: "cutoff", value: state.tone.cutoff, min: 200, max: 8000, step: 10,
+              display: (v) => `${(v / 1000).toFixed(1)}k`,
+              onChange: (v) => patch("tone", { cutoff: v }) },
+            { label: "tilt", value: state.tone.tilt, min: -8, max: 8, step: 0.1,
+              display: (v) => `${v > 0 ? "+" : ""}${v.toFixed(1)}`,
+              onChange: (v) => patch("tone", { tilt: v }) },
+          ]}
+        />
+      </div>
+    </div>
+  );
+}
+
+type SliderSpec = {
+  label: string;
+  value: number; min: number; max: number; step: number;
+  display: (v: number) => string;
+  onChange: (v: number) => void;
+};
+
+function FxChannel({
+  title, types, activeType, onType, bypass, onBypass, sliders,
+}: {
+  title: string;
+  types: string[];
+  activeType: string;
+  onType: (t: string) => void;
+  bypass: boolean;
+  onBypass: () => void;
+  sliders: SliderSpec[];
+}) {
+  return (
+    <div className={"flex flex-col px-4 py-4 gap-3 " + (bypass ? "opacity-50" : "opacity-100")}>
+      <div className="flex items-center justify-between">
+        <div className="text-[10px] tracking-[0.22em] uppercase text-white/70">{title}</div>
+        <button
+          onClick={onBypass}
+          title={bypass ? "enable" : "bypass"}
+          className="h-2 w-2 rounded-full transition-colors"
+          style={{
+            background: bypass ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.85)",
+            boxShadow: bypass ? "none" : "0 0 8px rgba(255,255,255,0.4)",
+          }}
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-1">
+        {types.map((t) => (
+          <button
+            key={t}
+            onClick={() => onType(t)}
+            className={
+              "px-1.5 py-0.5 rounded-sm text-[9.5px] tracking-[0.14em] uppercase transition-colors " +
+              (t === activeType
+                ? "bg-white/15 text-white"
+                : "bg-white/5 text-white/55 hover:text-white hover:bg-white/10")
+            }
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-3 mt-1">
+        {sliders.map((s) => (
+          <div key={s.label} className="flex flex-col gap-1">
+            <div className="flex items-center justify-between text-[9px] tracking-[0.18em] uppercase text-white/40">
+              <span>{s.label}</span>
+              <span className="tabular-nums text-white/70">{s.display(s.value)}</span>
+            </div>
+            <input
+              type="range"
+              min={s.min} max={s.max} step={s.step}
+              value={s.value}
+              onChange={(e) => s.onChange(parseFloat(e.target.value))}
+              className="pr-hairline-slider w-full"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

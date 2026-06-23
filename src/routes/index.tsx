@@ -1050,6 +1050,15 @@ function PhaseApp() {
             onAddLine={addLine}
             onClearLines={clearLines}
             onBpm={setBpm}
+            fxOpen={fxOpen}
+            onToggleFx={() => setFxOpen((v) => !v)}
+          />
+        )}
+        {isWheel && (
+          <FxDrawer
+            open={fxOpen}
+            state={fxState}
+            onChange={setFxState}
           />
         )}
       </main>

@@ -1666,12 +1666,13 @@ function WheelOverlays({
 }
 
 function RingChip({
-  ring, left, top, onRemove, onUpdate,
+  ring, left, top, onRemove, onUpdate, onHover,
 }: {
   ring: WheelRing;
   left: number; top: number;
   onRemove: () => void;
   onUpdate: (patch: Partial<WheelRing>) => void;
+  onHover?: (hover: boolean) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(`${ring.beats}/${ring.subdivision}`);
@@ -1697,18 +1698,20 @@ function RingChip({
 
   return (
     <div
-      className="absolute flex items-center gap-1.5 px-1.5 py-0.5 rounded-sm text-[10px] tracking-wider select-none"
+      className="absolute flex items-center gap-1.5 px-1.5 py-0.5 rounded-sm text-[10px] tracking-wider select-none transition-opacity"
       style={{
         left, top,
-        background: "oklch(0.13 0.012 260 / 0.85)",
-        boxShadow: "inset 0 0 0 1px var(--pr-line)",
-        color: "var(--pr-text)",
-        fontFamily: "ui-monospace, SFMono-Regular, monospace",
+        background: "transparent",
+        color: "rgba(255,255,255,0.45)",
+        fontFamily: "'Inter', ui-sans-serif, system-ui",
+        opacity: 0.6,
       }}
+      onMouseEnter={() => onHover?.(true)}
+      onMouseLeave={() => onHover?.(false)}
     >
       <button title="cycle voice" onClick={cycleSlot}
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ background: dot, boxShadow: `0 0 6px ${dot}` }} />
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: dot }} />
       {editing ? (
         <input
           autoFocus
@@ -1717,23 +1720,23 @@ function RingChip({
           onBlur={commit}
           onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setEditing(false); setVal(`${ring.beats}/${ring.subdivision}`); } }}
           className="w-12 bg-transparent outline-none border-b"
-          style={{ borderColor: "var(--pr-line)", color: "var(--pr-text)" }}
+          style={{ borderColor: "rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.8)" }}
         />
       ) : (
-        <button onClick={() => { setVal(`${ring.beats}/${ring.subdivision}`); setEditing(true); }}>
+        <button className="hover:text-white" onClick={() => { setVal(`${ring.beats}/${ring.subdivision}`); setEditing(true); }}>
           {ring.beats}/{ring.subdivision}
         </button>
       )}
       <button
         title="toggle direction"
         onClick={() => onUpdate({ direction: (ring.direction === 1 ? -1 : 1) as 1 | -1 })}
-        style={{ color: "var(--pr-muted)" }}
+        className="hover:text-white"
       >
         {ring.direction === 1 ? "↻" : "↺"}
       </button>
-      <span style={{ color: "var(--pr-muted)" }}>·</span>
-      <button onClick={cycleSlot} style={{ color: "var(--pr-muted)" }}>{ring.voiceSlot}</button>
-      <button onClick={onRemove} style={{ color: "var(--pr-muted)" }} title="remove ring">×</button>
+      <span className="opacity-50">·</span>
+      <button className="hover:text-white" onClick={cycleSlot}>{ring.voiceSlot}</button>
+      <button className="hover:text-white" onClick={onRemove} title="remove ring">×</button>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 
 export const Route = createFileRoute("/")({
   head: () => ({

@@ -507,6 +507,7 @@ function PhaseApp() {
     dust: [],
     startedAt: 0,
     paused: true,
+    wheel: makeSeedWheel(),
   });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 

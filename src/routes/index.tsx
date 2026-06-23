@@ -821,6 +821,26 @@ function PhaseApp() {
     if (handled) bumpTopo();
   };
 
+  const onCanvasPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (sceneRef.current !== "wheel") return;
+    const c = canvasRef.current; if (!c) return;
+    const rect = c.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const cx = rect.width / 2, cy = rect.height / 2;
+    const r = Math.hypot(px - cx, py - cy);
+    const wh = engineRef.current.wheel;
+    let hit: string | null = null;
+    let bestD = 14;
+    for (const ring of wh.rings) {
+      const R = (ring.radiusFactor * Math.min(rect.width, rect.height)) / 2;
+      const d = Math.abs(r - R);
+      if (d < bestD) { bestD = d; hit = ring.id; }
+    }
+    hoverRingIdRef.current = hit;
+  };
+  const onCanvasPointerLeave = () => { hoverRingIdRef.current = null; };
+
   /* ---- Wheel ring/line mutators ---- */
   const addRing = () => {
     const wh = engineRef.current.wheel;

@@ -558,6 +558,12 @@ function PhaseApp() {
     filter.frequency.value = knobsRef.current.fx1;
     filter.Q.value = 0.6;
 
+    // tone: high-shelf right after filter
+    const shelf = ctx.createBiquadFilter();
+    shelf.type = "highshelf";
+    shelf.frequency.value = 4000;
+    shelf.gain.value = 0;
+
     // chorus: delay modulated by LFO
     const chorusDelay = ctx.createDelay(0.05);
     chorusDelay.delayTime.value = 0.012;
@@ -581,27 +587,44 @@ function PhaseApp() {
     const dryToMaster = ctx.createGain();
     dryToMaster.gain.value = 1;
 
-    // routing: preFx -> filter -> [dry+chorus] -> master, and -> delay -> wet -> master
+    // grain: secondary delay tap
+    const grainDelay = ctx.createDelay(0.4);
+    grainDelay.delayTime.value = 0.06;
+    const grainFeedback = ctx.createGain();
+    grainFeedback.gain.value = 0.0;
+    const grainMix = ctx.createGain();
+    grainMix.gain.value = 0.0;
+
+    // routing: preFx -> filter -> shelf -> [dry+chorus] -> master,
+    //          shelf -> delay -> wet -> master, shelf -> grain -> grainMix -> master
     preFx.connect(filter);
-    filter.connect(dryToMaster);
-    filter.connect(chorusDelay);
+    filter.connect(shelf);
+    shelf.connect(dryToMaster);
+    shelf.connect(chorusDelay);
     chorusDelay.connect(chorusMix);
     chorusMix.connect(dryToMaster);
     dryToMaster.connect(master);
 
-    filter.connect(delay);
+    shelf.connect(delay);
     delay.connect(feedback);
     feedback.connect(delay);
     delay.connect(wet);
     wet.connect(master);
 
+    shelf.connect(grainDelay);
+    grainDelay.connect(grainFeedback);
+    grainFeedback.connect(grainDelay);
+    grainDelay.connect(grainMix);
+    grainMix.connect(master);
+
     master.connect(ctx.destination);
 
     audioRef.current = {
-      ctx, master, preFx, filter, chorusDelay, chorusLFO, chorusLFOGain,
+      ctx, master, preFx, filter, shelf, chorusDelay, chorusLFO, chorusLFOGain,
       chorusMix, delay, feedback, wet, dryToMaster,
+      grainDelay, grainFeedback, grainMix,
     };
-    return audioRef.current;
+    return audioRef.current!;
   }, []);
 
   /* ---- Sync knobs -> audio params ---- */

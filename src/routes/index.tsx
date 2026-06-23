@@ -713,13 +713,17 @@ function PhaseApp() {
 
     const W = e.w, H = e.h;
     ctx2d.setTransform(e.dpr, 0, 0, e.dpr, 0, 0);
+    const isWheelScene = sceneRef.current === "wheel";
 
-    // background fade (creates motion trails)
-    ctx2d.fillStyle = "oklch(0.09 0.01 260 / 0.35)";
-    ctx2d.fillRect(0, 0, W, H);
-
-    // background scene
-    drawBackground(ctx2d, W, H, bgRef.current, e, dt);
+    if (isWheelScene) {
+      // ART SURFACE: opaque charcoal base + vignette + tiled grain
+      paintArtBackground(ctx2d, W, H, grainPatternRef);
+    } else {
+      // background fade (creates motion trails) — non-wheel scenes
+      ctx2d.fillStyle = "oklch(0.09 0.01 260 / 0.35)";
+      ctx2d.fillRect(0, 0, W, H);
+      drawBackground(ctx2d, W, H, bgRef.current, e, dt);
+    }
 
     // process pending visual triggers whose time has come
     if (a) {
@@ -737,7 +741,7 @@ function PhaseApp() {
     }
 
     // draw scene
-    if (sceneRef.current === "wheel") {
+    if (isWheelScene) {
       // update wheel physics + trigger detection (audio + visuals)
       if (a && playingRef.current) {
         updateWheel(e.wheel, dt, a, bpmRef.current, voicesRef.current, knobsRef.current);
@@ -745,8 +749,19 @@ function PhaseApp() {
         // decay flashes even when paused
         decayWheelFlashes(e.wheel, dt);
       }
+      // ghost text behind everything
+      const targetOp = hoverRingIdRef.current ? 1 : 0;
+      hoverOpacityRef.current += (targetOp - hoverOpacityRef.current) * Math.min(1, dt * 6);
+      if (hoverOpacityRef.current > 0.01) {
+        const ring = e.wheel.rings.find(r => r.id === hoverRingIdRef.current)
+          ?? e.wheel.rings.find(r => r.id === lastHoverRef.current);
+        if (ring) {
+          lastHoverRef.current = ring.id;
+          drawGhostReadout(ctx2d, W, H, ringPeriodSec(ring, bpmRef.current), hoverOpacityRef.current);
+        }
+      }
       ctx2d.globalCompositeOperation = "lighter";
-      drawWheelScene(ctx2d, W, H, e.wheel, voicesRef.current);
+      drawWheelScene(ctx2d, W, H, e.wheel, voicesRef.current, dt, hoverRingIdRef.current);
     } else {
       ctx2d.globalCompositeOperation = "lighter";
       if (sceneRef.current === "polygon") drawPolygonScene(ctx2d, W, H, e, k, v, audioNow);
@@ -755,21 +770,22 @@ function PhaseApp() {
     }
 
     // particles
-    drawParticles(ctx2d, e, dt);
+    if (!isWheelScene) drawParticles(ctx2d, e, dt);
 
     ctx2d.globalCompositeOperation = "source-over";
 
-    // wordmark
-    ctx2d.save();
-    ctx2d.fillStyle = "oklch(0.6 0.04 80 / 0.07)";
-    ctx2d.font = "600 64px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto";
-    ctx2d.textAlign = "center";
-    ctx2d.textBaseline = "middle";
-    ctx2d.letterSpacing = "12px" as unknown as string;
-    ctx2d.fillText("PHASE", W / 2, H / 2 - 16);
-    ctx2d.font = "500 18px ui-sans-serif, system-ui";
-    ctx2d.fillText("RHYTHMS", W / 2, H / 2 + 30);
-    ctx2d.restore();
+    if (!isWheelScene) {
+      ctx2d.save();
+      ctx2d.fillStyle = "oklch(0.6 0.04 80 / 0.07)";
+      ctx2d.font = "600 64px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto";
+      ctx2d.textAlign = "center";
+      ctx2d.textBaseline = "middle";
+      ctx2d.letterSpacing = "12px" as unknown as string;
+      ctx2d.fillText("PHASE", W / 2, H / 2 - 16);
+      ctx2d.font = "500 18px ui-sans-serif, system-ui";
+      ctx2d.fillText("RHYTHMS", W / 2, H / 2 + 30);
+      ctx2d.restore();
+    }
   };
 
   /* ---- Transport ---- */

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -519,6 +519,10 @@ function PhaseApp() {
     wheel: makeSeedWheel(),
   });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const grainPatternRef = useRef<CanvasPattern | null>(null);
+  const hoverRingIdRef = useRef<string | null>(null);
+  const hoverOpacityRef = useRef<number>(0);
+  const lastHoverRef = useRef<string | null>(null);
 
   /* ---- Audio graph init ---- */
   const ensureAudio = useCallback((): AudioGraph => {
@@ -665,6 +669,7 @@ function PhaseApp() {
       engineRef.current.h = rect.height;
       engineRef.current.dpr = dpr;
       setCanvasRect({ w: rect.width, h: rect.height });
+      grainPatternRef.current = null; // regenerate grain to match dpr
     };
     onResize();
     window.addEventListener("resize", onResize);
@@ -709,13 +714,17 @@ function PhaseApp() {
 
     const W = e.w, H = e.h;
     ctx2d.setTransform(e.dpr, 0, 0, e.dpr, 0, 0);
+    const isWheelScene = sceneRef.current === "wheel";
 
-    // background fade (creates motion trails)
-    ctx2d.fillStyle = "oklch(0.09 0.01 260 / 0.35)";
-    ctx2d.fillRect(0, 0, W, H);
-
-    // background scene
-    drawBackground(ctx2d, W, H, bgRef.current, e, dt);
+    if (isWheelScene) {
+      // ART SURFACE: opaque charcoal base + vignette + tiled grain
+      paintArtBackground(ctx2d, W, H, grainPatternRef);
+    } else {
+      // background fade (creates motion trails) — non-wheel scenes
+      ctx2d.fillStyle = "oklch(0.09 0.01 260 / 0.35)";
+      ctx2d.fillRect(0, 0, W, H);
+      drawBackground(ctx2d, W, H, bgRef.current, e, dt);
+    }
 
     // process pending visual triggers whose time has come
     if (a) {
@@ -733,7 +742,7 @@ function PhaseApp() {
     }
 
     // draw scene
-    if (sceneRef.current === "wheel") {
+    if (isWheelScene) {
       // update wheel physics + trigger detection (audio + visuals)
       if (a && playingRef.current) {
         updateWheel(e.wheel, dt, a, bpmRef.current, voicesRef.current, knobsRef.current);
@@ -741,8 +750,19 @@ function PhaseApp() {
         // decay flashes even when paused
         decayWheelFlashes(e.wheel, dt);
       }
+      // ghost text behind everything
+      const targetOp = hoverRingIdRef.current ? 1 : 0;
+      hoverOpacityRef.current += (targetOp - hoverOpacityRef.current) * Math.min(1, dt * 6);
+      if (hoverOpacityRef.current > 0.01) {
+        const ring = e.wheel.rings.find(r => r.id === hoverRingIdRef.current)
+          ?? e.wheel.rings.find(r => r.id === lastHoverRef.current);
+        if (ring) {
+          lastHoverRef.current = ring.id;
+          drawGhostReadout(ctx2d, W, H, ringPeriodSec(ring, bpmRef.current), hoverOpacityRef.current);
+        }
+      }
       ctx2d.globalCompositeOperation = "lighter";
-      drawWheelScene(ctx2d, W, H, e.wheel, voicesRef.current);
+      drawWheelScene(ctx2d, W, H, e.wheel, voicesRef.current, dt, hoverRingIdRef.current);
     } else {
       ctx2d.globalCompositeOperation = "lighter";
       if (sceneRef.current === "polygon") drawPolygonScene(ctx2d, W, H, e, k, v, audioNow);
@@ -751,21 +771,22 @@ function PhaseApp() {
     }
 
     // particles
-    drawParticles(ctx2d, e, dt);
+    if (!isWheelScene) drawParticles(ctx2d, e, dt);
 
     ctx2d.globalCompositeOperation = "source-over";
 
-    // wordmark
-    ctx2d.save();
-    ctx2d.fillStyle = "oklch(0.6 0.04 80 / 0.07)";
-    ctx2d.font = "600 64px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto";
-    ctx2d.textAlign = "center";
-    ctx2d.textBaseline = "middle";
-    ctx2d.letterSpacing = "12px" as unknown as string;
-    ctx2d.fillText("PHASE", W / 2, H / 2 - 16);
-    ctx2d.font = "500 18px ui-sans-serif, system-ui";
-    ctx2d.fillText("RHYTHMS", W / 2, H / 2 + 30);
-    ctx2d.restore();
+    if (!isWheelScene) {
+      ctx2d.save();
+      ctx2d.fillStyle = "oklch(0.6 0.04 80 / 0.07)";
+      ctx2d.font = "600 64px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto";
+      ctx2d.textAlign = "center";
+      ctx2d.textBaseline = "middle";
+      ctx2d.letterSpacing = "12px" as unknown as string;
+      ctx2d.fillText("PHASE", W / 2, H / 2 - 16);
+      ctx2d.font = "500 18px ui-sans-serif, system-ui";
+      ctx2d.fillText("RHYTHMS", W / 2, H / 2 + 30);
+      ctx2d.restore();
+    }
   };
 
   /* ---- Transport ---- */
@@ -799,6 +820,26 @@ function PhaseApp() {
     const handled = wheelHandleClick(engineRef.current.wheel, px, py, rect.width, rect.height);
     if (handled) bumpTopo();
   };
+
+  const onCanvasPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (sceneRef.current !== "wheel") return;
+    const c = canvasRef.current; if (!c) return;
+    const rect = c.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const cx = rect.width / 2, cy = rect.height / 2;
+    const r = Math.hypot(px - cx, py - cy);
+    const wh = engineRef.current.wheel;
+    let hit: string | null = null;
+    let bestD = 14;
+    for (const ring of wh.rings) {
+      const R = (ring.radiusFactor * Math.min(rect.width, rect.height)) / 2;
+      const d = Math.abs(r - R);
+      if (d < bestD) { bestD = d; hit = ring.id; }
+    }
+    hoverRingIdRef.current = hit;
+  };
+  const onCanvasPointerLeave = () => { hoverRingIdRef.current = null; };
 
   /* ---- Wheel ring/line mutators ---- */
   const addRing = () => {
@@ -838,6 +879,11 @@ function PhaseApp() {
     const l = wh.lines.find((x) => x.id === id);
     if (l) { l.angle = angle; bumpTopo(); }
   };
+  const clearLines = () => {
+    const wh = engineRef.current.wheel;
+    wh.lines = [];
+    bumpTopo();
+  };
   const updateRing = (id: string, patch: Partial<WheelRing>) => {
     const wh = engineRef.current.wheel;
     const r = wh.rings.find((x) => x.id === id);
@@ -849,9 +895,10 @@ function PhaseApp() {
   return (
     <div
       className="min-h-screen w-full flex flex-col"
-      style={{ background: "var(--pr-bg-2)", color: "var(--pr-text)" }}
+      style={{ background: isWheel ? "#0b0b0d" : "var(--pr-bg-2)", color: "var(--pr-text)" }}
     >
-      {/* TOP CONTROL STRIP */}
+      {/* TOP CONTROL STRIP — hidden in Wheel art mode */}
+      {!isWheel && (
       <header
         className="flex items-center gap-4 px-4 py-2.5 border-b"
         style={{
@@ -918,14 +965,17 @@ function PhaseApp() {
           </button>
         </div>
       </header>
+      )}
 
       {/* CANVAS */}
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full block"
-          style={{ background: "oklch(0.09 0.01 260)", cursor: isWheel ? "crosshair" : "default" }}
+          style={{ background: isWheel ? "#0b0b0d" : "oklch(0.09 0.01 260)", cursor: isWheel ? "crosshair" : "default" }}
           onPointerDown={onCanvasPointerDown}
+          onPointerMove={onCanvasPointerMove}
+          onPointerLeave={onCanvasPointerLeave}
         />
         {isWheel && (
           <WheelOverlays
@@ -939,11 +989,24 @@ function PhaseApp() {
             onRemoveLine={removeLine}
             onSetLineAngle={setLineAngle}
             onUpdateRing={updateRing}
+            onHoverRing={(id) => { hoverRingIdRef.current = id; }}
+          />
+        )}
+        {isWheel && (
+          <ArtDock
+            playing={playing}
+            bpm={bpm}
+            onTogglePlay={togglePlay}
+            onAddRing={addRing}
+            onAddLine={addLine}
+            onClearLines={clearLines}
+            onBpm={setBpm}
           />
         )}
       </main>
 
-      {/* BOTTOM BPM DOCK */}
+      {/* BOTTOM BPM DOCK — hidden in Wheel art mode */}
+      {!isWheel && (
       <footer
         className="flex items-center gap-4 px-5 py-2.5 border-t"
         style={{
@@ -965,6 +1028,7 @@ function PhaseApp() {
           {bpm} <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "var(--pr-muted)" }}>bpm</span>
         </div>
       </footer>
+      )}
     </div>
   );
 }
@@ -1386,49 +1450,56 @@ function wheelHandleClick(wh: WheelState, px: number, py: number, W: number, H: 
 
 function drawWheelScene(
   ctx: CanvasRenderingContext2D, W: number, H: number, wh: WheelState, voices: VoiceSel,
+  _dt: number = 0, hoverRingId: string | null = null,
 ) {
   const cx = W / 2, cy = H / 2;
   const maxR = Math.min(W, H) / 2;
 
-  // 1) rings (faint stroke, brighten with flash)
+  // 1) rings — restrained 1px hairlines, brighten on flash or hover
   for (const ring of wh.rings) {
     const R = ringRadiusPx(ring, W, H);
-    const color = voiceSlotColor(ring.voiceSlot, true);
-    ctx.strokeStyle = color.replace("a", (0.18 + ring.flash * 0.5).toFixed(3));
-    ctx.lineWidth = 1 + ring.flash * 1.2;
+    const hovered = ring.id === hoverRingId;
+    const base = hovered ? 0.22 : 0.08;
+    ctx.strokeStyle = `rgba(255,255,255,${(base + ring.flash * 0.35).toFixed(3)})`;
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, TAU);
     ctx.stroke();
   }
 
-  // 2) lines (chord across the wheel)
+  // 2) trigger lines — quiet hairline chords with rim ticks
   for (const line of wh.lines) {
     const x1 = cx + Math.cos(line.angle) * maxR * 0.96;
     const y1 = cy + Math.sin(line.angle) * maxR * 0.96;
     const x2 = cx - Math.cos(line.angle) * maxR * 0.96;
     const y2 = cy - Math.sin(line.angle) * maxR * 0.96;
-    // soft glow
-    ctx.strokeStyle = `oklch(0.92 0.05 80 / ${(0.18 + line.flash * 0.55).toFixed(3)})`;
-    ctx.lineWidth = 1 + line.flash * 1.8;
+    ctx.strokeStyle = `rgba(255,255,255,${(0.12 + line.flash * 0.35).toFixed(3)})`;
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
     ctx.stroke();
-    // sparks at crossing points
+    // ink-bleed ripple at each crossing (Fluid Inversion)
     for (const s of line.sparks) {
       const sx = cx + Math.cos(s.x) * s.y * (Math.min(W, H) / 2);
       const sy = cy + Math.sin(s.x) * s.y * (Math.min(W, H) / 2);
-      const a = Math.max(0, s.t / 0.6);
-      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, 22 * a + 4);
-      g.addColorStop(0, `oklch(1 0.04 90 / ${(0.7 * a).toFixed(3)})`);
-      g.addColorStop(1, "oklch(1 0.04 90 / 0)");
+      // s.t starts at 0.6 (life). Convert to elapsed k in [0..1] (life 0.5s scaled).
+      const elapsed = 0.6 - s.t;
+      const k = Math.max(0, Math.min(1, elapsed / 0.5));
+      const radius = 40 * (1 - Math.pow(1 - k, 3)); // exp ease-out
+      const alpha = Math.pow(1 - k, 2.2) * 0.55;
+      if (alpha < 0.01) continue;
+      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, Math.max(2, radius));
+      g.addColorStop(0, `rgba(255,255,255,0)`);
+      g.addColorStop(0.55, `rgba(255,255,255,${(alpha * 0.9).toFixed(3)})`);
+      g.addColorStop(1, `rgba(255,255,255,0)`);
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.arc(sx, sy, 22 * a + 4, 0, TAU);
+      ctx.arc(sx, sy, Math.max(2, radius), 0, TAU);
       ctx.fill();
     }
   }
 
-  // 3) notes
+  // 3) notes — soft discs + kinetic trails
   for (const ring of wh.rings) {
     const R = ringRadiusPx(ring, W, H);
     const sign = ring.direction;
@@ -1438,31 +1509,107 @@ function drawWheelScene(
       const nx = cx + Math.cos(w) * R;
       const ny = cy + Math.sin(w) * R;
       const inten = n.flash;
-      // outer halo
-      const baseR = 5 + inten * 12;
-      const g = ctx.createRadialGradient(nx, ny, 0, nx, ny, baseR + 14);
-      g.addColorStop(0, color.replace("a", (0.9 * (0.45 + inten * 0.55)).toFixed(3)));
-      g.addColorStop(0.5, color.replace("a", (0.25 * (0.3 + inten * 0.7)).toFixed(3)));
+
+      // kinetic trail (6 samples behind the note)
+      const trail = getTrail(n);
+      // draw oldest → newest
+      for (let i = 0; i < trail.length; i++) {
+        const p = trail[i];
+        const tk = (i + 1) / (trail.length + 1);
+        const tr = 1.4 + tk * 2.2;
+        const ta = 0.04 + tk * 0.08;
+        ctx.fillStyle = color.replace("a", ta.toFixed(3));
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, tr, 0, TAU);
+        ctx.fill();
+      }
+      // sample current position into trail (cap length)
+      trail.push({ x: nx, y: ny });
+      if (trail.length > 6) trail.shift();
+
+      // soft note disc
+      const baseR = 3.5 + inten * 5;
+      const g = ctx.createRadialGradient(nx, ny, 0, nx, ny, baseR + 10);
+      g.addColorStop(0, color.replace("a", (0.85).toFixed(3)));
+      g.addColorStop(0.45, color.replace("a", (0.3 + inten * 0.4).toFixed(3)));
       g.addColorStop(1, color.replace("a", "0"));
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.arc(nx, ny, baseR + 14, 0, TAU);
+      ctx.arc(nx, ny, baseR + 10, 0, TAU);
       ctx.fill();
-      // crisp ring
-      ctx.strokeStyle = color.replace("a", (0.65 + inten * 0.35).toFixed(3));
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.arc(nx, ny, 4.5, 0, TAU);
-      ctx.stroke();
     }
   }
+}
+
+/* ============================================================
+ * Art surface helpers (modular for future sequencers)
+ * ============================================================ */
+
+const noteTrails = new WeakMap<WheelNote, { x: number; y: number }[]>();
+function getTrail(n: WheelNote): { x: number; y: number }[] {
+  let t = noteTrails.get(n);
+  if (!t) { t = []; noteTrails.set(n, t); }
+  return t;
+}
+
+function buildGrainPattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
+  const size = 256;
+  const off = document.createElement("canvas");
+  off.width = size; off.height = size;
+  const octx = off.getContext("2d");
+  if (!octx) return null;
+  const img = octx.createImageData(size, size);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = (Math.random() * 255) | 0;
+    img.data[i] = v;
+    img.data[i + 1] = v;
+    img.data[i + 2] = v;
+    img.data[i + 3] = 10; // ~4% alpha grain
+  }
+  octx.putImageData(img, 0, 0);
+  return ctx.createPattern(off, "repeat");
+}
+
+function paintArtBackground(
+  ctx: CanvasRenderingContext2D, W: number, H: number,
+  patternRef: { current: CanvasPattern | null },
+) {
+  // charcoal base
+  ctx.fillStyle = "#0b0b0d";
+  ctx.fillRect(0, 0, W, H);
+  // vignette
+  const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.15, W / 2, H / 2, Math.max(W, H) * 0.75);
+  vg.addColorStop(0, "rgba(0,0,0,0)");
+  vg.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+  // grain
+  if (!patternRef.current) patternRef.current = buildGrainPattern(ctx);
+  if (patternRef.current) {
+    ctx.fillStyle = patternRef.current;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function drawGhostReadout(
+  ctx: CanvasRenderingContext2D, W: number, H: number, periodSec: number, opacity: number,
+) {
+  const txt = `${periodSec.toFixed(2).padStart(5, "0")}s`;
+  const size = Math.max(120, Math.min(280, Math.min(W, H) * 0.22));
+  ctx.save();
+  ctx.fillStyle = `rgba(255,255,255,${(0.05 * opacity).toFixed(3)})`;
+  ctx.font = `300 ${size}px "Inter", system-ui, -apple-system, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(txt, W / 2, H / 2);
+  ctx.restore();
 }
 
 /* ---- Wheel DOM overlays ---- */
 
 function WheelOverlays({
   wheel, topo, canvasW, canvasH,
-  onAddRing, onAddLine, onRemoveRing, onRemoveLine, onSetLineAngle, onUpdateRing,
+  onAddRing, onAddLine, onRemoveRing, onRemoveLine, onSetLineAngle, onUpdateRing, onHoverRing,
 }: {
   wheel: WheelState;
   topo: number;
@@ -1474,9 +1621,11 @@ function WheelOverlays({
   onRemoveLine: (id: string) => void;
   onSetLineAngle: (id: string, angle: number) => void;
   onUpdateRing: (id: string, patch: Partial<WheelRing>) => void;
+  onHoverRing?: (id: string | null) => void;
 }) {
   // touch topo so eslint doesn't whine and to force re-render
   void topo;
+  void onAddRing; void onAddLine;
 
   const cx = canvasW / 2;
   const cy = canvasH / 2;
@@ -1484,27 +1633,6 @@ function WheelOverlays({
 
   return (
     <>
-      {/* Add buttons */}
-      <div className="absolute top-3 left-3 flex flex-col gap-1.5 select-none">
-        <button
-          onClick={onAddRing}
-          className="px-2 py-1 text-[10px] uppercase tracking-[0.2em] rounded-sm"
-          style={{ background: "var(--pr-panel-2)", color: "var(--pr-text)", boxShadow: "inset 0 0 0 1px var(--pr-line)" }}
-        >
-          + ring
-        </button>
-        <button
-          onClick={onAddLine}
-          className="px-2 py-1 text-[10px] uppercase tracking-[0.2em] rounded-sm"
-          style={{ background: "var(--pr-panel-2)", color: "var(--pr-text)", boxShadow: "inset 0 0 0 1px var(--pr-line)" }}
-        >
-          + line
-        </button>
-        <div className="mt-1 text-[9px] uppercase tracking-[0.18em] opacity-60" style={{ color: "var(--pr-muted)" }}>
-          click a ring to add a note<br />click a note to remove
-        </div>
-      </div>
-
       {/* Ring chips on the right edge of each ring */}
       {wheel.rings.map((r) => {
         const R = (r.radiusFactor * Math.min(canvasW, canvasH)) / 2;
@@ -1518,6 +1646,7 @@ function WheelOverlays({
             top={top}
             onRemove={() => onRemoveRing(r.id)}
             onUpdate={(patch) => onUpdateRing(r.id, patch)}
+            onHover={(h) => onHoverRing?.(h ? r.id : null)}
           />
         );
       })}
@@ -1537,12 +1666,13 @@ function WheelOverlays({
 }
 
 function RingChip({
-  ring, left, top, onRemove, onUpdate,
+  ring, left, top, onRemove, onUpdate, onHover,
 }: {
   ring: WheelRing;
   left: number; top: number;
   onRemove: () => void;
   onUpdate: (patch: Partial<WheelRing>) => void;
+  onHover?: (hover: boolean) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(`${ring.beats}/${ring.subdivision}`);
@@ -1568,18 +1698,20 @@ function RingChip({
 
   return (
     <div
-      className="absolute flex items-center gap-1.5 px-1.5 py-0.5 rounded-sm text-[10px] tracking-wider select-none"
+      className="absolute flex items-center gap-1.5 px-1.5 py-0.5 rounded-sm text-[10px] tracking-wider select-none transition-opacity"
       style={{
         left, top,
-        background: "oklch(0.13 0.012 260 / 0.85)",
-        boxShadow: "inset 0 0 0 1px var(--pr-line)",
-        color: "var(--pr-text)",
-        fontFamily: "ui-monospace, SFMono-Regular, monospace",
+        background: "transparent",
+        color: "rgba(255,255,255,0.45)",
+        fontFamily: "'Inter', ui-sans-serif, system-ui",
+        opacity: 0.6,
       }}
+      onMouseEnter={() => onHover?.(true)}
+      onMouseLeave={() => onHover?.(false)}
     >
       <button title="cycle voice" onClick={cycleSlot}
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ background: dot, boxShadow: `0 0 6px ${dot}` }} />
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: dot }} />
       {editing ? (
         <input
           autoFocus
@@ -1588,23 +1720,23 @@ function RingChip({
           onBlur={commit}
           onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setEditing(false); setVal(`${ring.beats}/${ring.subdivision}`); } }}
           className="w-12 bg-transparent outline-none border-b"
-          style={{ borderColor: "var(--pr-line)", color: "var(--pr-text)" }}
+          style={{ borderColor: "rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.8)" }}
         />
       ) : (
-        <button onClick={() => { setVal(`${ring.beats}/${ring.subdivision}`); setEditing(true); }}>
+        <button className="hover:text-white" onClick={() => { setVal(`${ring.beats}/${ring.subdivision}`); setEditing(true); }}>
           {ring.beats}/{ring.subdivision}
         </button>
       )}
       <button
         title="toggle direction"
         onClick={() => onUpdate({ direction: (ring.direction === 1 ? -1 : 1) as 1 | -1 })}
-        style={{ color: "var(--pr-muted)" }}
+        className="hover:text-white"
       >
         {ring.direction === 1 ? "↻" : "↺"}
       </button>
-      <span style={{ color: "var(--pr-muted)" }}>·</span>
-      <button onClick={cycleSlot} style={{ color: "var(--pr-muted)" }}>{ring.voiceSlot}</button>
-      <button onClick={onRemove} style={{ color: "var(--pr-muted)" }} title="remove ring">×</button>
+      <span className="opacity-50">·</span>
+      <button className="hover:text-white" onClick={cycleSlot}>{ring.voiceSlot}</button>
+      <button className="hover:text-white" onClick={onRemove} title="remove ring">×</button>
     </div>
   );
 }
@@ -1647,10 +1779,10 @@ function LineHandle({
       <div
         className="absolute"
         style={{
-          left: hx - 10, top: hy - 10, width: 20, height: 20,
+          left: hx - 8, top: hy - 8, width: 16, height: 16,
           borderRadius: 999,
-          background: "oklch(0.13 0.012 260 / 0.85)",
-          boxShadow: "inset 0 0 0 1px oklch(0.92 0.05 80 / 0.7), 0 0 10px oklch(0.92 0.05 80 / 0.4)",
+          background: "transparent",
+          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.35)",
           cursor: "grab",
           touchAction: "none",
         }}
@@ -1661,5 +1793,88 @@ function LineHandle({
         title="drag to rotate · double-click to remove"
       />
     </>
+  );
+}
+
+/* ============================================================
+ * Floating glass dock (Wheel art mode)
+ * ============================================================ */
+
+function ArtDock({
+  playing, bpm, onTogglePlay, onAddRing, onAddLine, onClearLines, onBpm,
+}: {
+  playing: boolean;
+  bpm: number;
+  onTogglePlay: () => void;
+  onAddRing: () => void;
+  onAddLine: () => void;
+  onClearLines: () => void;
+  onBpm: (v: number) => void;
+}) {
+  return (
+    <div
+      className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md"
+      style={{
+        background: "rgba(255,255,255,0.04)",
+        boxShadow: "0 8px 40px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.02)",
+        fontFamily: "'Inter', ui-sans-serif, system-ui",
+      }}
+    >
+      <DockBtn label={playing ? "pause" : "play"} onClick={onTogglePlay} active={playing}>
+        {playing ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+        )}
+      </DockBtn>
+      <span className="h-4 w-px bg-white/10" />
+      <DockBtn label="add circle" onClick={onAddRing}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9" /><path d="M12 8v8M8 12h8" strokeLinecap="round" /></svg>
+      </DockBtn>
+      <DockBtn label="add line" onClick={onAddLine}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 20L20 4" /></svg>
+      </DockBtn>
+      <DockBtn label="clear lines" onClick={onClearLines}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M6 6l12 12M6 18L18 6" /></svg>
+      </DockBtn>
+      <span className="h-4 w-px bg-white/10" />
+      <div className="flex items-center gap-3">
+        <input
+          type="range"
+          min={20} max={180} step={1}
+          value={bpm}
+          onChange={(e) => onBpm(parseInt(e.target.value, 10))}
+          className="pr-hairline-slider"
+          style={{ width: 120 }}
+          title={`${bpm} bpm`}
+        />
+        <div className="text-[10px] tabular-nums tracking-[0.18em] uppercase text-white/50">
+          {bpm}<span className="ml-1 text-white/30">bpm</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DockBtn({
+  children, onClick, label, active,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={
+        "h-7 w-7 grid place-items-center rounded-full transition-colors " +
+        (active ? "text-white" : "text-white/60 hover:text-white")
+      }
+    >
+      {children}
+    </button>
   );
 }

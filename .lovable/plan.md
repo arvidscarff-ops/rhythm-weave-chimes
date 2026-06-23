@@ -1,88 +1,89 @@
+# Minimalist Art Piece — Visual Overhaul (Wheel Canvas)
 
-# Plan — "Wheel" scene (new primary mode)
+Reframe the app's surface as a single quiet art object. The audio engine, wheel physics, trigger detection, and scene/voice models stay byte-for-byte the same. Only the **rendering layer**, **chrome/dock**, and **interaction visuals** change.
 
-## 1. Scene reshuffle
+## 1. Canvas surface
 
-- `scene` dropdown order becomes: **wheel** (default), polygon, sine, lissajous.
-- App boots in Wheel mode. The others stay as decorative visualizers (no editing) so nothing is lost.
-- A new per-scene state object is added so Wheel state (rings, lines, notes) is independent from the polygon-engine state. The polygon scheduler keeps running only when a non-Wheel scene is selected.
+- Replace the flat oklch canvas background with a layered paint:
+  - Base: deep charcoal `#0b0b0d` (≈ `oklch(0.12 0.005 0)`).
+  - Subtle vignette (radial gradient, ~6% darker at edges) so the eye centers.
+  - Static **noise-grain** overlay: generated once into an offscreen canvas at mount (≈ 256×256 monochrome pixel noise at ~4% alpha), tiled via `ctx.fillStyle = pattern` each frame. Cached, regenerated only on DPR change.
+- Remove the inline `style.background` on `<canvas>`; paint the bg inside `render()` so the noise composes correctly.
 
-## 2. Wheel data model
+## 2. Wheel rendering refinement (drawWheelScene)
 
-```text
-project: { bpm: number, swing?: never }   // bpm = master tempo
-ring: {
-  id, radius (px or % of canvas),
-  beats: number,           // beats per full rotation (numerator)
-  subdivision: number,     // denominator (e.g. 4 in 4/4) — divides a "beat" into smaller pulses; together they define rotation seconds = (beats/subdivision) * (60/bpm) * 4
-  direction: 'cw' | 'ccw',
-  phase: number,           // current rotation angle (radians), advanced every frame
-  color: string,
-  notes: [{ id, angle (rad, fixed on the ring), pitchSemis, voice }],
-}
-line: { id, angle (rad), length: 'full'|'half', color }   // a chord/diameter across the wheel center; trigger when a note crosses
+Keep geometry identical; restyle strokes:
+- Rings: 1px hairline, `rgba(255,255,255,0.08)`; the actively-hovered ring brightens to `0.18`.
+- Notes: small soft discs (radial gradient, no hard edge), tinted by voice.
+- Trigger lines: 1px, `rgba(255,255,255,0.12)`, with a faint perpendicular tick at the rim.
+- No drop-shadows, no neon — restraint over glow.
+
+## 3. Fluid Inversion — trigger visual
+
+Replace the current "flash circle" trigger effect with an **ink-bleed ripple**:
+
+- New particle type `ripple` with `{x, y, t0, life=0.5s, hue}`.
+- Each frame compute `k = (now - t0) / life`, clamp 0..1.
+- `radius = 40 * (1 - Math.pow(1 - k, 3))` (exponential ease-out 0→40px).
+- `alpha = Math.pow(1 - k, 2.2) * 0.55`.
+- Render as a radial gradient disc (transparent center → soft tinted edge → transparent), `globalCompositeOperation = 'lighter'` so overlapping ripples bloom subtly.
+- Spawned from existing trigger callsite in `updateWheel` — same place that already dispatches audio.
+
+## 4. Kinetic trail on rotating notes
+
+- Per note, keep a small ring buffer (length 6) of recent `{x, y}` sampled every frame inside `drawWheelScene`.
+- Draw oldest→newest as tiny discs whose radius and alpha scale linearly: `r = noteR * (i+1)/7 * 0.6`, `alpha = 0.05 + 0.04*i`.
+- Buffer lives on a `WeakMap<WheelNote, Trail>` inside the render module, so the data model stays untouched and trails reset cleanly when notes are removed.
+
+## 5. Ambient speed readout (hover ghost text)
+
+- Track `hoverRingId` in `WheelOverlays` (already has per-ring chips — wire `onPointerEnter/Leave` on each ring chip and on canvas hover hit-test against ring radius).
+- When set, render in the canvas dead center:
+  - Period in seconds, formatted `"04.50s"` (zero-padded, 2 decimals).
+  - Font: `clamp(120px, 22vmin, 280px)`, weight 300, family `'Inter', system-ui` (Inter loaded via `<link>` in `__root.tsx`).
+  - Color: `rgba(255,255,255,0.05)`.
+  - 180ms fade in/out (opacity tween in a ref, no React rerender).
+- Drawn on the canvas (not DOM) so it sits behind rings and obeys the noise layer.
+
+## 6. Chrome removal & glass dock
+
+- **Top header** (knob row, scene picker, voice dropdowns, play button): hidden entirely while in `wheel` scene. Audio engine still reads `knobsRef`/`voicesRef`; defaults are fine for v1 of the art mode.
+- **Bottom BPM footer**: replaced by a single floating dock, absolute-positioned bottom-center.
+- Dock: `fixed bottom-6 left-1/2 -translate-x-1/2`, `backdrop-blur-md bg-white/5 border border-white/10 rounded-full px-5 py-2.5 flex items-center gap-4 shadow-[0_8px_40px_rgba(0,0,0,0.4)]`.
+- Contents (icon-only, no labels, 16px lucide icons, `text-white/70 hover:text-white`):
+  - Play/Pause toggle
+  - Add Circle (calls existing `addRing`)
+  - Clear Lines (new tiny helper that empties `wheel.lines`)
+  - Thin tempo readout `{bpm}` + a 120px-wide hairline range input styled as a 1px track with a 6px dot thumb (no box, no fill). Hover expands a tooltip showing the value.
+- Ring chips & line handles (DOM overlays) restyled: 10px text, `text-white/40`, no backgrounds, hover only — so the canvas reads as art at rest.
+
+## 7. Modularity for future sequencers
+
+Refactor the canvas pipeline into a tiny **SceneRenderer interface** (no behavior change for non-wheel scenes):
+
+```ts
+type SceneRenderer = {
+  draw(ctx, w, h, t, dt): void;
+  hitTest?(px, py, w, h): boolean; // for click routing
+  onPointerDown?(px, py, w, h): boolean;
+};
 ```
 
-Trigger detection: for each note, compute its world angle = `note.angle + ring.phase * (direction === 'cw' ? 1 : -1)`. Between frames, check if it crossed any line's angle (handle wrap-around). On a crossing, schedule the note via the existing audio engine (`playVoice`) at `audioCtx.currentTime` (the visual frame time, close enough — for tighter sync we sample-accurately schedule using the angular velocity to estimate exact crossing time within the frame).
-
-## 3. Rhythm format → ring period
-
-`bpm` is global. A ring with notation `N/D` rotates once every `(N / D) * 4` beats — i.e. 4/4 = 4 beats per rotation, 3/4 = 3 beats, 11/13 = 11 * 4/13 ≈ 3.385 beats. Period in seconds = `beats_per_rotation * 60 / bpm`. This gives the "11/13" phasing feel against, say, a 4/4 ring at the same BPM.
-
-Direction (cw/ccw) is a per-ring toggle.
-
-## 4. Canvas interaction (Wheel mode only)
-
-- **Add ring:** "+ ring" button → new ring appears at next free radius (cycles through 25/40/55/70/85% of canvas min-dim). Default 4/4 cw.
-- **Remove ring:** "×" on the ring's inline label.
-- **Add note:** click on an empty arc of a ring (within ~10 px tolerance) → a note dot appears at that angle. Pitch defaults to a pentatonic degree based on radial position (outer = lower, inner = higher) but is overridable in the inline control popup.
-- **Remove note:** click an existing note (within ~10 px) → removes it.
-- **Add line:** "+ line" button → new line appears at the next of 0°, 90°, 180°, 270°. Each line is a diameter through the center; drag its end handle (small disk on the rim) to rotate it.
-- **Remove line:** "×" on the line's handle.
-- **Per-ring inline panel:** small floating chip near each ring's label showing `N / D`, direction arrow, voice (melo/bass/atmo), color swatch, ×. Click `N / D` to type a fraction; arrow toggles direction; voice cycles through the existing voice list.
-
-Selection is implicit (hover → reveal controls). No modal inspector.
-
-## 5. New global controls
-
-- **Bottom dock:** slim transport bar with a long BPM slider (40–220), a current-BPM readout, and play/pause mirrored from the top.
-- Top header keeps the existing knob row but `speed` and `multiply` are hidden in Wheel mode (they belong to the polygon engine). They reappear when scene = polygon/sine/lissajous.
-- The `melo/bass/atmo` voice dropdowns still drive note voice (each note inherits its ring's voice slot).
-
-## 6. Visual design (matches the synth-hardware feel already established)
-
-- Concentric rings: faint stroke when idle, glow when a note on it just fired.
-- Notes: small neon dots colored by ring voice; pulse + emit particles when crossed by a line.
-- Lines: thin neon chords across the wheel; flash at the crossing point on trigger.
-- Outer ring labels (small monospace) sit on the right edge of each ring: `4/4 ▸  melo  ×`. Mouseover brightens; otherwise dimmed.
-- Wordmark stays low-opacity in the background.
-- Particles + glow reuse the existing particle pool.
-
-## 7. Audio path
-
-No changes to the audio graph. Wheel triggers call the same `playVoice(ctx, preFx, voice, freq, fx2, time)` so the FX bus and existing knobs (rev-mix, rev-size, fx-1, fx-2, main-vol, pitch) Just Work.
-
-## 8. Build order (each step ships something working)
-
-1. Scene reshuffle: add `'wheel'` to scene list, render an empty wheel canvas, bottom BPM slider wired (just stored). Hide speed/multiply knobs when in Wheel.
-2. Ring model + rendering + spin loop. Default seed: one 4/4 ring with a few preset notes so play makes sound immediately.
-3. Line model + trigger detection + audio firing.
-4. Click-to-add/remove notes; +ring / ×ring controls.
-5. +line / ×line controls; drag line angle.
-6. Inline per-ring chip (notation editor, direction, voice, color, ×).
-7. Polish: glow on crossing, particles at crossing point, line flash, easing on ring fade-in/out.
+- Extract `drawWheelScene` + ripple/trail/ghost-text layers into `wheelRenderer` conforming to this interface.
+- Background painter (charcoal + vignette + grain) and overlay layer (ghost text) live in `src/lib/canvas/background.ts` and `src/lib/canvas/typography.ts` — shared across all future sequencers.
+- The main `render()` becomes: `paintBackground → sceneRenderer.draw → paintOverlays`. Adding a future "grid", "graph", or "spiral" sequencer is just another `SceneRenderer`.
 
 ## Technical notes
 
-- All Wheel state in a single `useRef` store (no per-frame React renders); a `bump` state forces a re-render only when topology changes (add/remove ring/line/note) so DOM overlays (chips, line handles) stay in sync. Spin/triggers run purely on the RAF loop.
-- Crossing detection uses signed angular delta from previous frame, normalized to `(-π, π]`, accounting for cw/ccw. To avoid double-fires on near-stationary rings at high frame rates, store last-fire time per (note, line) pair with a 30 ms refractory window.
-- The existing canvas keeps additive blending and dust background. Wheel layer draws before particles.
-- DOM overlays (chips, line handles) are absolutely positioned divs over the canvas, computed from canvas-space → CSS-space using the cached `rect`.
-- BPM clamp 40–220. Notation parser accepts `N/D` with N ∈ 1..32, D ∈ 1..32; invalid input reverts to previous value.
+- New files: `src/lib/canvas/background.ts`, `src/lib/canvas/typography.ts`, `src/lib/canvas/ripples.ts`, `src/lib/canvas/trails.ts`, `src/lib/canvas/sceneRenderer.ts`. All pure functions/closures — no React.
+- Inter font added via `<link rel="stylesheet" href="https://rsms.me/inter/inter.css">` in `src/routes/__root.tsx` head (per stack rules, never `@import` a URL in styles.css).
+- No changes to: `playVoice`, `updateWheel` math, `WheelState`/`WheelRing`/`WheelLine`/`WheelNote` types, BPM range, ring period formula, polygon engine, or any audio knob.
+- Removed UI in wheel mode is *hidden*, not deleted — switching back to a non-wheel scene restores the full header (kept for parity even though wheel is the showcase).
+- Performance: grain pattern cached; trails capped at 6×N notes; ripples auto-evicted after `life`; ghost text is a single fillText per frame.
 
-## Out of scope for this step (call out before building)
+## Out of scope
 
-- Saving/loading wheel presets.
-- Pitch editing UI (notes auto-assign by ring index; we can add a pitch picker in a follow-up).
-- Swing / micro-timing.
-- Multiple selected items / multi-edit.
+- Theme tokens beyond what this surface needs (no full design-token redo).
+- Mobile-specific dock layout.
+- Saving/loading the art state.
+- Touch-press long-hover for the ghost readout (mouse hover only for v1).

@@ -1779,10 +1779,10 @@ function LineHandle({
       <div
         className="absolute"
         style={{
-          left: hx - 10, top: hy - 10, width: 20, height: 20,
+          left: hx - 8, top: hy - 8, width: 16, height: 16,
           borderRadius: 999,
-          background: "oklch(0.13 0.012 260 / 0.85)",
-          boxShadow: "inset 0 0 0 1px oklch(0.92 0.05 80 / 0.7), 0 0 10px oklch(0.92 0.05 80 / 0.4)",
+          background: "transparent",
+          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.35)",
           cursor: "grab",
           touchAction: "none",
         }}
@@ -1793,5 +1793,88 @@ function LineHandle({
         title="drag to rotate · double-click to remove"
       />
     </>
+  );
+}
+
+/* ============================================================
+ * Floating glass dock (Wheel art mode)
+ * ============================================================ */
+
+function ArtDock({
+  playing, bpm, onTogglePlay, onAddRing, onAddLine, onClearLines, onBpm,
+}: {
+  playing: boolean;
+  bpm: number;
+  onTogglePlay: () => void;
+  onAddRing: () => void;
+  onAddLine: () => void;
+  onClearLines: () => void;
+  onBpm: (v: number) => void;
+}) {
+  return (
+    <div
+      className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md"
+      style={{
+        background: "rgba(255,255,255,0.04)",
+        boxShadow: "0 8px 40px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.02)",
+        fontFamily: "'Inter', ui-sans-serif, system-ui",
+      }}
+    >
+      <DockBtn label={playing ? "pause" : "play"} onClick={onTogglePlay} active={playing}>
+        {playing ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+        )}
+      </DockBtn>
+      <span className="h-4 w-px bg-white/10" />
+      <DockBtn label="add circle" onClick={onAddRing}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9" /><path d="M12 8v8M8 12h8" strokeLinecap="round" /></svg>
+      </DockBtn>
+      <DockBtn label="add line" onClick={onAddLine}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 20L20 4" /></svg>
+      </DockBtn>
+      <DockBtn label="clear lines" onClick={onClearLines}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M6 6l12 12M6 18L18 6" /></svg>
+      </DockBtn>
+      <span className="h-4 w-px bg-white/10" />
+      <div className="flex items-center gap-3">
+        <input
+          type="range"
+          min={20} max={180} step={1}
+          value={bpm}
+          onChange={(e) => onBpm(parseInt(e.target.value, 10))}
+          className="pr-hairline-slider"
+          style={{ width: 120 }}
+          title={`${bpm} bpm`}
+        />
+        <div className="text-[10px] tabular-nums tracking-[0.18em] uppercase text-white/50">
+          {bpm}<span className="ml-1 text-white/30">bpm</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DockBtn({
+  children, onClick, label, active,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={
+        "h-7 w-7 grid place-items-center rounded-full transition-colors " +
+        (active ? "text-white" : "text-white/60 hover:text-white")
+      }
+    >
+      {children}
+    </button>
   );
 }

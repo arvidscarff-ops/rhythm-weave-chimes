@@ -14,7 +14,14 @@ import {
   type GrainType,
   type ToneType,
 } from "@/lib/fx/fxState";
-import { PACKS, PACK_IDS, playPackVoice, type PackId, type VoiceSpec } from "@/lib/sound/packs";
+import { playPackVoice } from "@/lib/sound/packs";
+import {
+  BUILTIN_RUNTIME_PACKS,
+  fetchCustomPacks,
+  triggerPackVoice,
+  warmCustomPack,
+  type RuntimePack,
+} from "@/lib/sound/runtimePacks";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -518,7 +525,8 @@ function PhaseApp() {
   const [fxOpen, setFxOpen] = useState(false);
   const [packsOpen, setPacksOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [selectedPack, setSelectedPack] = useState<PackId>("moss");
+  const [selectedPack, setSelectedPack] = useState<string>("moss");
+  const [customPacks, setCustomPacks] = useState<RuntimePack[]>([]);
   // topology bump: rings/lines/notes counts so DOM overlays re-render
   const [topo, setTopo] = useState(0);
   const bumpTopo = useCallback(() => setTopo((x) => x + 1), []);
@@ -547,7 +555,11 @@ function PhaseApp() {
   const voicesRef = useRef(voices); voicesRef.current = voices;
   const knobsRef = useRef(knobs); knobsRef.current = knobs;
   const bpmRef = useRef(bpm); bpmRef.current = bpm;
-  const packRef = useRef(selectedPack); packRef.current = selectedPack;
+  // Resolve currently-selected pack into a RuntimePack (built-in or custom).
+  const allPacks: RuntimePack[] = [...BUILTIN_RUNTIME_PACKS, ...customPacks];
+  const activePack: RuntimePack =
+    allPacks.find((p) => p.id === selectedPack) ?? BUILTIN_RUNTIME_PACKS[0];
+  const packRef = useRef<RuntimePack>(activePack); packRef.current = activePack;
 
   const audioRef = useRef<AudioGraph | null>(null);
   const engineRef = useRef<EngineState>({
@@ -768,6 +780,30 @@ function PhaseApp() {
     const a = audioRef.current; if (!a) return;
     applyFxState(a, fxState);
   }, [fxState]);
+
+  /* ---- Custom pack fetching + warming ---- */
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const list = await fetchCustomPacks();
+        if (!cancelled) setCustomPacks(list);
+      } catch (err) {
+        console.warn("[packs] custom fetch failed", err);
+      }
+    };
+    load();
+    // Re-fetch when packs drawer opens so newly-published packs appear without reload.
+    return () => { cancelled = true; };
+  }, [packsOpen]);
+
+  // Pre-decode samples for the active custom pack as soon as it's selected.
+  useEffect(() => {
+    if (activePack.kind !== "custom") return;
+    const a = audioRef.current;
+    if (!a) return;
+    warmCustomPack(a.ctx, activePack).catch(() => {});
+  }, [activePack]);
 
   /* ---- Reset rhythm when multiply / speed changes ---- */
   useEffect(() => {
@@ -1218,12 +1254,13 @@ function PhaseApp() {
         {isWheel && (
           <PacksDrawer
             open={packsOpen}
+            packs={allPacks}
             selected={selectedPack}
             onSelect={setSelectedPack}
-            onAudition={(spec: VoiceSpec) => {
+            onAudition={(pack: RuntimePack, slotIndex: number) => {
               const a = ensureAudio();
               if (a.ctx.state === "suspended") a.ctx.resume();
-              playPackVoice(a.ctx, a.preFx, spec, 440, a.ctx.currentTime + 0.01);
+              triggerPackVoice(a.ctx, a.preFx, pack, slotIndex, 440, a.ctx.currentTime + 0.01);
             }}
           />
         )}
@@ -1567,14 +1604,13 @@ function decayWheelFlashes(wh: WheelState, dt: number) {
 }
 
 function updateWheel(
-  wh: WheelState, dt: number, audio: AudioGraph, bpm: number, voices: VoiceSel, knobs: Knobs, packId: PackId,
+  wh: WheelState, dt: number, audio: AudioGraph, bpm: number, voices: VoiceSel, knobs: Knobs, pack: RuntimePack,
 ) {
   const now = audio.ctx.currentTime;
   const REFRACTORY = 0.16; // prevents frame jitter and ambient voice pileups
 
   decayWheelFlashes(wh, dt);
 
-  const pack = PACKS[packId];
   for (let ri = 0; ri < wh.rings.length; ri++) {
     const ring = wh.rings[ri];
     const period = ringPeriodSec(ring, bpm);
@@ -1586,7 +1622,6 @@ function updateWheel(
     const movingForward = nextPhase >= prevPhase;
 
     const voiceLegacy = resolveVoice(ring.voiceSlot, voices);
-    const voiceSpec = pack.voices[ri % pack.voices.length];
 
     for (const note of ring.notes) {
       const prevWorld = norm2pi(note.angle + prevPhase);
@@ -1614,7 +1649,7 @@ function updateWheel(
 
             if (voiceLegacy !== "none") {
               const freq = vertexFreq(note.pitchIndex, knobs.pitch);
-              playPackVoice(audio.ctx, audio.preFx, voiceSpec, freq, now);
+              triggerPackVoice(audio.ctx, audio.preFx, pack, ri, freq, now);
             }
             note.flash = 1;
             ring.flash = Math.max(ring.flash, 0.7);
@@ -2446,12 +2481,13 @@ function FxChannel({
  * ============================================================ */
 
 function PacksDrawer({
-  open, selected, onSelect, onAudition,
+  open, packs, selected, onSelect, onAudition,
 }: {
   open: boolean;
-  selected: PackId;
-  onSelect: (p: PackId) => void;
-  onAudition: (spec: VoiceSpec) => void;
+  packs: RuntimePack[];
+  selected: string;
+  onSelect: (id: string) => void;
+  onAudition: (pack: RuntimePack, slotIndex: number) => void;
 }) {
   return (
     <div
@@ -2470,14 +2506,17 @@ function PacksDrawer({
           ring index → voice · hover to audition
         </div>
       </div>
-      <div className="pr-stagger px-3 pb-4 grid grid-cols-3 gap-3">
-        {PACK_IDS.map((pid) => {
-          const pack = PACKS[pid];
-          const active = pid === selected;
+      <div className="pr-stagger px-3 pb-4 grid grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto">
+        {packs.map((pack) => {
+          const active = pack.id === selected;
+          const slotNames: { name: string; idx: number }[] =
+            pack.kind === "builtin"
+              ? pack.pack.voices.map((v, i) => ({ name: v.name, idx: i }))
+              : pack.slots.map((s, i) => ({ name: s?.label ?? (s ? "Sample" : "—"), idx: i }));
           return (
             <button
-              key={pid}
-              onClick={() => onSelect(pid)}
+              key={pack.id}
+              onClick={() => onSelect(pack.id)}
               className={
                 "text-left rounded-xl px-3 py-3 transition-all border " +
                 (active
@@ -2492,25 +2531,30 @@ function PacksDrawer({
             >
               <div className="flex items-center justify-between mb-0.5">
                 <div className="text-[12px] tracking-[0.22em] text-white/90">{pack.name}</div>
-                <span
-                  className="h-1.5 w-1.5 rounded-full"
-                  style={{
-                    background: active ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.18)",
-                    boxShadow: active ? "0 0 8px rgba(255,255,255,0.5)" : "none",
-                  }}
-                />
+                <div className="flex items-center gap-1.5">
+                  {pack.kind === "custom" && (
+                    <span className="text-[8px] tracking-[0.22em] uppercase text-white/40">user</span>
+                  )}
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{
+                      background: active ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.18)",
+                      boxShadow: active ? "0 0 8px rgba(255,255,255,0.5)" : "none",
+                    }}
+                  />
+                </div>
               </div>
               <div className="text-[10px] text-white/45 mb-2.5">{pack.blurb}</div>
               <div className="grid grid-cols-2 gap-1">
-                {pack.voices.map((v, i) => (
+                {slotNames.map(({ name, idx }) => (
                   <div
-                    key={v.id}
-                    onMouseEnter={(e) => { e.stopPropagation(); onAudition(v); }}
+                    key={idx}
+                    onMouseEnter={(e) => { e.stopPropagation(); onAudition(pack, idx); }}
                     className="text-[9.5px] tracking-[0.08em] uppercase px-1.5 py-1 rounded-sm text-white/55 bg-white/[0.03] hover:bg-white/[0.09] hover:text-white/90 cursor-pointer truncate"
-                    title={v.name}
+                    title={name}
                   >
-                    <span className="text-white/30 mr-1 tabular-nums">{i + 1}</span>
-                    {v.name}
+                    <span className="text-white/30 mr-1 tabular-nums">{idx + 1}</span>
+                    {name}
                   </div>
                 ))}
               </div>

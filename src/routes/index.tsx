@@ -971,6 +971,14 @@ function PhaseApp() {
       style={{ background: isWheel ? undefined : "var(--pr-bg-2)", color: "var(--pr-text)" }}
     >
       {isWheel && <PhaseChrome />}
+      {isWheel && (
+        <PhaseReadout
+          wheel={engineRef.current.wheel}
+          bpm={bpm}
+          hoverRingId={hoverRing}
+          topo={topo}
+        />
+      )}
       {/* TOP CONTROL STRIP — hidden in Wheel art mode */}
       {!isWheel && (
       <header
@@ -1044,15 +1052,7 @@ function PhaseApp() {
       {/* CANVAS */}
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
         {isWheel ? (
-          <div
-            className="absolute pr-glass-card overflow-hidden"
-            style={{
-              left: "max(220px, 18vw)",
-              right: "max(40px, 4vw)",
-              top: "max(96px, 11vh)",
-              bottom: "max(160px, 18vh)",
-            }}
-          >
+          <>
             <canvas
               ref={canvasRef}
               className="absolute inset-0 w-full h-full block"
@@ -1061,20 +1061,22 @@ function PhaseApp() {
               onPointerMove={onCanvasPointerMove}
               onPointerLeave={onCanvasPointerLeave}
             />
-            <WheelOverlays
-            wheel={engineRef.current.wheel}
-            topo={topo}
-            canvasW={canvasRect.w}
-            canvasH={canvasRect.h}
-            onAddRing={addRing}
-            onAddLine={addLine}
-            onRemoveRing={removeRing}
-            onRemoveLine={removeLine}
-            onSetLineAngle={setLineAngle}
-            onUpdateRing={updateRing}
-            onHoverRing={(id) => { hoverRingIdRef.current = id; setHoverRing(id); }}
-            />
-          </div>
+            <div className="absolute inset-0 pointer-events-none">
+              <WheelOverlays
+                wheel={engineRef.current.wheel}
+                topo={topo}
+                canvasW={canvasRect.w}
+                canvasH={canvasRect.h}
+                onAddRing={addRing}
+                onAddLine={addLine}
+                onRemoveRing={removeRing}
+                onRemoveLine={removeLine}
+                onSetLineAngle={setLineAngle}
+                onUpdateRing={updateRing}
+                onHoverRing={(id) => { hoverRingIdRef.current = id; setHoverRing(id); }}
+              />
+            </div>
+          </>
         ) : (
           <canvas
             ref={canvasRef}

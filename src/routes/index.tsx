@@ -1230,12 +1230,13 @@ function PhaseApp() {
         {isWheel && (
           <PacksDrawer
             open={packsOpen}
+            packs={allPacks}
             selected={selectedPack}
             onSelect={setSelectedPack}
-            onAudition={(spec: VoiceSpec) => {
+            onAudition={(pack: RuntimePack, slotIndex: number) => {
               const a = ensureAudio();
               if (a.ctx.state === "suspended") a.ctx.resume();
-              playPackVoice(a.ctx, a.preFx, spec, 440, a.ctx.currentTime + 0.01);
+              triggerPackVoice(a.ctx, a.preFx, pack, slotIndex, 440, a.ctx.currentTime + 0.01);
             }}
           />
         )}

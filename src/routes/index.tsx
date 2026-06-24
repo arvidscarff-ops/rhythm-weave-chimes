@@ -525,7 +525,8 @@ function PhaseApp() {
   const [fxOpen, setFxOpen] = useState(false);
   const [packsOpen, setPacksOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [selectedPack, setSelectedPack] = useState<PackId>("moss");
+  const [selectedPack, setSelectedPack] = useState<string>("moss");
+  const [customPacks, setCustomPacks] = useState<RuntimePack[]>([]);
   // topology bump: rings/lines/notes counts so DOM overlays re-render
   const [topo, setTopo] = useState(0);
   const bumpTopo = useCallback(() => setTopo((x) => x + 1), []);
@@ -554,7 +555,11 @@ function PhaseApp() {
   const voicesRef = useRef(voices); voicesRef.current = voices;
   const knobsRef = useRef(knobs); knobsRef.current = knobs;
   const bpmRef = useRef(bpm); bpmRef.current = bpm;
-  const packRef = useRef(selectedPack); packRef.current = selectedPack;
+  // Resolve currently-selected pack into a RuntimePack (built-in or custom).
+  const allPacks: RuntimePack[] = [...BUILTIN_RUNTIME_PACKS, ...customPacks];
+  const activePack: RuntimePack =
+    allPacks.find((p) => p.id === selectedPack) ?? BUILTIN_RUNTIME_PACKS[0];
+  const packRef = useRef<RuntimePack>(activePack); packRef.current = activePack;
 
   const audioRef = useRef<AudioGraph | null>(null);
   const engineRef = useRef<EngineState>({

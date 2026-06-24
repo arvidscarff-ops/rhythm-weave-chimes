@@ -97,17 +97,20 @@ type AudioGraph = {
   preFx: GainNode;       // input bus
   filter: BiquadFilterNode;
   shelf: BiquadFilterNode;
-  chorusDelay: DelayNode;
-  chorusLFO: OscillatorNode;
-  chorusLFOGain: GainNode;
   chorusMix: GainNode;
-  delay: DelayNode;
-  feedback: GainNode;
+  chorusRate: AudioParam;       // proxy: control both chorus LFOs
+  delayL: DelayNode;
+  delayR: DelayNode;
+  delayFeedback: GainNode;
   wet: GainNode;
   dryToMaster: GainNode;
   grainDelay: DelayNode;
   grainFeedback: GainNode;
   grainMix: GainNode;
+  convolver: ConvolverNode;
+  reverbWet: GainNode;
+  reverbSend: GainNode;
+  irSeconds: number;
 };
 
 /* ============================================================

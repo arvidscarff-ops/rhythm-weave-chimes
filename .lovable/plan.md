@@ -1,57 +1,25 @@
+## Goal
+Strip away the framing so the wheel breathes — no glass card, no on-canvas hover readouts. Move numeric info into a small, quiet "data pile" on the left.
 
-# Phase → Elasti-style Visual Redesign
+## Changes — `src/routes/index.tsx`
 
-Keep all audio + wheel engine logic untouched. This is a pure visual/layout pass on `src/routes/index.tsx`, `src/routes/__root.tsx`, and `src/styles.css`.
+1. **Remove the glass card wrapper around the wheel canvas.**
+   - In the `isWheel` branch of `<main>`, drop the `<div className="absolute pr-glass-card overflow-hidden" …>` container.
+   - Render the wheel canvas the same way as the non-wheel branch: `<canvas className="absolute inset-0 w-full h-full block" style={{ background: "transparent", cursor: "crosshair" }} />`, with `<WheelOverlays>` as a sibling absolute-positioned layer using the full viewport.
+   - `WheelOverlays` math already uses `canvasW`/`canvasH` from `canvasRect` — it will recentre automatically once the canvas fills the page.
 
-## Target aesthetic (from reference)
-- Deep **teal/aqua atmospheric gradient** background (not charcoal) with soft, painterly light blooms — `oklch(45% 0.06 200)` deep teal → `oklch(60% 0.04 190)` misty cyan, plus a faint vignette and the existing noise grain on top at lower opacity.
-- **Monospace HUD chrome** everywhere: JetBrains Mono, `text-[10px]/[11px]`, `tracking-[0.18em]`, uppercase, low-contrast white/70.
-- **Glass card** as the dominant surface: heavy `backdrop-blur-xl`, `bg-white/8`, 1px `border-white/15`, generous `rounded-2xl`, soft inner highlight.
-- **Small circular HUD icons** (thin 1px stroked circles ~22px) for toggles instead of filled buttons.
-- Live **clock + date** in top-right (`HH:MM:SS AM` / `MON DD, YYYY`), wordmark top-left (`Phase®`).
-- Small left-rail nav list (WHEEL / FX / PACKS / ABOUT), bottom-left tagline block, bottom-right meta (`© 2026 PHASE` / `X / GITHUB`).
+2. **Remove on-canvas hover readouts.**
+   - Delete the call to `drawGhostReadout(...)` and the surrounding `hoverOpacityRef` block in the RAF loop (~lines 834–844). Keep `hoverRingIdRef` (the left pile uses it).
+   - Delete the `drawGhostReadout` function itself (~lines 1734–1749).
+   - In `drawWheelScene` (~lines 1597–1605), remove the per-ring `${beats}/${subdivision}` text drawn at the ring's right edge. Keep the ring stroke.
 
-## Layout
+3. **Add a small "Readout" pile on the left, under the nav rail.**
+   - New component `PhaseReadout({ wheel, bpm, hoverRingId })` rendered inside `PhaseApp` (sibling of `PhaseChrome`), positioned `absolute left-6 top-[260px]` (below About).
+   - For each ring print one row in `pr-label` (JetBrains Mono, 10px, tracking-widest, `text-white/40`): `{beats}/{sub}  ·  {period.toFixed(2)}S`. The row for the hovered ring fades up to `text-white/85`.
+   - Append a final muted row: `{bpm} BPM`.
+   - Use the same `requestAnimationFrame`-driven re-render that `WheelOverlays` already gets via `topo`; pipe `topo` and `hoverRingId` (lifted to React state mirror — reuse existing `setHoverRing` if present, otherwise add a lightweight `useState` synced from `hoverRingIdRef` on each frame inside the existing tick).
 
-```text
-┌──────────────────────────────────────────────────────┐
-│ Phase®                              14:36:29 PM      │
-│                                     JUN 24, 2026     │
-│                                          ◐  ✱        │
-│ WHEEL                                                │
-│ FX        ┌───── glass canvas card ─────┐            │
-│ PACKS     │                             │            │
-│ ABOUT     │      wheel + rings here     │            │
-│           │                             │            │
-│           └─────────────────────────────┘            │
-│                                                      │
-│                  ┌── floating dock ──┐               │
-│                                                      │
-│ GENERATIVE                              © 2026 PHASE │
-│ POLYRHYTHMIC                              X / GITHUB │
-│ AMBIENT INSTRUMENT.                                  │
-└──────────────────────────────────────────────────────┘
-```
-
-- The wheel canvas moves **inside a centered glass card** (~min(900px, 70vw) wide, ~70vh tall), offset slightly right of center like the reference.
-- Existing dock + drawers (FX, Packs) stay functionally identical but restyled to match: white/8 fill, white/15 hairlines, white/70 mono labels. Left rail items toggle the same drawers.
-
-## Visual tokens (in `src/styles.css`)
-- `--pr-bg-grad`: radial + linear teal blend.
-- `--pr-glass`: `color-mix(in oklab, white 8%, transparent)`.
-- `--pr-hairline`: `color-mix(in oklab, white 15%, transparent)`.
-- `--pr-ink`: `color-mix(in oklab, white 78%, transparent)` for HUD text.
-- Replace charcoal `--pr-bg` baseline; keep noise overlay but drop to `opacity .35` and `mix-blend-mode: soft-light` so it reads as misty grain over teal.
-- New utilities: `.pr-glass-card`, `.pr-hud-ring` (circular icon button), `.pr-rail-link` (active = white, inactive = white/45).
-
-## Canvas adjustments (no engine changes)
-- Wheel strokes shift to `rgba(255,255,255,0.55)` hairlines on the new lighter ground; ratio + ghost readouts re-tuned to `rgba(255,255,255,0.08 → 0.22)` so they still read on teal.
-- Ink-bleed ripple gradient stays but tinted toward warm white (`rgba(255,245,230,a)`) so triggers pop against the cool ground.
-
-## Files touched
-- `src/styles.css` — new background gradient, glass + hud utilities, rail/clock styles, noise overlay retuned.
-- `src/routes/__root.tsx` — body class for the new gradient; JetBrains Mono link already present.
-- `src/routes/index.tsx` — add Wordmark, Clock (live `setInterval`), LeftRail (wired to existing drawer toggles), BottomMeta, glass card wrapper around the canvas; restyle ArtDock / FxDrawer / PacksDrawer chrome to the new tokens; recolor canvas strokes/readouts. No audio, no engine, no scene-logic changes.
+4. **Quiet hydration warning on the clock** (drive-by, since we touch `PhaseChrome`): initialize the `now` state to `null` and only render the time/date strings after the first `useEffect` tick, so SSR and first client render match.
 
 ## Out of scope
-- No new features, no sound changes, no routing changes, no engine refactor.
+Dock, FX drawer, Packs drawer, audio engine, sound packs — untouched.

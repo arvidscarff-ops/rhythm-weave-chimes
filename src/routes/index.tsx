@@ -260,6 +260,69 @@ const SCALE_DEG = [0, 3, 5, 7, 10];
 const ROOT_HZ = 110; // A2
 const MAX_ACTIVE_VOICES = 18;
 let activeVoiceCount = 0;
+void MAX_ACTIVE_VOICES; void activeVoiceCount;
+
+/* ---- Pendulum / Bars constants & seeds ---- */
+
+// Ratios that produce a slow phasing fan-out (Galileo pendulum style).
+// Index N → period multiplier; longer index = slower swing.
+const PEND_RATIOS = [1.0, 1.06, 1.13, 1.21, 1.30, 1.40, 1.51, 1.63, 1.76, 1.90, 2.05, 2.21];
+const BAR_RATIOS = [
+  { num: 3, den: 4 }, { num: 4, den: 5 }, { num: 5, den: 6 }, { num: 6, den: 7 },
+  { num: 7, den: 8 }, { num: 8, den: 9 }, { num: 9, den: 10 }, { num: 5, den: 8 },
+  { num: 4, den: 7 }, { num: 3, den: 8 }, { num: 7, den: 12 }, { num: 11, den: 13 },
+];
+
+function pendBaseSec(bpm: number) {
+  // Slowest pendulum's full half-cycle ≈ this many seconds at the given bpm.
+  // At 90 bpm → ~3.6s for one zero-cross-to-zero-cross.
+  return (60 / Math.max(20, bpm)) * 5.4;
+}
+
+function pendPeriodSec(b: PendulumBob, bpm: number) {
+  const r = PEND_RATIOS[b.ratioIndex % PEND_RATIOS.length];
+  return pendBaseSec(bpm) * r;
+}
+
+function barBaseSec(bpm: number) {
+  return (60 / Math.max(20, bpm)) * 4.0;
+}
+
+function barPeriodSec(l: BarLane, bpm: number) {
+  const r = BAR_RATIOS[l.ratioIndex % BAR_RATIOS.length];
+  return barBaseSec(bpm) * (r.den / r.num);
+}
+
+function pitchToFreq(semitones: number) {
+  // A3 (220) as root; pitchIndex 0 → A3.
+  return 220 * Math.pow(2, semitones / 12);
+}
+
+function makeSeedPendulum(): PendulumState {
+  return {
+    bobs: [
+      { id: uid("p"), ratioIndex: 0, slotIndex: 0, pitchIndex: 7, phase: 0,    prevSign: 1, flash: 0 },
+      { id: uid("p"), ratioIndex: 1, slotIndex: 1, pitchIndex: 5, phase: 0.1,  prevSign: 1, flash: 0 },
+      { id: uid("p"), ratioIndex: 2, slotIndex: 2, pitchIndex: 3, phase: 0.2,  prevSign: 1, flash: 0 },
+      { id: uid("p"), ratioIndex: 3, slotIndex: 3, pitchIndex: 0, phase: 0.3,  prevSign: 1, flash: 0 },
+      { id: uid("p"), ratioIndex: 4, slotIndex: 4, pitchIndex: -2, phase: 0.4, prevSign: 1, flash: 0 },
+      { id: uid("p"), ratioIndex: 5, slotIndex: 5, pitchIndex: -5, phase: 0.5, prevSign: 1, flash: 0 },
+    ],
+  };
+}
+
+function makeSeedBars(): BarsState {
+  return {
+    lanes: [
+      { id: uid("b"), ratioIndex: 0, slotIndex: 0, pitchIndex: 12, phase: 0,    flash: 0, lastTriggerY: 1 },
+      { id: uid("b"), ratioIndex: 1, slotIndex: 1, pitchIndex: 7,  phase: 0.07, flash: 0, lastTriggerY: 1 },
+      { id: uid("b"), ratioIndex: 2, slotIndex: 2, pitchIndex: 5,  phase: 0.14, flash: 0, lastTriggerY: 1 },
+      { id: uid("b"), ratioIndex: 3, slotIndex: 3, pitchIndex: 3,  phase: 0.21, flash: 0, lastTriggerY: 1 },
+      { id: uid("b"), ratioIndex: 4, slotIndex: 4, pitchIndex: 0,  phase: 0.28, flash: 0, lastTriggerY: 1 },
+      { id: uid("b"), ratioIndex: 5, slotIndex: 5, pitchIndex: -5, phase: 0.35, flash: 0, lastTriggerY: 1 },
+    ],
+  };
+}
 
 function vertexFreq(i: number, pitchSemi: number) {
   const deg = SCALE_DEG[i % SCALE_DEG.length];

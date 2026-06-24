@@ -90,6 +90,8 @@ type EngineState = {
 type AudioGraph = {
   ctx: AudioContext;
   master: GainNode;
+  busTrim: GainNode;
+  limiter: DynamicsCompressorNode;
   preFx: GainNode;       // input bus
   filter: BiquadFilterNode;
   shelf: BiquadFilterNode;
@@ -272,28 +274,28 @@ function playVoice(
   const oscs: OscillatorNode[] = [];
 
   if (voice === "chime") {
-    oscs.push(mk("sine", freq, -detuneCents, 0.35));
-    oscs.push(mk("sine", freq * 2.01, detuneCents, 0.12));
-    oscs.push(mk("sine", freq * 3.0, 0, 0.05));
-    attack = 0.005; release = 3.2; peak = 0.55;
+    oscs.push(mk("sine", freq, -detuneCents, 0.25));
+    oscs.push(mk("sine", freq * 2.01, detuneCents, 0.08));
+    oscs.push(mk("sine", freq * 3.0, 0, 0.035));
+    attack = 0.005; release = 3.2; peak = 0.32;
   } else if (voice === "pluck") {
-    oscs.push(mk("triangle", freq, -detuneCents, 0.5));
-    oscs.push(mk("triangle", freq * 1.005, detuneCents, 0.3));
-    attack = 0.003; release = 1.4; peak = 0.7;
+    oscs.push(mk("triangle", freq, -detuneCents, 0.35));
+    oscs.push(mk("triangle", freq * 1.005, detuneCents, 0.2));
+    attack = 0.003; release = 1.4; peak = 0.42;
   } else if (voice === "bell") {
-    oscs.push(mk("sine", freq, 0, 0.4));
-    oscs.push(mk("sine", freq * 3.5, 0, 0.18));
-    oscs.push(mk("sine", freq * 5.2, 0, 0.06));
-    attack = 0.008; release = 4.5; peak = 0.5;
+    oscs.push(mk("sine", freq, 0, 0.28));
+    oscs.push(mk("sine", freq * 3.5, 0, 0.12));
+    oscs.push(mk("sine", freq * 5.2, 0, 0.04));
+    attack = 0.008; release = 4.5; peak = 0.3;
   } else if (voice === "pad") {
-    oscs.push(mk("triangle", freq * 0.5, -detuneCents, 0.4));
-    oscs.push(mk("sine", freq * 0.5 * 1.005, detuneCents, 0.3));
-    oscs.push(mk("sine", freq, 0, 0.18));
-    attack = 0.45; release = 3.5; peak = 0.45;
+    oscs.push(mk("triangle", freq * 0.5, -detuneCents, 0.28));
+    oscs.push(mk("sine", freq * 0.5 * 1.005, detuneCents, 0.2));
+    oscs.push(mk("sine", freq, 0, 0.12));
+    attack = 0.45; release = 3.5; peak = 0.28;
   } else if (voice === "bass") {
-    oscs.push(mk("sine", freq * 0.5, -detuneCents, 0.55));
-    oscs.push(mk("triangle", freq * 0.5, detuneCents, 0.18));
-    attack = 0.01; release = 2.2; peak = 0.7;
+    oscs.push(mk("sine", freq * 0.5, -detuneCents, 0.38));
+    oscs.push(mk("triangle", freq * 0.5, detuneCents, 0.12));
+    attack = 0.01; release = 2.2; peak = 0.42;
   }
 
   const t = startAt;
@@ -583,7 +585,7 @@ function PhaseApp() {
     const delay = ctx.createDelay(2.5);
     delay.delayTime.value = knobsRef.current.revSize;
     const feedback = ctx.createGain();
-    feedback.gain.value = 0.55;
+    feedback.gain.value = 0.38;
     const wet = ctx.createGain();
     wet.gain.value = knobsRef.current.revMix;
     const dryToMaster = ctx.createGain();
@@ -597,32 +599,45 @@ function PhaseApp() {
     const grainMix = ctx.createGain();
     grainMix.gain.value = 0.0;
 
-    // routing: preFx -> filter -> shelf -> [dry+chorus] -> master,
-    //          shelf -> delay -> wet -> master, shelf -> grain -> grainMix -> master
+    // bus trim + master limiter give headroom for parallel sends
+    const busTrim = ctx.createGain();
+    busTrim.gain.value = 0.5;
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -6;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.12;
+
+    // routing: preFx -> filter -> shelf -> [dry+chorus] -> busTrim,
+    //          shelf -> delay -> wet -> busTrim, shelf -> grain -> grainMix -> busTrim
+    //          busTrim -> master -> limiter -> destination
     preFx.connect(filter);
     filter.connect(shelf);
     shelf.connect(dryToMaster);
     shelf.connect(chorusDelay);
     chorusDelay.connect(chorusMix);
     chorusMix.connect(dryToMaster);
-    dryToMaster.connect(master);
+    dryToMaster.connect(busTrim);
 
     shelf.connect(delay);
     delay.connect(feedback);
     feedback.connect(delay);
     delay.connect(wet);
-    wet.connect(master);
+    wet.connect(busTrim);
 
     shelf.connect(grainDelay);
     grainDelay.connect(grainFeedback);
     grainFeedback.connect(grainDelay);
     grainDelay.connect(grainMix);
-    grainMix.connect(master);
+    grainMix.connect(busTrim);
 
-    master.connect(ctx.destination);
+    busTrim.connect(master);
+    master.connect(limiter);
+    limiter.connect(ctx.destination);
 
     audioRef.current = {
-      ctx, master, preFx, filter, shelf, chorusDelay, chorusLFO, chorusLFOGain,
+      ctx, master, busTrim, limiter, preFx, filter, shelf, chorusDelay, chorusLFO, chorusLFOGain,
       chorusMix, delay, feedback, wet, dryToMaster,
       grainDelay, grainFeedback, grainMix,
     };
@@ -633,11 +648,11 @@ function PhaseApp() {
   useEffect(() => {
     const a = audioRef.current; if (!a) return;
     const t = a.ctx.currentTime;
-    a.master.gain.setTargetAtTime(knobs.mainVol, t, 0.04);
+    a.master.gain.setTargetAtTime(knobs.mainVol * 0.85, t, 0.04);
     a.filter.frequency.setTargetAtTime(knobs.fx1, t, 0.04);
     a.delay.delayTime.setTargetAtTime(knobs.revSize, t, 0.05);
     a.wet.gain.setTargetAtTime(knobs.revMix, t, 0.05);
-    a.chorusMix.gain.setTargetAtTime(0.2 + (knobs.fx2 / 40) * 0.6, t, 0.05);
+    a.chorusMix.gain.setTargetAtTime(0.1 + (knobs.fx2 / 40) * 0.4, t, 0.05);
     a.chorusLFOGain.gain.setTargetAtTime(0.001 + (knobs.fx2 / 40) * 0.008, t, 0.05);
   }, [knobs]);
 

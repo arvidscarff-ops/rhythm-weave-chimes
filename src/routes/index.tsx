@@ -1938,11 +1938,11 @@ function ArtDock({
 }) {
   return (
     <div
-      className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md"
+      className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-xl bg-neutral-950/40 pr-mono"
       style={{
-        background: "rgba(255,255,255,0.04)",
-        boxShadow: "0 8px 40px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.02)",
-        fontFamily: "'Inter', ui-sans-serif, system-ui",
+        boxShadow:
+          "0 18px 60px rgba(0,0,0,0.55), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.02)",
+        zIndex: 5,
       }}
     >
       <DockBtn label={playing ? "pause" : "play"} onClick={onTogglePlay} active={playing}>
@@ -1991,7 +1991,7 @@ function ArtDock({
           style={{ width: 120 }}
           title={`${bpm} bpm`}
         />
-        <div className="text-[10px] tabular-nums tracking-[0.18em] uppercase text-white/50">
+        <div className="pr-label tabular-nums text-white/55">
           {bpm}<span className="ml-1 text-white/30">bpm</span>
         </div>
       </div>

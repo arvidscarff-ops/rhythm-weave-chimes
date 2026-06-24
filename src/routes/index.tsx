@@ -1083,6 +1083,40 @@ function PhaseApp() {
     bumpTopo();
   };
 
+  /* ---- Pendulum mutators ---- */
+  const addBob = () => {
+    const p = engineRef.current.pendulum;
+    const idx = p.bobs.length % PEND_RATIOS.length;
+    const slot = p.bobs.length % 6;
+    p.bobs.push({
+      id: uid("p"), ratioIndex: idx, slotIndex: slot,
+      pitchIndex: 7 - p.bobs.length * 2, phase: Math.random(),
+      prevSign: 1, flash: 0,
+    });
+    bumpTopo();
+  };
+  const clearBobs = () => {
+    engineRef.current.pendulum.bobs = [];
+    bumpTopo();
+  };
+
+  /* ---- Bars mutators ---- */
+  const addLane = () => {
+    const b = engineRef.current.bars;
+    const idx = b.lanes.length % BAR_RATIOS.length;
+    const slot = b.lanes.length % 6;
+    b.lanes.push({
+      id: uid("b"), ratioIndex: idx, slotIndex: slot,
+      pitchIndex: 12 - b.lanes.length * 3,
+      phase: Math.random() * 0.4, flash: 0, lastTriggerY: 1,
+    });
+    bumpTopo();
+  };
+  const clearLanes = () => {
+    engineRef.current.bars.lanes = [];
+    bumpTopo();
+  };
+
   return (
     <div
       className="min-h-screen w-full flex flex-col relative pr-stage"

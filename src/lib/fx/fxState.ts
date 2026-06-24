@@ -46,12 +46,19 @@ export const DEFAULT_FX_STATE: FxState = {
 type FxNodes = {
   ctx: AudioContext;
   filter: BiquadFilterNode;
-  chorusLFO: OscillatorNode;
-  chorusLFOGain: GainNode;
+  chorusRate: AudioParam;          // primary LFO frequency
+  _chorusRateB: AudioParam;        // quadrature LFO frequency
+  _chorusDepthA: GainNode;
+  _chorusDepthB: GainNode;
   chorusMix: GainNode;
-  delay: DelayNode;
-  feedback: GainNode;
-  wet: GainNode;
+  delayL: DelayNode;
+  delayR: DelayNode;
+  delayFeedback: GainNode;
+  wet: GainNode;                   // ping-pong wet level
+  reverbWet: GainNode;             // convolution reverb wet level
+  _reverbDamp: BiquadFilterNode;
+  _reverbPredelay: DelayNode;
+  irSeconds: number;
   grainDelay?: DelayNode;
   grainFeedback?: GainNode;
   grainMix?: GainNode;
@@ -62,16 +69,26 @@ export function applyFxState(a: FxNodes, s: FxState) {
   const t = a.ctx.currentTime;
   const R = 0.04;
 
-  // Reverb
+  // Reverb (convolution) — type changes damping + predelay character.
   const rv = REVERB_PRESETS[s.reverb.type];
-  a.delay.delayTime.setTargetAtTime(s.reverb.size * (rv.delay / 0.55), t, R);
-  a.feedback.gain.setTargetAtTime(rv.feedback, t, R);
-  a.wet.gain.setTargetAtTime(s.reverb.bypass ? 0 : s.reverb.mix * 0.45, t, R);
+  // size 0.05..1.2  →  predelay 5..120ms + damping cutoff
+  a._reverbPredelay.delayTime.setTargetAtTime(Math.min(0.2, s.reverb.size * 0.18), t, R);
+  const dampMap: Record<string, number> = { room: 4200, hall: 5200, plate: 6800, cosmic: 8200 };
+  a._reverbDamp.frequency.setTargetAtTime(dampMap[s.reverb.type] ?? 5200, t, R);
+  a.reverbWet.gain.setTargetAtTime(s.reverb.bypass ? 0 : s.reverb.mix * 0.55, t, R);
 
-  // Chorus
+  // Ping-pong delay tracks reverb size/preset for cohesive space.
+  a.delayL.delayTime.setTargetAtTime(s.reverb.size * (rv.delay / 0.55), t, R);
+  a.delayR.delayTime.setTargetAtTime(s.reverb.size * (rv.delay / 0.55) * 1.5, t, R);
+  a.delayFeedback.gain.setTargetAtTime(rv.feedback, t, R);
+  a.wet.gain.setTargetAtTime(s.reverb.bypass ? 0 : s.reverb.mix * 0.30, t, R);
+
+  // Stereo chorus
   const cp = CHORUS_PRESETS[s.chorus.type];
-  a.chorusLFO.frequency.setTargetAtTime(s.chorus.rate, t, R);
-  a.chorusLFOGain.gain.setTargetAtTime(cp.depth, t, R);
+  a.chorusRate.setTargetAtTime(s.chorus.rate, t, R);
+  a._chorusRateB.setTargetAtTime(s.chorus.rate * 0.93, t, R); // slight detune for width
+  a._chorusDepthA.gain.setTargetAtTime(cp.depth, t, R);
+  a._chorusDepthB.gain.setTargetAtTime(cp.depth * 1.15, t, R);
   a.chorusMix.gain.setTargetAtTime(s.chorus.bypass ? 0 : s.chorus.mix * 0.55, t, R);
 
   // Grain

@@ -557,6 +557,7 @@ function PhaseApp() {
   const hoverRingIdRef = useRef<string | null>(null);
   const hoverOpacityRef = useRef<number>(0);
   const lastHoverRef = useRef<string | null>(null);
+  const [hoverRing, setHoverRing] = useState<string | null>(null);
 
   /* ---- Audio graph init ---- */
   const ensureAudio = useCallback((): AudioGraph => {
@@ -831,17 +832,6 @@ function PhaseApp() {
         // decay flashes even when paused
         decayWheelFlashes(e.wheel, dt);
       }
-      // ghost text behind everything
-      const targetOp = hoverRingIdRef.current ? 1 : 0;
-      hoverOpacityRef.current += (targetOp - hoverOpacityRef.current) * Math.min(1, dt * 6);
-      if (hoverOpacityRef.current > 0.01) {
-        const ring = e.wheel.rings.find(r => r.id === hoverRingIdRef.current)
-          ?? e.wheel.rings.find(r => r.id === lastHoverRef.current);
-        if (ring) {
-          lastHoverRef.current = ring.id;
-          drawGhostReadout(ctx2d, W, H, ringPeriodSec(ring, bpmRef.current), hoverOpacityRef.current);
-        }
-      }
       ctx2d.globalCompositeOperation = "lighter";
       drawWheelScene(ctx2d, W, H, e.wheel, voicesRef.current, dt, hoverRingIdRef.current);
     } else {
@@ -920,8 +910,9 @@ function PhaseApp() {
       if (d < bestD) { bestD = d; hit = ring.id; }
     }
     hoverRingIdRef.current = hit;
+    setHoverRing((prev) => (prev === hit ? prev : hit));
   };
-  const onCanvasPointerLeave = () => { hoverRingIdRef.current = null; };
+  const onCanvasPointerLeave = () => { hoverRingIdRef.current = null; setHoverRing(null); };
 
   /* ---- Wheel ring/line mutators ---- */
   const addRing = () => {
@@ -980,6 +971,14 @@ function PhaseApp() {
       style={{ background: isWheel ? undefined : "var(--pr-bg-2)", color: "var(--pr-text)" }}
     >
       {isWheel && <PhaseChrome />}
+      {isWheel && (
+        <PhaseReadout
+          wheel={engineRef.current.wheel}
+          bpm={bpm}
+          hoverRingId={hoverRing}
+          topo={topo}
+        />
+      )}
       {/* TOP CONTROL STRIP — hidden in Wheel art mode */}
       {!isWheel && (
       <header
@@ -1053,15 +1052,7 @@ function PhaseApp() {
       {/* CANVAS */}
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
         {isWheel ? (
-          <div
-            className="absolute pr-glass-card overflow-hidden"
-            style={{
-              left: "max(220px, 18vw)",
-              right: "max(40px, 4vw)",
-              top: "max(96px, 11vh)",
-              bottom: "max(160px, 18vh)",
-            }}
-          >
+          <>
             <canvas
               ref={canvasRef}
               className="absolute inset-0 w-full h-full block"
@@ -1071,19 +1062,19 @@ function PhaseApp() {
               onPointerLeave={onCanvasPointerLeave}
             />
             <WheelOverlays
-            wheel={engineRef.current.wheel}
-            topo={topo}
-            canvasW={canvasRect.w}
-            canvasH={canvasRect.h}
-            onAddRing={addRing}
-            onAddLine={addLine}
-            onRemoveRing={removeRing}
-            onRemoveLine={removeLine}
-            onSetLineAngle={setLineAngle}
-            onUpdateRing={updateRing}
-            onHoverRing={(id) => { hoverRingIdRef.current = id; }}
+                wheel={engineRef.current.wheel}
+                topo={topo}
+                canvasW={canvasRect.w}
+                canvasH={canvasRect.h}
+                onAddRing={addRing}
+                onAddLine={addLine}
+                onRemoveRing={removeRing}
+                onRemoveLine={removeLine}
+                onSetLineAngle={setLineAngle}
+                onUpdateRing={updateRing}
+                onHoverRing={(id) => { hoverRingIdRef.current = id; setHoverRing(id); }}
             />
-          </div>
+          </>
         ) : (
           <canvas
             ref={canvasRef}
@@ -1593,16 +1584,6 @@ function drawWheelScene(
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, TAU);
     ctx.stroke();
-
-    // ghost ratio label on the ring's right edge
-    const labelA = hovered ? 0.20 : 0.06;
-    ctx.save();
-    ctx.fillStyle = `rgba(255,255,255,${labelA.toFixed(3)})`;
-    ctx.font = `400 10px "JetBrains Mono", ui-monospace, monospace`;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillText(`${ring.beats}/${ring.subdivision}`, cx + R + 10, cy - R * 0.02);
-    ctx.restore();
   }
 
   // 2) trigger lines — quiet hairline chords with rim ticks
@@ -1731,22 +1712,7 @@ function paintArtBackground(
   }
 }
 
-function drawGhostReadout(
-  ctx: CanvasRenderingContext2D, W: number, H: number, periodSec: number, opacity: number,
-) {
-  const txt = `${periodSec.toFixed(2).padStart(5, "0")}S`;
-  const size = Math.max(120, Math.min(280, Math.min(W, H) * 0.22));
-  ctx.save();
-  // 5% idle → 20% on full hover (opacity arg is 0..1 hover lerp)
-  const a = 0.05 + 0.15 * opacity;
-  ctx.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`;
-  ctx.font = `300 ${size}px "JetBrains Mono", ui-monospace, monospace`;
-  ctx.letterSpacing = "0.15em" as unknown as string;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(txt, W / 2, H / 2);
-  ctx.restore();
-}
+// (ghost readout removed — numeric info now lives in the left-side PhaseReadout pile)
 
 /* ---- Wheel DOM overlays ---- */
 
@@ -1949,20 +1915,57 @@ function LineHandle({
  * PhaseChrome — page-level HUD: wordmark, live clock, rail, meta
  * ============================================================ */
 
+function PhaseReadout({
+  wheel, bpm, hoverRingId, topo,
+}: {
+  wheel: WheelState;
+  bpm: number;
+  hoverRingId: string | null;
+  topo: number;
+}) {
+  void topo;
+  return (
+    <div className="pointer-events-none absolute left-7 z-10" style={{ top: 260 }}>
+      <div className="pr-label text-white/30 mb-2">READOUT</div>
+      <div className="flex flex-col gap-1 tabular-nums">
+        {wheel.rings.map((r) => {
+          const active = r.id === hoverRingId;
+          const period = ringPeriodSec(r, bpm);
+          return (
+            <div
+              key={r.id}
+              className="pr-label transition-opacity"
+              style={{ color: active ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.32)" }}
+            >
+              {r.beats}/{r.subdivision} · {period.toFixed(2)}S
+            </div>
+          );
+        })}
+        <div className="pr-label text-white/30 mt-2">{bpm} BPM</div>
+      </div>
+    </div>
+  );
+}
+
 function PhaseChrome() {
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
+    setNow(new Date());
     const id = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(id);
   }, []);
 
   const pad = (n: number) => n.toString().padStart(2, "0");
-  const h24 = now.getHours();
-  const ampm = h24 >= 12 ? "PM" : "AM";
-  const h = ((h24 + 11) % 12) + 1;
-  const time = `${pad(h)}:${pad(now.getMinutes())}:${pad(now.getSeconds())} ${ampm}`;
-  const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-  const date = `${months[now.getMonth()]} ${pad(now.getDate())}, ${now.getFullYear()}`;
+  let time = "";
+  let date = "";
+  if (now) {
+    const h24 = now.getHours();
+    const ampm = h24 >= 12 ? "PM" : "AM";
+    const h = ((h24 + 11) % 12) + 1;
+    time = `${pad(h)}:${pad(now.getMinutes())}:${pad(now.getSeconds())} ${ampm}`;
+    const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+    date = `${months[now.getMonth()]} ${pad(now.getDate())}, ${now.getFullYear()}`;
+  }
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10">

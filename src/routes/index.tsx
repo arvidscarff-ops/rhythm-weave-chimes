@@ -1052,16 +1052,25 @@ function PhaseApp() {
 
       {/* CANVAS */}
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full block"
-          style={{ background: isWheel ? "oklch(18% 0.02 240)" : "oklch(0.09 0.01 260)", cursor: isWheel ? "crosshair" : "default" }}
-          onPointerDown={onCanvasPointerDown}
-          onPointerMove={onCanvasPointerMove}
-          onPointerLeave={onCanvasPointerLeave}
-        />
-        {isWheel && (
-          <WheelOverlays
+        {isWheel ? (
+          <div
+            className="absolute pr-glass-card overflow-hidden"
+            style={{
+              left: "max(220px, 18vw)",
+              right: "max(40px, 4vw)",
+              top: "max(96px, 11vh)",
+              bottom: "max(160px, 18vh)",
+            }}
+          >
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 w-full h-full block"
+              style={{ background: "transparent", cursor: "crosshair" }}
+              onPointerDown={onCanvasPointerDown}
+              onPointerMove={onCanvasPointerMove}
+              onPointerLeave={onCanvasPointerLeave}
+            />
+            <WheelOverlays
             wheel={engineRef.current.wheel}
             topo={topo}
             canvasW={canvasRect.w}
@@ -1073,6 +1082,16 @@ function PhaseApp() {
             onSetLineAngle={setLineAngle}
             onUpdateRing={updateRing}
             onHoverRing={(id) => { hoverRingIdRef.current = id; }}
+            />
+          </div>
+        ) : (
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full block"
+            style={{ background: "oklch(0.09 0.01 260)", cursor: "default" }}
+            onPointerDown={onCanvasPointerDown}
+            onPointerMove={onCanvasPointerMove}
+            onPointerLeave={onCanvasPointerLeave}
           />
         )}
         {isWheel && (

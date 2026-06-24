@@ -826,7 +826,7 @@ function PhaseApp() {
     if (isWheelScene) {
       // update wheel physics + trigger detection (audio + visuals)
       if (a && playingRef.current) {
-        updateWheel(e.wheel, dt, a, bpmRef.current, voicesRef.current, knobsRef.current);
+        updateWheel(e.wheel, dt, a, bpmRef.current, voicesRef.current, knobsRef.current, packRef.current);
       } else {
         // decay flashes even when paused
         decayWheelFlashes(e.wheel, dt);

@@ -976,9 +976,10 @@ function PhaseApp() {
 
   return (
     <div
-      className="min-h-screen w-full flex flex-col"
-      style={{ background: isWheel ? "oklch(18% 0.02 240)" : "var(--pr-bg-2)", color: "var(--pr-text)" }}
+      className={"min-h-screen w-full flex flex-col relative " + (isWheel ? "pr-stage" : "")}
+      style={{ background: isWheel ? undefined : "var(--pr-bg-2)", color: "var(--pr-text)" }}
     >
+      {isWheel && <PhaseChrome />}
       {/* TOP CONTROL STRIP — hidden in Wheel art mode */}
       {!isWheel && (
       <header
@@ -1051,16 +1052,25 @@ function PhaseApp() {
 
       {/* CANVAS */}
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full block"
-          style={{ background: isWheel ? "oklch(18% 0.02 240)" : "oklch(0.09 0.01 260)", cursor: isWheel ? "crosshair" : "default" }}
-          onPointerDown={onCanvasPointerDown}
-          onPointerMove={onCanvasPointerMove}
-          onPointerLeave={onCanvasPointerLeave}
-        />
-        {isWheel && (
-          <WheelOverlays
+        {isWheel ? (
+          <div
+            className="absolute pr-glass-card overflow-hidden"
+            style={{
+              left: "max(220px, 18vw)",
+              right: "max(40px, 4vw)",
+              top: "max(96px, 11vh)",
+              bottom: "max(160px, 18vh)",
+            }}
+          >
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 w-full h-full block"
+              style={{ background: "transparent", cursor: "crosshair" }}
+              onPointerDown={onCanvasPointerDown}
+              onPointerMove={onCanvasPointerMove}
+              onPointerLeave={onCanvasPointerLeave}
+            />
+            <WheelOverlays
             wheel={engineRef.current.wheel}
             topo={topo}
             canvasW={canvasRect.w}
@@ -1072,6 +1082,16 @@ function PhaseApp() {
             onSetLineAngle={setLineAngle}
             onUpdateRing={updateRing}
             onHoverRing={(id) => { hoverRingIdRef.current = id; }}
+            />
+          </div>
+        ) : (
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full block"
+            style={{ background: "oklch(0.09 0.01 260)", cursor: "default" }}
+            onPointerDown={onCanvasPointerDown}
+            onPointerMove={onCanvasPointerMove}
+            onPointerLeave={onCanvasPointerLeave}
           />
         )}
         {isWheel && (
@@ -1691,20 +1711,23 @@ function paintArtBackground(
   ctx: CanvasRenderingContext2D, W: number, H: number,
   patternRef: { current: CanvasPattern | null },
 ) {
-  // charcoal base
-  ctx.fillStyle = "oklch(18% 0.02 240)";
-  ctx.fillRect(0, 0, W, H);
-  // vignette
-  const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.15, W / 2, H / 2, Math.max(W, H) * 0.75);
-  vg.addColorStop(0, "rgba(0,0,0,0)");
-  vg.addColorStop(1, "rgba(0,0,0,0.55)");
+  // Canvas is transparent — the teal page field shows through the glass card.
+  ctx.clearRect(0, 0, W, H);
+  // Soft inner bloom for depth inside the card
+  const vg = ctx.createRadialGradient(W * 0.62, H * 0.42, Math.min(W, H) * 0.05,
+                                       W * 0.62, H * 0.42, Math.max(W, H) * 0.7);
+  vg.addColorStop(0, "rgba(255,255,255,0.07)");
+  vg.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, W, H);
-  // grain
+  // Subtle grain
   if (!patternRef.current) patternRef.current = buildGrainPattern(ctx);
   if (patternRef.current) {
+    ctx.save();
+    ctx.globalAlpha = 0.5;
     ctx.fillStyle = patternRef.current;
     ctx.fillRect(0, 0, W, H);
+    ctx.restore();
   }
 }
 
@@ -1921,6 +1944,81 @@ function LineHandle({
 /* ============================================================
  * Floating glass dock (Wheel art mode)
  * ============================================================ */
+
+/* ============================================================
+ * PhaseChrome — page-level HUD: wordmark, live clock, rail, meta
+ * ============================================================ */
+
+function PhaseChrome() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const h24 = now.getHours();
+  const ampm = h24 >= 12 ? "PM" : "AM";
+  const h = ((h24 + 11) % 12) + 1;
+  const time = `${pad(h)}:${pad(now.getMinutes())}:${pad(now.getSeconds())} ${ampm}`;
+  const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  const date = `${months[now.getMonth()]} ${pad(now.getDate())}, ${now.getFullYear()}`;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10">
+      {/* Wordmark — top-left */}
+      <div className="absolute top-6 left-7 flex items-center gap-2 pointer-events-auto">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" className="text-white/85">
+          <circle cx="12" cy="12" r="9" />
+          <circle cx="12" cy="12" r="3.5" />
+          <path d="M12 3v4M12 17v4M3 12h4M17 12h4" strokeLinecap="round" />
+        </svg>
+        <div className="text-white/90" style={{ fontFamily: "var(--pr-mono)", fontSize: 14, letterSpacing: "0.04em" }}>
+          Phase<span className="text-white/45 text-[10px] align-super">®</span>
+        </div>
+      </div>
+
+      {/* Clock + HUD icons — top-right */}
+      <div className="absolute top-6 right-8 flex flex-col items-end gap-2 pointer-events-auto">
+        <div className="pr-label text-white/80 tabular-nums">{time}</div>
+        <div className="pr-label text-white/45 tabular-nums">{date}</div>
+        <div className="flex items-center gap-2 mt-1">
+          <button className="pr-hud-ring" title="ambient">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4a8 8 0 100 16V4z"/></svg>
+          </button>
+          <button className="pr-hud-ring" title="phase">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <path d="M12 3v18M3 12h18M5.5 5.5l13 13M18.5 5.5l-13 13"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Left rail nav */}
+      <nav className="absolute top-32 left-7 flex flex-col gap-0.5 pointer-events-auto">
+        <a className="pr-rail-link" data-active="true">Wheel</a>
+        <a className="pr-rail-link">FX</a>
+        <a className="pr-rail-link">Packs</a>
+        <a className="pr-rail-link">About</a>
+      </nav>
+
+      {/* Bottom-left tagline */}
+      <div className="absolute bottom-6 left-7 pointer-events-auto">
+        <div className="pr-label text-white/55 leading-[1.7]">
+          GENERATIVE<br />
+          POLYRHYTHMIC<br />
+          AMBIENT INSTRUMENT.
+        </div>
+      </div>
+
+      {/* Bottom-right meta */}
+      <div className="absolute bottom-6 right-8 text-right pointer-events-auto">
+        <div className="pr-label text-white/55">© 2026 PHASE, INC.</div>
+        <div className="pr-label text-white/35 mt-1">X / GITHUB</div>
+      </div>
+    </div>
+  );
+}
 
 function ArtDock({
   playing, bpm, onTogglePlay, onAddRing, onAddLine, onClearLines, onBpm, fxOpen, onToggleFx,

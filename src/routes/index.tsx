@@ -274,28 +274,28 @@ function playVoice(
   const oscs: OscillatorNode[] = [];
 
   if (voice === "chime") {
-    oscs.push(mk("sine", freq, -detuneCents, 0.35));
-    oscs.push(mk("sine", freq * 2.01, detuneCents, 0.12));
-    oscs.push(mk("sine", freq * 3.0, 0, 0.05));
-    attack = 0.005; release = 3.2; peak = 0.55;
+    oscs.push(mk("sine", freq, -detuneCents, 0.25));
+    oscs.push(mk("sine", freq * 2.01, detuneCents, 0.08));
+    oscs.push(mk("sine", freq * 3.0, 0, 0.035));
+    attack = 0.005; release = 3.2; peak = 0.32;
   } else if (voice === "pluck") {
-    oscs.push(mk("triangle", freq, -detuneCents, 0.5));
-    oscs.push(mk("triangle", freq * 1.005, detuneCents, 0.3));
-    attack = 0.003; release = 1.4; peak = 0.7;
+    oscs.push(mk("triangle", freq, -detuneCents, 0.35));
+    oscs.push(mk("triangle", freq * 1.005, detuneCents, 0.2));
+    attack = 0.003; release = 1.4; peak = 0.42;
   } else if (voice === "bell") {
-    oscs.push(mk("sine", freq, 0, 0.4));
-    oscs.push(mk("sine", freq * 3.5, 0, 0.18));
-    oscs.push(mk("sine", freq * 5.2, 0, 0.06));
-    attack = 0.008; release = 4.5; peak = 0.5;
+    oscs.push(mk("sine", freq, 0, 0.28));
+    oscs.push(mk("sine", freq * 3.5, 0, 0.12));
+    oscs.push(mk("sine", freq * 5.2, 0, 0.04));
+    attack = 0.008; release = 4.5; peak = 0.3;
   } else if (voice === "pad") {
-    oscs.push(mk("triangle", freq * 0.5, -detuneCents, 0.4));
-    oscs.push(mk("sine", freq * 0.5 * 1.005, detuneCents, 0.3));
-    oscs.push(mk("sine", freq, 0, 0.18));
-    attack = 0.45; release = 3.5; peak = 0.45;
+    oscs.push(mk("triangle", freq * 0.5, -detuneCents, 0.28));
+    oscs.push(mk("sine", freq * 0.5 * 1.005, detuneCents, 0.2));
+    oscs.push(mk("sine", freq, 0, 0.12));
+    attack = 0.45; release = 3.5; peak = 0.28;
   } else if (voice === "bass") {
-    oscs.push(mk("sine", freq * 0.5, -detuneCents, 0.55));
-    oscs.push(mk("triangle", freq * 0.5, detuneCents, 0.18));
-    attack = 0.01; release = 2.2; peak = 0.7;
+    oscs.push(mk("sine", freq * 0.5, -detuneCents, 0.38));
+    oscs.push(mk("triangle", freq * 0.5, detuneCents, 0.12));
+    attack = 0.01; release = 2.2; peak = 0.42;
   }
 
   const t = startAt;

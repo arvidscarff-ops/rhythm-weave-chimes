@@ -1,5 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import {
   DEFAULT_FX_STATE,
   applyFxState,

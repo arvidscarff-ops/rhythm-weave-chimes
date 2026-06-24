@@ -21,6 +21,23 @@ import {
   warmCustomPack,
   type RuntimePack,
 } from "@/lib/sound/runtimePacks";
+import {
+  LASER_COLORS,
+  type LaserColorKey,
+  type LaserPalette,
+  type Sparkle,
+  drawLaserLine,
+  drawLaserArc,
+  drawLaserPath,
+  drawBurnDot,
+  drawStarburst,
+  drawSparkles,
+  updateSparkles,
+  sparkleArc,
+  sparkleLine,
+  spawnSparkle,
+  hashSeed,
+} from "@/lib/visual/laser";
 
 export const Route = createFileRoute("/")({
   head: () => ({

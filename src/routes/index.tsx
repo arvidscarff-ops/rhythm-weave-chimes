@@ -1909,6 +1909,7 @@ function LineHandle({
 
 function ArtDock({
   playing, bpm, onTogglePlay, onAddRing, onAddLine, onClearLines, onBpm, fxOpen, onToggleFx,
+  packsOpen, onTogglePacks,
 }: {
   playing: boolean;
   bpm: number;
@@ -1919,6 +1920,8 @@ function ArtDock({
   onBpm: (v: number) => void;
   fxOpen: boolean;
   onToggleFx: () => void;
+  packsOpen: boolean;
+  onTogglePacks: () => void;
 }) {
   return (
     <div
@@ -1955,6 +1958,13 @@ function ArtDock({
           <circle cx="10" cy="12" r="1.6" fill="currentColor" />
           <path d="M4 17h12M20 17h0" />
           <circle cx="18" cy="17" r="1.6" fill="currentColor" />
+        </svg>
+      </DockBtn>
+      <DockBtn label="packs" onClick={onTogglePacks} active={packsOpen}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 8l8-4 8 4-8 4-8-4z" />
+          <path d="M4 12l8 4 8-4" />
+          <path d="M4 16l8 4 8-4" />
         </svg>
       </DockBtn>
       <span className="h-4 w-px bg-white/10" />

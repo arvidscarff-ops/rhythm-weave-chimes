@@ -2199,6 +2199,7 @@ function FxDrawer({
       }}
     >
       <div className="h-full grid grid-cols-4 divide-x divide-white/[0.07]">
+        <></>
         <FxChannel
           title="reverb"
           types={["room", "hall", "plate", "cosmic"] as ReverbType[]}

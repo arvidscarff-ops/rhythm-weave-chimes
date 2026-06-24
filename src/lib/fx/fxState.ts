@@ -11,10 +11,10 @@ export type FxState = {
 };
 
 export const REVERB_PRESETS: Record<ReverbType, { delay: number; feedback: number }> = {
-  room: { delay: 0.18, feedback: 0.35 },
-  hall: { delay: 0.55, feedback: 0.62 },
-  plate: { delay: 0.32, feedback: 0.70 },
-  cosmic: { delay: 1.10, feedback: 0.78 },
+  room: { delay: 0.18, feedback: 0.28 },
+  hall: { delay: 0.55, feedback: 0.42 },
+  plate: { delay: 0.32, feedback: 0.5 },
+  cosmic: { delay: 1.10, feedback: 0.58 },
 };
 
 export const CHORUS_PRESETS: Record<ChorusType, { rate: number; depth: number }> = {
@@ -24,9 +24,9 @@ export const CHORUS_PRESETS: Record<ChorusType, { rate: number; depth: number }>
 };
 
 export const GRAIN_PRESETS: Record<GrainType, { delay: number; feedback: number }> = {
-  dust: { delay: 0.04, feedback: 0.20 },
-  stutter: { delay: 0.12, feedback: 0.55 },
-  shimmer: { delay: 0.22, feedback: 0.70 },
+  dust: { delay: 0.04, feedback: 0.15 },
+  stutter: { delay: 0.12, feedback: 0.4 },
+  shimmer: { delay: 0.22, feedback: 0.5 },
 };
 
 export const TONE_PRESETS: Record<ToneType, { cutoff: number; tilt: number }> = {
@@ -36,8 +36,8 @@ export const TONE_PRESETS: Record<ToneType, { cutoff: number; tilt: number }> = 
 };
 
 export const DEFAULT_FX_STATE: FxState = {
-  reverb: { type: "hall", mix: 0.45, size: 0.55, bypass: false },
-  chorus: { type: "subtle", mix: 0.3, rate: 0.35, bypass: false },
+  reverb: { type: "hall", mix: 0.28, size: 0.55, bypass: false },
+  chorus: { type: "subtle", mix: 0.18, rate: 0.35, bypass: false },
   grain: { type: "dust", mix: 0.0, density: 0.5, bypass: true },
   tone: { type: "warm", cutoff: 2400, tilt: 0, bypass: false },
 };
@@ -79,7 +79,7 @@ export function applyFxState(a: FxNodes, s: FxState) {
     const gp = GRAIN_PRESETS[s.grain.type];
     const scale = 0.5 + s.grain.density; // 0.5..1.5
     a.grainDelay.delayTime.setTargetAtTime(Math.min(0.39, gp.delay * scale), t, R);
-    a.grainFeedback.gain.setTargetAtTime(Math.min(0.92, gp.feedback * scale), t, R);
+    a.grainFeedback.gain.setTargetAtTime(Math.min(0.6, gp.feedback * scale), t, R);
     a.grainMix.gain.setTargetAtTime(s.grain.bypass ? 0 : s.grain.mix, t, R);
   }
 

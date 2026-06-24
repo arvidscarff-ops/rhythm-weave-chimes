@@ -79,7 +79,7 @@ export function applyFxState(a: FxNodes, s: FxState) {
     const gp = GRAIN_PRESETS[s.grain.type];
     const scale = 0.5 + s.grain.density; // 0.5..1.5
     a.grainDelay.delayTime.setTargetAtTime(Math.min(0.39, gp.delay * scale), t, R);
-    a.grainFeedback.gain.setTargetAtTime(Math.min(0.92, gp.feedback * scale), t, R);
+    a.grainFeedback.gain.setTargetAtTime(Math.min(0.6, gp.feedback * scale), t, R);
     a.grainMix.gain.setTargetAtTime(s.grain.bypass ? 0 : s.grain.mix, t, R);
   }
 

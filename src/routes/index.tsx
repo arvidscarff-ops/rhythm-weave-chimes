@@ -601,13 +601,13 @@ function PhaseApp() {
 
     // bus trim + master limiter give headroom for parallel sends
     const busTrim = ctx.createGain();
-    busTrim.gain.value = 0.5;
+    busTrim.gain.value = 0.35;
     const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = -6;
-    limiter.knee.value = 0;
-    limiter.ratio.value = 20;
-    limiter.attack.value = 0.003;
-    limiter.release.value = 0.12;
+    limiter.threshold.value = -10;
+    limiter.knee.value = 6;
+    limiter.ratio.value = 12;
+    limiter.attack.value = 0.004;
+    limiter.release.value = 0.18;
 
     // routing: preFx -> filter -> shelf -> [dry+chorus] -> busTrim,
     //          shelf -> delay -> wet -> busTrim, shelf -> grain -> grainMix -> busTrim

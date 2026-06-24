@@ -1968,7 +1968,15 @@ function PhaseReadout({
   );
 }
 
-function PhaseChrome() {
+type PanelId = "fx" | "packs" | "about";
+function PhaseChrome({
+  fxOpen, packsOpen, aboutOpen, onOpenPanel,
+}: {
+  fxOpen: boolean;
+  packsOpen: boolean;
+  aboutOpen: boolean;
+  onOpenPanel: (p: PanelId) => void;
+}) {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
@@ -2020,10 +2028,26 @@ function PhaseChrome() {
 
       {/* Left rail nav */}
       <nav className="absolute top-32 left-7 flex flex-col gap-0.5 pointer-events-auto">
-        <a className="pr-rail-link" data-active="true">Wheel</a>
-        <a className="pr-rail-link">FX</a>
-        <a className="pr-rail-link">Packs</a>
-        <a className="pr-rail-link">About</a>
+        <button
+          className="pr-rail-link"
+          data-active={!fxOpen && !packsOpen && !aboutOpen ? "true" : undefined}
+          onClick={() => { onOpenPanel("fx"); onOpenPanel("fx"); /* toggle close all */ }}
+        >Wheel</button>
+        <button
+          className="pr-rail-link"
+          data-active={fxOpen ? "true" : undefined}
+          onClick={() => onOpenPanel("fx")}
+        >FX</button>
+        <button
+          className="pr-rail-link"
+          data-active={packsOpen ? "true" : undefined}
+          onClick={() => onOpenPanel("packs")}
+        >Packs</button>
+        <button
+          className="pr-rail-link"
+          data-active={aboutOpen ? "true" : undefined}
+          onClick={() => onOpenPanel("about")}
+        >About</button>
       </nav>
 
       {/* Bottom-left tagline */}

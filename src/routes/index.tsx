@@ -1852,6 +1852,186 @@ function paintArtBackground(
 
 // (ghost readout removed — numeric info now lives in the left-side PhaseReadout pile)
 
+/* ============================================================
+ * Pendulum scene — Galileo-style hanging bobs
+ * ============================================================ */
+
+function decayPendulumFlashes(pend: PendulumState, dt: number) {
+  const k = 1 - Math.exp(-dt * 3.2);
+  for (const b of pend.bobs) b.flash = Math.max(0, b.flash - k);
+}
+
+function updatePendulum(
+  pend: PendulumState, dt: number, audio: AudioGraph, bpm: number,
+  knobs: Knobs, pack: RuntimePack,
+) {
+  decayPendulumFlashes(pend, dt);
+  const now = audio.ctx.currentTime;
+  for (const b of pend.bobs) {
+    const period = pendPeriodSec(b, bpm);
+    const inc = dt / Math.max(0.001, period);
+    b.phase = (b.phase + inc) % 1;
+    // SHM displacement: sin(2π·phase). Trigger on zero-cross (sign flip).
+    const s = Math.sin(b.phase * Math.PI * 2);
+    const sign: 1 | -1 = s >= 0 ? 1 : -1;
+    if (sign !== b.prevSign) {
+      const freq = pitchToFreq(b.pitchIndex + knobs.pitch);
+      triggerPackVoice(audio.ctx, audio.preFx, pack, b.slotIndex, freq, now + 0.005);
+      b.flash = 1;
+      b.prevSign = sign;
+    }
+  }
+}
+
+function drawPendulumScene(
+  ctx: CanvasRenderingContext2D, W: number, H: number,
+  pend: PendulumState, hoverId: string | null,
+) {
+  const ax = W / 2;
+  const ay = H * 0.16;
+  const maxLen = H * 0.62;
+  const minLen = H * 0.30;
+  const n = pend.bobs.length;
+
+  // anchor bar
+  ctx.strokeStyle = "rgba(255,255,255,0.22)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(ax - 220, ay); ctx.lineTo(ax + 220, ay);
+  ctx.stroke();
+
+  pend.bobs.forEach((b, i) => {
+    const t = n === 1 ? 0.5 : i / (n - 1);
+    const len = minLen + (maxLen - minLen) * t;
+    // swing amplitude in radians (small angle illusion, looks meditative)
+    const amp = 0.55;
+    const ang = Math.sin(b.phase * Math.PI * 2) * amp;
+    const bx = ax + Math.sin(ang) * len;
+    const by = ay + Math.cos(ang) * len;
+    const hot = hoverId === b.id;
+
+    // string
+    ctx.strokeStyle = hot ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.22)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+    ctx.stroke();
+
+    // bob glow
+    const baseR = 6 + b.flash * 10;
+    const g = ctx.createRadialGradient(bx, by, 0, bx, by, 60);
+    const a = 0.35 + b.flash * 0.55;
+    g.addColorStop(0, `rgba(180, 220, 255, ${a})`);
+    g.addColorStop(0.4, `rgba(120, 180, 230, ${a * 0.4})`);
+    g.addColorStop(1, "rgba(120,180,230,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(bx, by, 60, 0, Math.PI * 2); ctx.fill();
+
+    // crisp ring
+    ctx.strokeStyle = `rgba(220,235,255,${0.55 + b.flash * 0.4})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(bx, by, baseR, 0, Math.PI * 2); ctx.stroke();
+  });
+}
+
+/* ============================================================
+ * Bars scene — vertical lanes with falling playheads
+ * ============================================================ */
+
+function decayBarsFlashes(bars: BarsState, dt: number) {
+  const k = 1 - Math.exp(-dt * 3.2);
+  for (const l of bars.lanes) l.flash = Math.max(0, l.flash - k);
+}
+
+function updateBars(
+  bars: BarsState, dt: number, audio: AudioGraph, bpm: number,
+  knobs: Knobs, pack: RuntimePack,
+) {
+  decayBarsFlashes(bars, dt);
+  const now = audio.ctx.currentTime;
+  for (const l of bars.lanes) {
+    const period = barPeriodSec(l, bpm);
+    const prev = l.phase;
+    l.phase = (l.phase + dt / Math.max(0.001, period)) % 1;
+    if (l.phase < prev) {
+      // wrapped → trigger
+      const freq = pitchToFreq(l.pitchIndex + knobs.pitch);
+      triggerPackVoice(audio.ctx, audio.preFx, pack, l.slotIndex, freq, now + 0.005);
+      l.flash = 1;
+      l.lastTriggerY = 1;
+    }
+  }
+}
+
+function drawBarsScene(
+  ctx: CanvasRenderingContext2D, W: number, H: number,
+  bars: BarsState, hoverId: string | null,
+) {
+  const n = bars.lanes.length;
+  if (n === 0) return;
+  const padX = W * 0.12;
+  const top = H * 0.16;
+  const bot = H * 0.84;
+  const usable = W - padX * 2;
+  const step = usable / (n - 1 || 1);
+
+  // baseline + ceiling hairlines
+  ctx.strokeStyle = "rgba(255,255,255,0.18)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(padX - 30, bot); ctx.lineTo(W - padX + 30, bot); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(padX - 30, top); ctx.lineTo(W - padX + 30, top); ctx.stroke();
+
+  const pts: { x: number; y: number; flash: number; hot: boolean; id: string }[] = [];
+
+  bars.lanes.forEach((l, i) => {
+    const x = n === 1 ? W / 2 : padX + step * i;
+    // lane track
+    ctx.strokeStyle = "rgba(255,255,255,0.10)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bot); ctx.stroke();
+
+    const y = top + (bot - top) * l.phase;
+    const hot = hoverId === l.id;
+    pts.push({ x, y: bot, flash: l.flash, hot, id: l.id });
+
+    // playhead glow
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 40);
+    g.addColorStop(0, "rgba(200,225,255,0.55)");
+    g.addColorStop(1, "rgba(200,225,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, 40, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = hot ? "rgba(255,255,255,0.85)" : "rgba(220,235,255,0.6)";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.stroke();
+
+    // bottom strike node
+    const sR = 4 + l.flash * 12;
+    const sa = 0.35 + l.flash * 0.55;
+    const sg = ctx.createRadialGradient(x, bot, 0, x, bot, 70);
+    sg.addColorStop(0, `rgba(180,220,255,${sa})`);
+    sg.addColorStop(1, "rgba(120,180,230,0)");
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.arc(x, bot, 70, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `rgba(220,235,255,${0.5 + l.flash * 0.5})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(x, bot, sR, 0, Math.PI * 2); ctx.stroke();
+  });
+
+  // zigzag connector along bottom nodes
+  if (pts.length > 1) {
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      const offY = i % 2 === 0 ? -8 : 8;
+      if (i === 0) ctx.moveTo(p.x, p.y + offY);
+      else ctx.lineTo(p.x, p.y + offY);
+    }
+    ctx.stroke();
+  }
+}
+
 /* ---- Wheel DOM overlays ---- */
 
 function WheelOverlays({

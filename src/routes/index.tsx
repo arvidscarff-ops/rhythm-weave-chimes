@@ -2177,6 +2177,43 @@ function DockBtn({
   );
 }
 
+function LaserSwatches({
+  value, onChange,
+}: { value: LaserColorKey; onChange: (c: LaserColorKey) => void }) {
+  const swatches: { key: LaserColorKey; hex: string }[] = [
+    { key: "green",   hex: "#6effa0" },
+    { key: "red",     hex: "#ff5a6a" },
+    { key: "cyan",    hex: "#6ee6ff" },
+    { key: "magenta", hex: "#ff6edc" },
+    { key: "amber",   hex: "#ffb84a" },
+    { key: "blue",    hex: "#8aa6ff" },
+  ];
+  return (
+    <div className="flex items-center gap-1.5" title="Laser color">
+      {swatches.map((s) => {
+        const active = s.key === value;
+        return (
+          <button
+            key={s.key}
+            onClick={() => onChange(s.key)}
+            aria-label={`laser ${s.key}`}
+            title={s.key}
+            className="h-3 w-3 rounded-full transition-transform"
+            style={{
+              background: s.hex,
+              boxShadow: active
+                ? `0 0 0 1.5px rgba(255,255,255,0.85), 0 0 12px ${s.hex}`
+                : `0 0 6px ${s.hex}88`,
+              transform: active ? "scale(1.15)" : "scale(1)",
+              opacity: active ? 1 : 0.7,
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 /* ============================================================
  * FX Drawer — expanding glass panel for sound effects
  * ============================================================ */

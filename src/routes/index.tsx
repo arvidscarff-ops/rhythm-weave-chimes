@@ -2066,7 +2066,8 @@ function PhaseChrome({
 }
 
 function ArtDock({
-  scene, playing, bpm, onTogglePlay, onAddNode, onAddLine, onClearLines, onBpm, fxOpen, onToggleFx,
+  scene, playing, bpm, onTogglePlay, onAddNode, onAddLine, onClearLines, onBpm,
+  laserColor, onLaserColor, fxOpen, onToggleFx,
   packsOpen, onTogglePacks,
 }: {
   scene: SceneKind;
@@ -2077,6 +2078,8 @@ function ArtDock({
   onAddLine: () => void;
   onClearLines: () => void;
   onBpm: (v: number) => void;
+  laserColor: LaserColorKey;
+  onLaserColor: (c: LaserColorKey) => void;
   fxOpen: boolean;
   onToggleFx: () => void;
   packsOpen: boolean;
@@ -2112,6 +2115,8 @@ function ArtDock({
       <DockBtn label={clearLabel} onClick={onClearLines}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M6 6l12 12M6 18L18 6" /></svg>
       </DockBtn>
+      <span className="h-4 w-px bg-white/10" />
+      <LaserSwatches value={laserColor} onChange={onLaserColor} />
       <span className="h-4 w-px bg-white/10" />
       <DockBtn label="fx" onClick={onToggleFx} active={fxOpen}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">

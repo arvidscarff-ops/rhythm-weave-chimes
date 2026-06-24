@@ -1072,7 +1072,7 @@ function PhaseApp() {
             onRemoveLine={removeLine}
             onSetLineAngle={setLineAngle}
             onUpdateRing={updateRing}
-            onHoverRing={(id) => { hoverRingIdRef.current = id; }}
+            onHoverRing={(id) => { hoverRingIdRef.current = id; setHoverRing(id); }}
             />
           </div>
         ) : (

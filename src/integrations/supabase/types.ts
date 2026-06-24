@@ -14,16 +14,201 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      pack_slots: {
+        Row: {
+          created_at: string
+          gain_db: number
+          id: string
+          label: string | null
+          pack_id: string
+          pan: number
+          pitch_offset_semitones: number
+          sample_id: string | null
+          slot_index: number
+        }
+        Insert: {
+          created_at?: string
+          gain_db?: number
+          id?: string
+          label?: string | null
+          pack_id: string
+          pan?: number
+          pitch_offset_semitones?: number
+          sample_id?: string | null
+          slot_index: number
+        }
+        Update: {
+          created_at?: string
+          gain_db?: number
+          id?: string
+          label?: string | null
+          pack_id?: string
+          pan?: number
+          pitch_offset_semitones?: number
+          sample_id?: string | null
+          slot_index?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pack_slots_pack_id_fkey"
+            columns: ["pack_id"]
+            isOneToOne: false
+            referencedRelation: "packs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pack_slots_sample_id_fkey"
+            columns: ["sample_id"]
+            isOneToOne: false
+            referencedRelation: "samples"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      packs: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_builtin: boolean
+          is_public: boolean
+          name: string
+          owner_id: string | null
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_builtin?: boolean
+          is_public?: boolean
+          name: string
+          owner_id?: string | null
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_builtin?: boolean
+          is_public?: boolean
+          name?: string
+          owner_id?: string | null
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      samples: {
+        Row: {
+          bit_depth: number | null
+          channels: number | null
+          created_at: string
+          duration_sec: number | null
+          id: string
+          loop_end_sec: number | null
+          loop_start_sec: number | null
+          mime_type: string
+          name: string
+          owner_id: string | null
+          root_note: string | null
+          sample_rate_hz: number | null
+          size_bytes: number | null
+          storage_path: string
+        }
+        Insert: {
+          bit_depth?: number | null
+          channels?: number | null
+          created_at?: string
+          duration_sec?: number | null
+          id?: string
+          loop_end_sec?: number | null
+          loop_start_sec?: number | null
+          mime_type?: string
+          name: string
+          owner_id?: string | null
+          root_note?: string | null
+          sample_rate_hz?: number | null
+          size_bytes?: number | null
+          storage_path: string
+        }
+        Update: {
+          bit_depth?: number | null
+          channels?: number | null
+          created_at?: string
+          duration_sec?: number | null
+          id?: string
+          loop_end_sec?: number | null
+          loop_start_sec?: number | null
+          mime_type?: string
+          name?: string
+          owner_id?: string | null
+          root_note?: string | null
+          sample_rate_hz?: number | null
+          size_bytes?: number | null
+          storage_path?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +335,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const

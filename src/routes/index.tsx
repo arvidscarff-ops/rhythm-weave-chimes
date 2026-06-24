@@ -976,9 +976,10 @@ function PhaseApp() {
 
   return (
     <div
-      className="min-h-screen w-full flex flex-col"
-      style={{ background: isWheel ? "oklch(18% 0.02 240)" : "var(--pr-bg-2)", color: "var(--pr-text)" }}
+      className={"min-h-screen w-full flex flex-col " + (isWheel ? "pr-stage" : "")}
+      style={{ background: isWheel ? undefined : "var(--pr-bg-2)", color: "var(--pr-text)" }}
     >
+      {isWheel && <PhaseChrome />}
       {/* TOP CONTROL STRIP — hidden in Wheel art mode */}
       {!isWheel && (
       <header

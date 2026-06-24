@@ -1915,6 +1915,38 @@ function LineHandle({
  * PhaseChrome — page-level HUD: wordmark, live clock, rail, meta
  * ============================================================ */
 
+function PhaseReadout({
+  wheel, bpm, hoverRingId, topo,
+}: {
+  wheel: WheelState;
+  bpm: number;
+  hoverRingId: string | null;
+  topo: number;
+}) {
+  void topo;
+  return (
+    <div className="pointer-events-none absolute left-7 z-10" style={{ top: 260 }}>
+      <div className="pr-label text-white/30 mb-2">READOUT</div>
+      <div className="flex flex-col gap-1 tabular-nums">
+        {wheel.rings.map((r) => {
+          const active = r.id === hoverRingId;
+          const period = ringPeriodSec(r, bpm);
+          return (
+            <div
+              key={r.id}
+              className="pr-label transition-opacity"
+              style={{ color: active ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.32)" }}
+            >
+              {r.beats}/{r.subdivision} · {period.toFixed(2)}S
+            </div>
+          );
+        })}
+        <div className="pr-label text-white/30 mt-2">{bpm} BPM</div>
+      </div>
+    </div>
+  );
+}
+
 function PhaseChrome() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {

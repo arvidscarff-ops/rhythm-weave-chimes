@@ -13,7 +13,7 @@ import {
   type GrainType,
   type ToneType,
 } from "@/lib/fx/fxState";
-import { PACKS, PACK_IDS, playPackVoice, type PackId } from "@/lib/sound/packs";
+import { PACKS, PACK_IDS, playPackVoice, type PackId, type VoiceSpec } from "@/lib/sound/packs";
 
 export const Route = createFileRoute("/")({
   head: () => ({

@@ -1567,12 +1567,22 @@ function drawWheelScene(
   for (const ring of wh.rings) {
     const R = ringRadiusPx(ring, W, H);
     const hovered = ring.id === hoverRingId;
-    const base = hovered ? 0.22 : 0.08;
+    const base = hovered ? 0.20 : 0.06;
     ctx.strokeStyle = `rgba(255,255,255,${(base + ring.flash * 0.35).toFixed(3)})`;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 0.5;
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, TAU);
     ctx.stroke();
+
+    // ghost ratio label on the ring's right edge
+    const labelA = hovered ? 0.20 : 0.06;
+    ctx.save();
+    ctx.fillStyle = `rgba(255,255,255,${labelA.toFixed(3)})`;
+    ctx.font = `400 10px "JetBrains Mono", ui-monospace, monospace`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`${ring.beats}/${ring.subdivision}`, cx + R + 10, cy - R * 0.02);
+    ctx.restore();
   }
 
   // 2) trigger lines — quiet hairline chords with rim ticks
@@ -1581,8 +1591,8 @@ function drawWheelScene(
     const y1 = cy + Math.sin(line.angle) * maxR * 0.96;
     const x2 = cx - Math.cos(line.angle) * maxR * 0.96;
     const y2 = cy - Math.sin(line.angle) * maxR * 0.96;
-    ctx.strokeStyle = `rgba(255,255,255,${(0.12 + line.flash * 0.35).toFixed(3)})`;
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = `rgba(255,255,255,${(0.10 + line.flash * 0.30).toFixed(3)})`;
+    ctx.lineWidth = 0.5;
     ctx.beginPath();
     ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
     ctx.stroke();

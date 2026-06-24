@@ -91,6 +91,7 @@ type AudioGraph = {
   ctx: AudioContext;
   master: GainNode;
   busTrim: GainNode;
+  highpass: BiquadFilterNode;
   limiter: DynamicsCompressorNode;
   preFx: GainNode;       // input bus
   filter: BiquadFilterNode;
@@ -210,6 +211,8 @@ function makeSeedWheel(): WheelState {
 // pentatonic minor across octaves starting at A2
 const SCALE_DEG = [0, 3, 5, 7, 10];
 const ROOT_HZ = 110; // A2
+const MAX_ACTIVE_VOICES = 18;
+let activeVoiceCount = 0;
 
 function vertexFreq(i: number, pitchSemi: number) {
   const deg = SCALE_DEG[i % SCALE_DEG.length];
@@ -254,6 +257,7 @@ function playVoice(
   startAt: number,
 ) {
   if (voice === "none") return;
+  if (activeVoiceCount >= MAX_ACTIVE_VOICES) return;
   const env = ctx.createGain();
   env.gain.value = 0;
   env.connect(dest);
@@ -270,43 +274,48 @@ function playVoice(
     return o;
   };
 
-  let attack = 0.01, hold = 0, release = 2.5, peak = 0.5;
+  let attack = 0.01, hold = 0, release = 2.5, peak = 0.16;
   const oscs: OscillatorNode[] = [];
 
   if (voice === "chime") {
     oscs.push(mk("sine", freq, -detuneCents, 0.25));
     oscs.push(mk("sine", freq * 2.01, detuneCents, 0.08));
     oscs.push(mk("sine", freq * 3.0, 0, 0.035));
-    attack = 0.005; release = 3.2; peak = 0.32;
+    attack = 0.005; release = 3.2; peak = 0.14;
   } else if (voice === "pluck") {
     oscs.push(mk("triangle", freq, -detuneCents, 0.35));
     oscs.push(mk("triangle", freq * 1.005, detuneCents, 0.2));
-    attack = 0.003; release = 1.4; peak = 0.42;
+    attack = 0.003; release = 1.4; peak = 0.16;
   } else if (voice === "bell") {
     oscs.push(mk("sine", freq, 0, 0.28));
     oscs.push(mk("sine", freq * 3.5, 0, 0.12));
     oscs.push(mk("sine", freq * 5.2, 0, 0.04));
-    attack = 0.008; release = 4.5; peak = 0.3;
+    attack = 0.008; release = 4.5; peak = 0.12;
   } else if (voice === "pad") {
     oscs.push(mk("triangle", freq * 0.5, -detuneCents, 0.28));
     oscs.push(mk("sine", freq * 0.5 * 1.005, detuneCents, 0.2));
     oscs.push(mk("sine", freq, 0, 0.12));
-    attack = 0.45; release = 3.5; peak = 0.28;
+    attack = 0.45; release = 3.5; peak = 0.1;
   } else if (voice === "bass") {
     oscs.push(mk("sine", freq * 0.5, -detuneCents, 0.38));
     oscs.push(mk("triangle", freq * 0.5, detuneCents, 0.12));
-    attack = 0.01; release = 2.2; peak = 0.42;
+    attack = 0.01; release = 2.2; peak = 0.13;
   }
 
   const t = startAt;
+  const duration = attack + hold + release + 0.1;
+  activeVoiceCount += 1;
   env.gain.setValueAtTime(0.0001, t);
   env.gain.exponentialRampToValueAtTime(peak, t + attack);
   env.gain.exponentialRampToValueAtTime(0.0001, t + attack + hold + release);
 
   oscs.forEach((o) => {
     o.start(t);
-    o.stop(t + attack + hold + release + 0.1);
+    o.stop(t + duration);
   });
+  window.setTimeout(() => {
+    activeVoiceCount = Math.max(0, activeVoiceCount - 1);
+  }, Math.max(0, (t + duration - ctx.currentTime) * 1000));
 }
 
 /* ============================================================
@@ -552,7 +561,7 @@ function PhaseApp() {
     const ctx: AudioContext = new Ctx();
 
     const master = ctx.createGain();
-    master.gain.value = knobsRef.current.mainVol;
+    master.gain.value = knobsRef.current.mainVol * 0.7;
 
     const preFx = ctx.createGain();
     preFx.gain.value = 1;
@@ -579,7 +588,7 @@ function PhaseApp() {
     chorusLFOGain.connect(chorusDelay.delayTime);
     chorusLFO.start();
     const chorusMix = ctx.createGain();
-    chorusMix.gain.value = 0.5;
+    chorusMix.gain.value = 0.08;
 
     // delay (rev)
     const delay = ctx.createDelay(2.5);
@@ -587,9 +596,9 @@ function PhaseApp() {
     const feedback = ctx.createGain();
     feedback.gain.value = 0.38;
     const wet = ctx.createGain();
-    wet.gain.value = knobsRef.current.revMix;
+    wet.gain.value = knobsRef.current.revMix * 0.45;
     const dryToMaster = ctx.createGain();
-    dryToMaster.gain.value = 1;
+    dryToMaster.gain.value = 0.78;
 
     // grain: secondary delay tap
     const grainDelay = ctx.createDelay(0.4);
@@ -601,17 +610,21 @@ function PhaseApp() {
 
     // bus trim + master limiter give headroom for parallel sends
     const busTrim = ctx.createGain();
-    busTrim.gain.value = 0.35;
+    busTrim.gain.value = 0.28;
+    const highpass = ctx.createBiquadFilter();
+    highpass.type = "highpass";
+    highpass.frequency.value = 42;
+    highpass.Q.value = 0.7;
     const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = -10;
-    limiter.knee.value = 6;
-    limiter.ratio.value = 12;
-    limiter.attack.value = 0.004;
-    limiter.release.value = 0.18;
+    limiter.threshold.value = -16;
+    limiter.knee.value = 4;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.12;
 
     // routing: preFx -> filter -> shelf -> [dry+chorus] -> busTrim,
     //          shelf -> delay -> wet -> busTrim, shelf -> grain -> grainMix -> busTrim
-    //          busTrim -> master -> limiter -> destination
+    //          busTrim -> master -> highpass -> limiter -> destination
     preFx.connect(filter);
     filter.connect(shelf);
     shelf.connect(dryToMaster);
@@ -633,11 +646,12 @@ function PhaseApp() {
     grainMix.connect(busTrim);
 
     busTrim.connect(master);
-    master.connect(limiter);
+    master.connect(highpass);
+    highpass.connect(limiter);
     limiter.connect(ctx.destination);
 
     audioRef.current = {
-      ctx, master, busTrim, limiter, preFx, filter, shelf, chorusDelay, chorusLFO, chorusLFOGain,
+      ctx, master, busTrim, highpass, limiter, preFx, filter, shelf, chorusDelay, chorusLFO, chorusLFOGain,
       chorusMix, delay, feedback, wet, dryToMaster,
       grainDelay, grainFeedback, grainMix,
     };
@@ -648,12 +662,12 @@ function PhaseApp() {
   useEffect(() => {
     const a = audioRef.current; if (!a) return;
     const t = a.ctx.currentTime;
-    a.master.gain.setTargetAtTime(knobs.mainVol * 0.85, t, 0.04);
+    a.master.gain.setTargetAtTime(knobs.mainVol * 0.7, t, 0.04);
     a.filter.frequency.setTargetAtTime(knobs.fx1, t, 0.04);
     a.delay.delayTime.setTargetAtTime(knobs.revSize, t, 0.05);
-    a.wet.gain.setTargetAtTime(knobs.revMix, t, 0.05);
-    a.chorusMix.gain.setTargetAtTime(0.1 + (knobs.fx2 / 40) * 0.4, t, 0.05);
-    a.chorusLFOGain.gain.setTargetAtTime(0.001 + (knobs.fx2 / 40) * 0.008, t, 0.05);
+    a.wet.gain.setTargetAtTime(knobs.revMix * 0.45, t, 0.05);
+    a.chorusMix.gain.setTargetAtTime(0.04 + (knobs.fx2 / 40) * 0.16, t, 0.05);
+    a.chorusLFOGain.gain.setTargetAtTime(0.001 + (knobs.fx2 / 40) * 0.004, t, 0.05);
   }, [knobs]);
 
   /* ---- Sync FX state -> audio params (wins over knobs in wheel mode) ---- */
@@ -1418,7 +1432,7 @@ function updateWheel(
   wh: WheelState, dt: number, audio: AudioGraph, bpm: number, voices: VoiceSel, knobs: Knobs,
 ) {
   const now = audio.ctx.currentTime;
-  const REFRACTORY = 0.04; // 40 ms
+  const REFRACTORY = 0.16; // prevents frame jitter and ambient voice pileups
 
   decayWheelFlashes(wh, dt);
 
@@ -1427,20 +1441,22 @@ function updateWheel(
     const omega = TAU / Math.max(0.001, period); // rad/s
     const sign = ring.direction;
     const prevPhase = ring.phase;
-    ring.phase = prevPhase + sign * omega * dt;
+    const nextPhase = prevPhase + sign * omega * dt;
+    ring.phase = nextPhase;
+    const movingForward = nextPhase >= prevPhase;
 
     const voice = resolveVoice(ring.voiceSlot, voices);
 
     for (const note of ring.notes) {
-      const prevWorld = norm2pi(note.angle + prevPhase * sign);
-      const newWorld = norm2pi(note.angle + ring.phase * sign);
+      const prevWorld = norm2pi(note.angle + prevPhase);
+      const newWorld = norm2pi(note.angle + nextPhase);
 
       // For each line, two target angles: angle and angle+π
       for (const line of wh.lines) {
         for (let s = 0; s < 2; s++) {
           const target = norm2pi(line.angle + s * Math.PI);
           let crossed = false;
-          if (sign > 0) {
+          if (movingForward) {
             const d = fwdDist(prevWorld, newWorld);
             const dt2 = fwdDist(prevWorld, target);
             if (dt2 > 0 && dt2 <= d) crossed = true;
@@ -1482,10 +1498,9 @@ function wheelHandleClick(wh: WheelState, px: number, py: number, W: number, H: 
   // 1) try to remove an existing note (within 14px)
   for (const ring of wh.rings) {
     const ringR = ringRadiusPx(ring, W, H);
-    const sign = ring.direction;
     for (let i = ring.notes.length - 1; i >= 0; i--) {
       const n = ring.notes[i];
-      const wn = norm2pi(n.angle + ring.phase * sign);
+      const wn = norm2pi(n.angle + ring.phase);
       const nx = cx + Math.cos(wn) * ringR;
       const ny = cy + Math.sin(wn) * ringR;
       if (Math.hypot(px - nx, py - ny) < 14) {
@@ -1506,8 +1521,7 @@ function wheelHandleClick(wh: WheelState, px: number, py: number, W: number, H: 
   });
   if (best) {
     const ring = best as WheelRing;
-    const sign = ring.direction;
-    const localAngle = norm2pi(ang - ring.phase * sign);
+    const localAngle = norm2pi(ang - ring.phase);
     const note: WheelNote = {
       id: uid("n"),
       angle: localAngle,
@@ -1575,10 +1589,9 @@ function drawWheelScene(
   // 3) notes — soft discs + kinetic trails
   for (const ring of wh.rings) {
     const R = ringRadiusPx(ring, W, H);
-    const sign = ring.direction;
     const color = voiceSlotColor(ring.voiceSlot, true);
     for (const n of ring.notes) {
-      const w = norm2pi(n.angle + ring.phase * sign);
+      const w = norm2pi(n.angle + ring.phase);
       const nx = cx + Math.cos(w) * R;
       const ny = cy + Math.sin(w) * R;
       const inten = n.flash;

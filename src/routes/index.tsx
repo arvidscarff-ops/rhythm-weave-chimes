@@ -1224,6 +1224,8 @@ function PhaseApp() {
             else clearLanes();
           }}
           onBpm={setBpm}
+          laserColor={laserColor}
+          onLaserColor={setLaserColor}
           fxOpen={fxOpen}
           onToggleFx={() => {
             const next = !fxOpen;

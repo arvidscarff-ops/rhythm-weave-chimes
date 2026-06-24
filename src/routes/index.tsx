@@ -1584,16 +1584,6 @@ function drawWheelScene(
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, TAU);
     ctx.stroke();
-
-    // ghost ratio label on the ring's right edge
-    const labelA = hovered ? 0.20 : 0.06;
-    ctx.save();
-    ctx.fillStyle = `rgba(255,255,255,${labelA.toFixed(3)})`;
-    ctx.font = `400 10px "JetBrains Mono", ui-monospace, monospace`;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillText(`${ring.beats}/${ring.subdivision}`, cx + R + 10, cy - R * 0.02);
-    ctx.restore();
   }
 
   // 2) trigger lines — quiet hairline chords with rim ticks

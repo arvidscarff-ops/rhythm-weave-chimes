@@ -1971,12 +1971,13 @@ function PhaseReadout({
 
 type PanelId = "fx" | "packs" | "about";
 function PhaseChrome({
-  fxOpen, packsOpen, aboutOpen, onOpenPanel,
+  fxOpen, packsOpen, aboutOpen, onOpenPanel, onCloseAll,
 }: {
   fxOpen: boolean;
   packsOpen: boolean;
   aboutOpen: boolean;
   onOpenPanel: (p: PanelId) => void;
+  onCloseAll: () => void;
 }) {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
@@ -2032,7 +2033,7 @@ function PhaseChrome({
         <button
           className="pr-rail-link"
           data-active={!fxOpen && !packsOpen && !aboutOpen ? "true" : undefined}
-          onClick={() => { onOpenPanel("fx"); onOpenPanel("fx"); /* toggle close all */ }}
+          onClick={onCloseAll}
         >Wheel</button>
         <button
           className="pr-rail-link"

@@ -2422,3 +2422,67 @@ function PacksDrawer({
     </div>
   );
 }
+
+/* ============================================================
+ * About Drawer — project info window
+ * ============================================================ */
+
+function AboutDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const sections: { label: string; body: string }[] = [
+    {
+      label: "concept",
+      body:
+        "Phase is a generative polyrhythmic instrument. Concentric rings rotate at independent rates; whenever a ring crosses a radial line, a note sounds. Compositions emerge from the slow drift of mathematics into and out of phase.",
+    },
+    {
+      label: "engine",
+      body:
+        "All sound is synthesised live in the browser through the Web Audio API — additive partials, FM operators and filtered noise routed through reverb, chorus, grain and tone. No samples. No network. Just numbers becoming air.",
+    },
+    {
+      label: "interaction",
+      body:
+        "Click the canvas to add rings and lines. Hover any ring to inspect its period. Use the dock to load a sound pack, sculpt the FX chain or set the project tempo. Hold space to pause time.",
+    },
+    {
+      label: "credits",
+      body:
+        "Designed and engineered as a study in ambient interfaces. Typography in JetBrains Mono. Colour space in OKLCH. Built with TanStack Start.",
+    },
+  ];
+  return (
+    <div
+      data-state={open ? "open" : "closed"}
+      className="fx-drawer absolute left-1/2 bottom-[88px] rounded-2xl border border-white/10 backdrop-blur-xl bg-neutral-950/40 pr-mono"
+      style={{
+        width: "min(560px, calc(100vw - 48px))",
+        boxShadow:
+          "0 24px 70px rgba(0,0,0,0.65), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.03)",
+        zIndex: 4,
+      }}
+    >
+      <div className="px-5 pt-4 pb-3 flex items-baseline justify-between border-b border-white/[0.06]">
+        <div className="text-[10px] tracking-[0.22em] uppercase text-white/70">about · phase</div>
+        <button
+          onClick={onClose}
+          className="text-[9px] tracking-[0.22em] uppercase text-white/40 hover:text-white/90 transition-colors"
+          aria-label="close"
+        >
+          close
+        </button>
+      </div>
+      <div className="pr-stagger px-5 py-4 flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
+        {sections.map((s) => (
+          <div key={s.label} className="flex flex-col gap-1.5">
+            <div className="text-[9px] tracking-[0.22em] uppercase text-white/40">{s.label}</div>
+            <p className="text-[11.5px] leading-[1.65] text-white/75">{s.body}</p>
+          </div>
+        ))}
+        <div className="flex items-center justify-between pt-2 border-t border-white/[0.05]">
+          <span className="text-[9px] tracking-[0.22em] uppercase text-white/35">v 0.4 · 2026</span>
+          <span className="text-[9px] tracking-[0.22em] uppercase text-white/35">© phase, inc.</span>
+        </div>
+      </div>
+    </div>
+  );
+}

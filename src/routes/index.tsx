@@ -1085,136 +1085,100 @@ function PhaseApp() {
 
   return (
     <div
-      className={"min-h-screen w-full flex flex-col relative " + (isWheel ? "pr-stage" : "")}
-      style={{ background: isWheel ? undefined : "var(--pr-bg-2)", color: "var(--pr-text)" }}
+      className="min-h-screen w-full flex flex-col relative pr-stage"
+      style={{ color: "var(--pr-text)" }}
     >
-      {isWheel && (
-        <PhaseChrome
-          fxOpen={fxOpen}
-          packsOpen={packsOpen}
-          aboutOpen={aboutOpen}
-          onOpenPanel={(p) => {
-            setFxOpen(p === "fx" ? !fxOpen : false);
-            setPacksOpen(p === "packs" ? !packsOpen : false);
-            setAboutOpen(p === "about" ? !aboutOpen : false);
-          }}
-          onCloseAll={() => { setFxOpen(false); setPacksOpen(false); setAboutOpen(false); }}
-        />
-      )}
-      {isWheel && (
-        <PhaseReadout
-          wheel={engineRef.current.wheel}
-          bpm={bpm}
-          hoverRingId={hoverRing}
-          topo={topo}
-        />
-      )}
+      <PhaseChrome
+        scene={scene}
+        onScene={setScene}
+        fxOpen={fxOpen}
+        packsOpen={packsOpen}
+        aboutOpen={aboutOpen}
+        onOpenPanel={(p) => {
+          setFxOpen(p === "fx" ? !fxOpen : false);
+          setPacksOpen(p === "packs" ? !packsOpen : false);
+          setAboutOpen(p === "about" ? !aboutOpen : false);
+        }}
+        onCloseAll={() => { setFxOpen(false); setPacksOpen(false); setAboutOpen(false); }}
+      />
+      <PhaseReadout
+        scene={scene}
+        wheel={engineRef.current.wheel}
+        pendulum={engineRef.current.pendulum}
+        bars={engineRef.current.bars}
+        bpm={bpm}
+        hoverRingId={hoverRing}
+        topo={topo}
+      />
       {/* CANVAS */}
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
-        {isWheel ? (
-          <>
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 w-full h-full block"
-              style={{ background: "transparent", cursor: "crosshair" }}
-              onPointerDown={onCanvasPointerDown}
-              onPointerMove={onCanvasPointerMove}
-              onPointerLeave={onCanvasPointerLeave}
-            />
-            <WheelOverlays
-                wheel={engineRef.current.wheel}
-                topo={topo}
-                canvasW={canvasRect.w}
-                canvasH={canvasRect.h}
-                onAddRing={addRing}
-                onAddLine={addLine}
-                onRemoveRing={removeRing}
-                onRemoveLine={removeLine}
-                onSetLineAngle={setLineAngle}
-                onUpdateRing={updateRing}
-                onHoverRing={(id) => { hoverRingIdRef.current = id; setHoverRing(id); }}
-            />
-          </>
-        ) : (
-          <canvas
-            ref={canvasRef}
-            className="absolute inset-0 w-full h-full block"
-            style={{ background: "oklch(0.09 0.01 260)", cursor: "default" }}
-            onPointerDown={onCanvasPointerDown}
-            onPointerMove={onCanvasPointerMove}
-            onPointerLeave={onCanvasPointerLeave}
-          />
-        )}
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full block"
+          style={{ background: "transparent", cursor: isWheel ? "crosshair" : "default" }}
+          onPointerDown={onCanvasPointerDown}
+          onPointerMove={onCanvasPointerMove}
+          onPointerLeave={onCanvasPointerLeave}
+        />
         {isWheel && (
-          <ArtDock
-            playing={playing}
-            bpm={bpm}
-            onTogglePlay={togglePlay}
+          <WheelOverlays
+            wheel={engineRef.current.wheel}
+            topo={topo}
+            canvasW={canvasRect.w}
+            canvasH={canvasRect.h}
             onAddRing={addRing}
             onAddLine={addLine}
-            onClearLines={clearLines}
-            onBpm={setBpm}
-            fxOpen={fxOpen}
-            onToggleFx={() => {
-              const next = !fxOpen;
-              setFxOpen(next);
-              if (next) { setPacksOpen(false); setAboutOpen(false); }
-            }}
-            packsOpen={packsOpen}
-            onTogglePacks={() => {
-              const next = !packsOpen;
-              setPacksOpen(next);
-              if (next) { setFxOpen(false); setAboutOpen(false); }
-            }}
+            onRemoveRing={removeRing}
+            onRemoveLine={removeLine}
+            onSetLineAngle={setLineAngle}
+            onUpdateRing={updateRing}
+            onHoverRing={(id) => { hoverRingIdRef.current = id; setHoverRing(id); }}
           />
         )}
-        {isWheel && (
-          <FxDrawer
-            open={fxOpen}
-            state={fxState}
-            onChange={setFxState}
-          />
-        )}
-        {isWheel && (
-          <PacksDrawer
-            open={packsOpen}
-            packs={allPacks}
-            selected={selectedPack}
-            onSelect={setSelectedPack}
-            onAudition={(pack: RuntimePack, slotIndex: number) => {
-              const a = ensureAudio();
-              if (a.ctx.state === "suspended") a.ctx.resume();
-              triggerPackVoice(a.ctx, a.preFx, pack, slotIndex, 440, a.ctx.currentTime + 0.01);
-            }}
-          />
-        )}
-        {isWheel && <AboutDrawer open={aboutOpen} onClose={() => setAboutOpen(false)} />}
-      </main>
-
-      {/* BOTTOM BPM DOCK — hidden in Wheel art mode */}
-      {!isWheel && (
-      <footer
-        className="flex items-center gap-4 px-5 py-2.5 border-t"
-        style={{
-          background: "linear-gradient(0deg, oklch(0.16 0.013 260) 0%, oklch(0.13 0.012 260) 100%)",
-          borderColor: "var(--pr-line)",
-        }}
-      >
-        <div className="text-[9px] uppercase tracking-[0.2em]" style={{ color: "var(--pr-muted)" }}>
-          tempo
-        </div>
-        <input
-          type="range"
-          min={20} max={180} step={1}
-          value={bpm}
-          onChange={(e) => setBpm(parseInt(e.target.value, 10))}
-          className="pr-slider flex-1"
+        <ArtDock
+          scene={scene}
+          playing={playing}
+          bpm={bpm}
+          onTogglePlay={togglePlay}
+          onAddNode={() => {
+            if (scene === "wheel") addRing();
+            else if (scene === "pendulum") addBob();
+            else addLane();
+          }}
+          onAddLine={addLine}
+          onClearLines={() => {
+            if (scene === "wheel") clearLines();
+            else if (scene === "pendulum") clearBobs();
+            else clearLanes();
+          }}
+          onBpm={setBpm}
+          fxOpen={fxOpen}
+          onToggleFx={() => {
+            const next = !fxOpen;
+            setFxOpen(next);
+            if (next) { setPacksOpen(false); setAboutOpen(false); }
+          }}
+          packsOpen={packsOpen}
+          onTogglePacks={() => {
+            const next = !packsOpen;
+            setPacksOpen(next);
+            if (next) { setFxOpen(false); setAboutOpen(false); }
+          }}
         />
-        <div className="text-sm tabular-nums tracking-wider" style={{ color: "var(--pr-text)" }}>
-          {bpm} <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "var(--pr-muted)" }}>bpm</span>
-        </div>
-      </footer>
-      )}
+        <FxDrawer open={fxOpen} state={fxState} onChange={setFxState} />
+        <PacksDrawer
+          open={packsOpen}
+          packs={allPacks}
+          selected={selectedPack}
+          onSelect={setSelectedPack}
+          onAudition={(pack: RuntimePack, slotIndex: number) => {
+            const a = ensureAudio();
+            if (a.ctx.state === "suspended") a.ctx.resume();
+            triggerPackVoice(a.ctx, a.preFx, pack, slotIndex, 440, a.ctx.currentTime + 0.01);
+          }}
+        />
+        <AboutDrawer open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      </main>
     </div>
   );
 }

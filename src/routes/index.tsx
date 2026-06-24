@@ -2371,7 +2371,7 @@ function PacksDrawer({
           ring index → voice · hover to audition
         </div>
       </div>
-      <div className="px-3 pb-4 grid grid-cols-3 gap-3">
+      <div className="pr-stagger px-3 pb-4 grid grid-cols-3 gap-3">
         {PACK_IDS.map((pid) => {
           const pack = PACKS[pid];
           const active = pid === selected;

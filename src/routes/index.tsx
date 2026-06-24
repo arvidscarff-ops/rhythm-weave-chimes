@@ -507,6 +507,8 @@ function PhaseApp() {
   const [bpm, setBpm] = useState(90);
   const [fxState, setFxState] = useState<FxState>(DEFAULT_FX_STATE);
   const [fxOpen, setFxOpen] = useState(false);
+  const [packsOpen, setPacksOpen] = useState(false);
+  const [selectedPack, setSelectedPack] = useState<PackId>("moss");
   // topology bump: rings/lines/notes counts so DOM overlays re-render
   const [topo, setTopo] = useState(0);
   const bumpTopo = useCallback(() => setTopo((x) => x + 1), []);
@@ -535,6 +537,7 @@ function PhaseApp() {
   const voicesRef = useRef(voices); voicesRef.current = voices;
   const knobsRef = useRef(knobs); knobsRef.current = knobs;
   const bpmRef = useRef(bpm); bpmRef.current = bpm;
+  const packRef = useRef(selectedPack); packRef.current = selectedPack;
 
   const audioRef = useRef<AudioGraph | null>(null);
   const engineRef = useRef<EngineState>({

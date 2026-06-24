@@ -2074,13 +2074,14 @@ function PhaseChrome({
 }
 
 function ArtDock({
-  playing, bpm, onTogglePlay, onAddRing, onAddLine, onClearLines, onBpm, fxOpen, onToggleFx,
+  scene, playing, bpm, onTogglePlay, onAddNode, onAddLine, onClearLines, onBpm, fxOpen, onToggleFx,
   packsOpen, onTogglePacks,
 }: {
+  scene: SceneKind;
   playing: boolean;
   bpm: number;
   onTogglePlay: () => void;
-  onAddRing: () => void;
+  onAddNode: () => void;
   onAddLine: () => void;
   onClearLines: () => void;
   onBpm: (v: number) => void;
@@ -2089,6 +2090,8 @@ function ArtDock({
   packsOpen: boolean;
   onTogglePacks: () => void;
 }) {
+  const addLabel = scene === "wheel" ? "add circle" : scene === "pendulum" ? "add bob" : "add lane";
+  const clearLabel = scene === "wheel" ? "clear lines" : scene === "pendulum" ? "clear bobs" : "clear lanes";
   return (
     <div
       className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-xl bg-neutral-950/40 pr-mono"
@@ -2106,13 +2109,15 @@ function ArtDock({
         )}
       </DockBtn>
       <span className="h-4 w-px bg-white/10" />
-      <DockBtn label="add circle" onClick={onAddRing}>
+      <DockBtn label={addLabel} onClick={onAddNode}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9" /><path d="M12 8v8M8 12h8" strokeLinecap="round" /></svg>
       </DockBtn>
-      <DockBtn label="add line" onClick={onAddLine}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 20L20 4" /></svg>
-      </DockBtn>
-      <DockBtn label="clear lines" onClick={onClearLines}>
+      {scene === "wheel" && (
+        <DockBtn label="add line" onClick={onAddLine}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 20L20 4" /></svg>
+        </DockBtn>
+      )}
+      <DockBtn label={clearLabel} onClick={onClearLines}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M6 6l12 12M6 18L18 6" /></svg>
       </DockBtn>
       <span className="h-4 w-px bg-white/10" />

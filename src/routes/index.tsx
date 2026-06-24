@@ -1712,22 +1712,7 @@ function paintArtBackground(
   }
 }
 
-function drawGhostReadout(
-  ctx: CanvasRenderingContext2D, W: number, H: number, periodSec: number, opacity: number,
-) {
-  const txt = `${periodSec.toFixed(2).padStart(5, "0")}S`;
-  const size = Math.max(120, Math.min(280, Math.min(W, H) * 0.22));
-  ctx.save();
-  // 5% idle → 20% on full hover (opacity arg is 0..1 hover lerp)
-  const a = 0.05 + 0.15 * opacity;
-  ctx.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`;
-  ctx.font = `300 ${size}px "JetBrains Mono", ui-monospace, monospace`;
-  ctx.letterSpacing = "0.15em" as unknown as string;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(txt, W / 2, H / 2);
-  ctx.restore();
-}
+// (ghost readout removed — numeric info now lives in the left-side PhaseReadout pile)
 
 /* ---- Wheel DOM overlays ---- */
 

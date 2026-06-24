@@ -1645,7 +1645,9 @@ function updateBars(
 
 function drawBarsScene(
   ctx: CanvasRenderingContext2D, W: number, H: number,
-  bars: BarsState, hoverId: string | null,
+  bars: BarsState, dt: number, T: number, pal: LaserPalette,
+  hoverId: string | null,
+  sparkles: Sparkle[], starbursts: { x: number; y: number; life: number; max: number }[],
 ) {
   const n = bars.lanes.length;
   if (n === 0) return;
@@ -1655,60 +1657,36 @@ function drawBarsScene(
   const usable = W - padX * 2;
   const step = usable / (n - 1 || 1);
 
-  // baseline + ceiling hairlines
-  ctx.strokeStyle = "rgba(255,255,255,0.18)";
-  ctx.lineWidth = 0.5;
-  ctx.beginPath(); ctx.moveTo(padX - 30, bot); ctx.lineTo(W - padX + 30, bot); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(padX - 30, top); ctx.lineTo(W - padX + 30, top); ctx.stroke();
+  // baseline + ceiling laser rails
+  drawLaserLine(ctx, padX - 30, bot, W - padX + 30, bot, pal,
+    { intensity: 0.55, seed: 0.71, t: T });
+  drawLaserLine(ctx, padX - 30, top, W - padX + 30, top, pal,
+    { intensity: 0.45, seed: 0.27, t: T });
 
   const pts: { x: number; y: number; flash: number; hot: boolean; id: string }[] = [];
 
   bars.lanes.forEach((l, i) => {
     const x = n === 1 ? W / 2 : padX + step * i;
-    // lane track
-    ctx.strokeStyle = "rgba(255,255,255,0.10)";
-    ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bot); ctx.stroke();
+    const seed = hashSeed(l.id);
+    const hot = hoverId === l.id;
+    const intensity = (hot ? 0.8 : 0.55) + l.flash * 0.45;
+    drawLaserLine(ctx, x, top, x, bot, pal, { intensity, seed, t: T });
+    sparkleLine(sparkles, x, top, x, bot, hot ? 5 : 2.5, dt, 140);
 
     const y = top + (bot - top) * l.phase;
-    const hot = hoverId === l.id;
     pts.push({ x, y: bot, flash: l.flash, hot, id: l.id });
 
-    // playhead glow
-    const g = ctx.createRadialGradient(x, y, 0, x, y, 40);
-    g.addColorStop(0, "rgba(200,225,255,0.55)");
-    g.addColorStop(1, "rgba(200,225,255,0)");
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(x, y, 40, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = hot ? "rgba(255,255,255,0.85)" : "rgba(220,235,255,0.6)";
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.stroke();
-
-    // bottom strike node
-    const sR = 4 + l.flash * 12;
-    const sa = 0.35 + l.flash * 0.55;
-    const sg = ctx.createRadialGradient(x, bot, 0, x, bot, 70);
-    sg.addColorStop(0, `rgba(180,220,255,${sa})`);
-    sg.addColorStop(1, "rgba(120,180,230,0)");
-    ctx.fillStyle = sg;
-    ctx.beginPath(); ctx.arc(x, bot, 70, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = `rgba(220,235,255,${0.5 + l.flash * 0.5})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(x, bot, sR, 0, Math.PI * 2); ctx.stroke();
+    // travelling burn dot (playhead)
+    drawBurnDot(ctx, x, y, pal, 0.7, 4);
+    // strike node at the bottom
+    drawBurnDot(ctx, x, bot, pal, 0.6 + l.flash * 0.7, 6 + l.flash * 6);
+    maybeBurst(l, l.flash, starbursts, x, bot, sparkles);
   });
 
   // zigzag connector along bottom nodes
   if (pts.length > 1) {
-    ctx.strokeStyle = "rgba(255,255,255,0.18)";
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    for (let i = 0; i < pts.length; i++) {
-      const p = pts[i];
-      const offY = i % 2 === 0 ? -8 : 8;
-      if (i === 0) ctx.moveTo(p.x, p.y + offY);
-      else ctx.lineTo(p.x, p.y + offY);
-    }
-    ctx.stroke();
+    const path = pts.map((p, i) => ({ x: p.x, y: p.y + (i % 2 === 0 ? -8 : 8) }));
+    drawLaserPath(ctx, path, pal, { intensity: 0.5, seed: 0.91, t: T });
   }
 }
 

@@ -910,8 +910,9 @@ function PhaseApp() {
       if (d < bestD) { bestD = d; hit = ring.id; }
     }
     hoverRingIdRef.current = hit;
+    setHoverRing((prev) => (prev === hit ? prev : hit));
   };
-  const onCanvasPointerLeave = () => { hoverRingIdRef.current = null; };
+  const onCanvasPointerLeave = () => { hoverRingIdRef.current = null; setHoverRing(null); };
 
   /* ---- Wheel ring/line mutators ---- */
   const addRing = () => {

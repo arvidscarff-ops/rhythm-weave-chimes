@@ -971,7 +971,18 @@ function PhaseApp() {
       className={"min-h-screen w-full flex flex-col relative " + (isWheel ? "pr-stage" : "")}
       style={{ background: isWheel ? undefined : "var(--pr-bg-2)", color: "var(--pr-text)" }}
     >
-      {isWheel && <PhaseChrome />}
+      {isWheel && (
+        <PhaseChrome
+          fxOpen={fxOpen}
+          packsOpen={packsOpen}
+          aboutOpen={aboutOpen}
+          onOpenPanel={(p) => {
+            setFxOpen(p === "fx" ? !fxOpen : false);
+            setPacksOpen(p === "packs" ? !packsOpen : false);
+            setAboutOpen(p === "about" ? !aboutOpen : false);
+          }}
+        />
+      )}
       {isWheel && (
         <PhaseReadout
           wheel={engineRef.current.wheel}

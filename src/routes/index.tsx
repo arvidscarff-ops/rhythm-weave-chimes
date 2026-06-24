@@ -1691,20 +1691,23 @@ function paintArtBackground(
   ctx: CanvasRenderingContext2D, W: number, H: number,
   patternRef: { current: CanvasPattern | null },
 ) {
-  // charcoal base
-  ctx.fillStyle = "oklch(18% 0.02 240)";
-  ctx.fillRect(0, 0, W, H);
-  // vignette
-  const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.15, W / 2, H / 2, Math.max(W, H) * 0.75);
-  vg.addColorStop(0, "rgba(0,0,0,0)");
-  vg.addColorStop(1, "rgba(0,0,0,0.55)");
+  // Canvas is transparent — the teal page field shows through the glass card.
+  ctx.clearRect(0, 0, W, H);
+  // Soft inner bloom for depth inside the card
+  const vg = ctx.createRadialGradient(W * 0.62, H * 0.42, Math.min(W, H) * 0.05,
+                                       W * 0.62, H * 0.42, Math.max(W, H) * 0.7);
+  vg.addColorStop(0, "rgba(255,255,255,0.07)");
+  vg.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, W, H);
-  // grain
+  // Subtle grain
   if (!patternRef.current) patternRef.current = buildGrainPattern(ctx);
   if (patternRef.current) {
+    ctx.save();
+    ctx.globalAlpha = 0.5;
     ctx.fillStyle = patternRef.current;
     ctx.fillRect(0, 0, W, H);
+    ctx.restore();
   }
 }
 

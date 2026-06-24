@@ -983,6 +983,14 @@ function PhaseApp() {
 
     const playing = !!(a && playingRef.current);
     const scene = sceneRef.current;
+    elapsedRef.current += dt;
+    const T = elapsedRef.current;
+    const pal = LASER_COLORS[laserColorRef.current];
+    updateSparkles(sparkleRef.current, dt);
+    for (let i = starburstRef.current.length - 1; i >= 0; i--) {
+      starburstRef.current[i].life -= dt;
+      if (starburstRef.current[i].life <= 0) starburstRef.current.splice(i, 1);
+    }
     ctx2d.globalCompositeOperation = "lighter";
     if (scene === "wheel") {
       if (playing) {
@@ -990,21 +998,29 @@ function PhaseApp() {
       } else {
         decayWheelFlashes(e.wheel, dt);
       }
-      drawWheelScene(ctx2d, W, H, e.wheel, voicesRef.current, dt, hoverRingIdRef.current);
+      drawWheelScene(ctx2d, W, H, e.wheel, dt, T, pal, hoverRingIdRef.current,
+        sparkleRef.current, starburstRef.current);
     } else if (scene === "pendulum") {
       if (playing) {
         updatePendulum(e.pendulum, dt, a!, bpmRef.current, knobsRef.current, packRef.current);
       } else {
         decayPendulumFlashes(e.pendulum, dt);
       }
-      drawPendulumScene(ctx2d, W, H, e.pendulum, hoverRingIdRef.current);
+      drawPendulumScene(ctx2d, W, H, e.pendulum, dt, T, pal, hoverRingIdRef.current,
+        sparkleRef.current, starburstRef.current);
     } else {
       if (playing) {
         updateBars(e.bars, dt, a!, bpmRef.current, knobsRef.current, packRef.current);
       } else {
         decayBarsFlashes(e.bars, dt);
       }
-      drawBarsScene(ctx2d, W, H, e.bars, hoverRingIdRef.current);
+      drawBarsScene(ctx2d, W, H, e.bars, dt, T, pal, hoverRingIdRef.current,
+        sparkleRef.current, starburstRef.current);
+    }
+    // sparkles + starbursts ride on top of beams (still additive)
+    drawSparkles(ctx2d, sparkleRef.current, pal);
+    for (const sb of starburstRef.current) {
+      drawStarburst(ctx2d, sb.x, sb.y, pal, sb.life / sb.max, 110);
     }
     ctx2d.globalCompositeOperation = "source-over";
   };

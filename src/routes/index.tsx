@@ -1433,14 +1433,16 @@ function decayWheelFlashes(wh: WheelState, dt: number) {
 }
 
 function updateWheel(
-  wh: WheelState, dt: number, audio: AudioGraph, bpm: number, voices: VoiceSel, knobs: Knobs,
+  wh: WheelState, dt: number, audio: AudioGraph, bpm: number, voices: VoiceSel, knobs: Knobs, packId: PackId,
 ) {
   const now = audio.ctx.currentTime;
   const REFRACTORY = 0.16; // prevents frame jitter and ambient voice pileups
 
   decayWheelFlashes(wh, dt);
 
-  for (const ring of wh.rings) {
+  const pack = PACKS[packId];
+  for (let ri = 0; ri < wh.rings.length; ri++) {
+    const ring = wh.rings[ri];
     const period = ringPeriodSec(ring, bpm);
     const omega = TAU / Math.max(0.001, period); // rad/s
     const sign = ring.direction;
@@ -1449,7 +1451,8 @@ function updateWheel(
     ring.phase = nextPhase;
     const movingForward = nextPhase >= prevPhase;
 
-    const voice = resolveVoice(ring.voiceSlot, voices);
+    const voiceLegacy = resolveVoice(ring.voiceSlot, voices);
+    const voiceSpec = pack.voices[ri % pack.voices.length];
 
     for (const note of ring.notes) {
       const prevWorld = norm2pi(note.angle + prevPhase);
@@ -1475,9 +1478,9 @@ function updateWheel(
             if (now - last < REFRACTORY) continue;
             wh.lastFire.set(key, now);
 
-            if (voice !== "none") {
+            if (voiceLegacy !== "none") {
               const freq = vertexFreq(note.pitchIndex, knobs.pitch);
-              playVoice(audio.ctx, audio.preFx, voice, freq, knobs.fx2, now);
+              playPackVoice(audio.ctx, audio.preFx, voiceSpec, freq, now);
             }
             note.flash = 1;
             ring.flash = Math.max(ring.flash, 0.7);

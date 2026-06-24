@@ -508,6 +508,7 @@ function PhaseApp() {
   const [fxState, setFxState] = useState<FxState>(DEFAULT_FX_STATE);
   const [fxOpen, setFxOpen] = useState(false);
   const [packsOpen, setPacksOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [selectedPack, setSelectedPack] = useState<PackId>("moss");
   // topology bump: rings/lines/notes counts so DOM overlays re-render
   const [topo, setTopo] = useState(0);

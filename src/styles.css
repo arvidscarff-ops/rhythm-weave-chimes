@@ -289,6 +289,30 @@ input[type="range"].pr-hairline-slider::-moz-range-thumb {
   pointer-events: auto;
 }
 
+/* Staggered child population — gives each row a snappy 'database load' feel */
+.pr-stagger > * {
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.fx-drawer[data-state="open"] .pr-stagger > * {
+  opacity: 1;
+  transform: translateY(0);
+}
+.pr-stagger > *:nth-child(1) { transition-delay: 40ms; }
+.pr-stagger > *:nth-child(2) { transition-delay: 80ms; }
+.pr-stagger > *:nth-child(3) { transition-delay: 120ms; }
+.pr-stagger > *:nth-child(4) { transition-delay: 160ms; }
+.pr-stagger > *:nth-child(5) { transition-delay: 200ms; }
+.pr-stagger > *:nth-child(6) { transition-delay: 240ms; }
+.pr-stagger > *:nth-child(7) { transition-delay: 280ms; }
+.pr-stagger > *:nth-child(8) { transition-delay: 320ms; }
+
+/* Rail link button reset */
+button.pr-rail-link { background: transparent; border: 0; cursor: pointer; }
+
 @layer base {
   * {
     border-color: var(--color-border);

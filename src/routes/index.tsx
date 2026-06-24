@@ -832,17 +832,6 @@ function PhaseApp() {
         // decay flashes even when paused
         decayWheelFlashes(e.wheel, dt);
       }
-      // ghost text behind everything
-      const targetOp = hoverRingIdRef.current ? 1 : 0;
-      hoverOpacityRef.current += (targetOp - hoverOpacityRef.current) * Math.min(1, dt * 6);
-      if (hoverOpacityRef.current > 0.01) {
-        const ring = e.wheel.rings.find(r => r.id === hoverRingIdRef.current)
-          ?? e.wheel.rings.find(r => r.id === lastHoverRef.current);
-        if (ring) {
-          lastHoverRef.current = ring.id;
-          drawGhostReadout(ctx2d, W, H, ringPeriodSec(ring, bpmRef.current), hoverOpacityRef.current);
-        }
-      }
       ctx2d.globalCompositeOperation = "lighter";
       drawWheelScene(ctx2d, W, H, e.wheel, voicesRef.current, dt, hoverRingIdRef.current);
     } else {

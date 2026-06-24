@@ -585,7 +585,7 @@ function PhaseApp() {
     const delay = ctx.createDelay(2.5);
     delay.delayTime.value = knobsRef.current.revSize;
     const feedback = ctx.createGain();
-    feedback.gain.value = 0.55;
+    feedback.gain.value = 0.38;
     const wet = ctx.createGain();
     wet.gain.value = knobsRef.current.revMix;
     const dryToMaster = ctx.createGain();
@@ -599,32 +599,45 @@ function PhaseApp() {
     const grainMix = ctx.createGain();
     grainMix.gain.value = 0.0;
 
-    // routing: preFx -> filter -> shelf -> [dry+chorus] -> master,
-    //          shelf -> delay -> wet -> master, shelf -> grain -> grainMix -> master
+    // bus trim + master limiter give headroom for parallel sends
+    const busTrim = ctx.createGain();
+    busTrim.gain.value = 0.5;
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -6;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.12;
+
+    // routing: preFx -> filter -> shelf -> [dry+chorus] -> busTrim,
+    //          shelf -> delay -> wet -> busTrim, shelf -> grain -> grainMix -> busTrim
+    //          busTrim -> master -> limiter -> destination
     preFx.connect(filter);
     filter.connect(shelf);
     shelf.connect(dryToMaster);
     shelf.connect(chorusDelay);
     chorusDelay.connect(chorusMix);
     chorusMix.connect(dryToMaster);
-    dryToMaster.connect(master);
+    dryToMaster.connect(busTrim);
 
     shelf.connect(delay);
     delay.connect(feedback);
     feedback.connect(delay);
     delay.connect(wet);
-    wet.connect(master);
+    wet.connect(busTrim);
 
     shelf.connect(grainDelay);
     grainDelay.connect(grainFeedback);
     grainFeedback.connect(grainDelay);
     grainDelay.connect(grainMix);
-    grainMix.connect(master);
+    grainMix.connect(busTrim);
 
-    master.connect(ctx.destination);
+    busTrim.connect(master);
+    master.connect(limiter);
+    limiter.connect(ctx.destination);
 
     audioRef.current = {
-      ctx, master, preFx, filter, shelf, chorusDelay, chorusLFO, chorusLFOGain,
+      ctx, master, busTrim, limiter, preFx, filter, shelf, chorusDelay, chorusLFO, chorusLFOGain,
       chorusMix, delay, feedback, wet, dryToMaster,
       grainDelay, grainFeedback, grainMix,
     };
@@ -635,11 +648,11 @@ function PhaseApp() {
   useEffect(() => {
     const a = audioRef.current; if (!a) return;
     const t = a.ctx.currentTime;
-    a.master.gain.setTargetAtTime(knobs.mainVol, t, 0.04);
+    a.master.gain.setTargetAtTime(knobs.mainVol * 0.85, t, 0.04);
     a.filter.frequency.setTargetAtTime(knobs.fx1, t, 0.04);
     a.delay.delayTime.setTargetAtTime(knobs.revSize, t, 0.05);
     a.wet.gain.setTargetAtTime(knobs.revMix, t, 0.05);
-    a.chorusMix.gain.setTargetAtTime(0.2 + (knobs.fx2 / 40) * 0.6, t, 0.05);
+    a.chorusMix.gain.setTargetAtTime(0.1 + (knobs.fx2 / 40) * 0.4, t, 0.05);
     a.chorusLFOGain.gain.setTargetAtTime(0.001 + (knobs.fx2 / 40) * 0.008, t, 0.05);
   }, [knobs]);
 

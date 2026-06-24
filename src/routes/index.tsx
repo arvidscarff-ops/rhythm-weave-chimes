@@ -14,7 +14,6 @@ import {
   type GrainType,
   type ToneType,
 } from "@/lib/fx/fxState";
-import { playPackVoice } from "@/lib/sound/packs";
 import {
   BUILTIN_RUNTIME_PACKS,
   fetchCustomPacks,
@@ -48,8 +47,7 @@ export const Route = createFileRoute("/")({
  * ============================================================ */
 
 type VoiceKind = "chime" | "pluck" | "bell" | "pad" | "bass" | "none";
-type SceneKind = "wheel" | "polygon" | "sine" | "lissajous";
-type BgKind = "void" | "grid" | "drift";
+type SceneKind = "wheel" | "pendulum" | "bars";
 
 type Knobs = {
   mainVol: number;   // 0..1
@@ -94,6 +92,10 @@ type EngineState = {
   paused: boolean;
   // wheel
   wheel: WheelState;
+  // pendulum
+  pendulum: PendulumState;
+  // bars
+  bars: BarsState;
 };
 
 type AudioGraph = {

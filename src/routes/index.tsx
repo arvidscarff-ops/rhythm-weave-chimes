@@ -557,6 +557,7 @@ function PhaseApp() {
   const hoverRingIdRef = useRef<string | null>(null);
   const hoverOpacityRef = useRef<number>(0);
   const lastHoverRef = useRef<string | null>(null);
+  const [hoverRing, setHoverRing] = useState<string | null>(null);
 
   /* ---- Audio graph init ---- */
   const ensureAudio = useCallback((): AudioGraph => {

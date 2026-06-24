@@ -781,6 +781,30 @@ function PhaseApp() {
     applyFxState(a, fxState);
   }, [fxState]);
 
+  /* ---- Custom pack fetching + warming ---- */
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const list = await fetchCustomPacks();
+        if (!cancelled) setCustomPacks(list);
+      } catch (err) {
+        console.warn("[packs] custom fetch failed", err);
+      }
+    };
+    load();
+    // Re-fetch when packs drawer opens so newly-published packs appear without reload.
+    return () => { cancelled = true; };
+  }, [packsOpen]);
+
+  // Pre-decode samples for the active custom pack as soon as it's selected.
+  useEffect(() => {
+    if (activePack.kind !== "custom") return;
+    const a = audioRef.current;
+    if (!a) return;
+    warmCustomPack(a.ctx, activePack).catch(() => {});
+  }, [activePack]);
+
   /* ---- Reset rhythm when multiply / speed changes ---- */
   useEffect(() => {
     const e = engineRef.current;

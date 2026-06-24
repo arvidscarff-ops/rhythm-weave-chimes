@@ -2457,12 +2457,13 @@ function FxChannel({
  * ============================================================ */
 
 function PacksDrawer({
-  open, selected, onSelect, onAudition,
+  open, packs, selected, onSelect, onAudition,
 }: {
   open: boolean;
-  selected: PackId;
-  onSelect: (p: PackId) => void;
-  onAudition: (spec: VoiceSpec) => void;
+  packs: RuntimePack[];
+  selected: string;
+  onSelect: (id: string) => void;
+  onAudition: (pack: RuntimePack, slotIndex: number) => void;
 }) {
   return (
     <div
@@ -2481,14 +2482,17 @@ function PacksDrawer({
           ring index → voice · hover to audition
         </div>
       </div>
-      <div className="pr-stagger px-3 pb-4 grid grid-cols-3 gap-3">
-        {PACK_IDS.map((pid) => {
-          const pack = PACKS[pid];
-          const active = pid === selected;
+      <div className="pr-stagger px-3 pb-4 grid grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto">
+        {packs.map((pack) => {
+          const active = pack.id === selected;
+          const slotNames: { name: string; idx: number }[] =
+            pack.kind === "builtin"
+              ? pack.pack.voices.map((v, i) => ({ name: v.name, idx: i }))
+              : pack.slots.map((s, i) => ({ name: s?.label ?? (s ? "Sample" : "—"), idx: i }));
           return (
             <button
-              key={pid}
-              onClick={() => onSelect(pid)}
+              key={pack.id}
+              onClick={() => onSelect(pack.id)}
               className={
                 "text-left rounded-xl px-3 py-3 transition-all border " +
                 (active
@@ -2503,25 +2507,30 @@ function PacksDrawer({
             >
               <div className="flex items-center justify-between mb-0.5">
                 <div className="text-[12px] tracking-[0.22em] text-white/90">{pack.name}</div>
-                <span
-                  className="h-1.5 w-1.5 rounded-full"
-                  style={{
-                    background: active ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.18)",
-                    boxShadow: active ? "0 0 8px rgba(255,255,255,0.5)" : "none",
-                  }}
-                />
+                <div className="flex items-center gap-1.5">
+                  {pack.kind === "custom" && (
+                    <span className="text-[8px] tracking-[0.22em] uppercase text-white/40">user</span>
+                  )}
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{
+                      background: active ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.18)",
+                      boxShadow: active ? "0 0 8px rgba(255,255,255,0.5)" : "none",
+                    }}
+                  />
+                </div>
               </div>
               <div className="text-[10px] text-white/45 mb-2.5">{pack.blurb}</div>
               <div className="grid grid-cols-2 gap-1">
-                {pack.voices.map((v, i) => (
+                {slotNames.map(({ name, idx }) => (
                   <div
-                    key={v.id}
-                    onMouseEnter={(e) => { e.stopPropagation(); onAudition(v); }}
+                    key={idx}
+                    onMouseEnter={(e) => { e.stopPropagation(); onAudition(pack, idx); }}
                     className="text-[9.5px] tracking-[0.08em] uppercase px-1.5 py-1 rounded-sm text-white/55 bg-white/[0.03] hover:bg-white/[0.09] hover:text-white/90 cursor-pointer truncate"
-                    title={v.name}
+                    title={name}
                   >
-                    <span className="text-white/30 mr-1 tabular-nums">{i + 1}</span>
-                    {v.name}
+                    <span className="text-white/30 mr-1 tabular-nums">{idx + 1}</span>
+                    {name}
                   </div>
                 ))}
               </div>

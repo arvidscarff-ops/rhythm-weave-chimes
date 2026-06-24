@@ -1101,7 +1101,7 @@ function PhaseApp() {
             open={packsOpen}
             selected={selectedPack}
             onSelect={setSelectedPack}
-            onAudition={(spec) => {
+            onAudition={(spec: VoiceSpec) => {
               const a = ensureAudio();
               if (a.ctx.state === "suspended") a.ctx.resume();
               playPackVoice(a.ctx, a.preFx, spec, 440, a.ctx.currentTime + 0.01);

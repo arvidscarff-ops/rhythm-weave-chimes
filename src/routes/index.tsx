@@ -111,6 +111,11 @@ type AudioGraph = {
   reverbWet: GainNode;
   reverbSend: GainNode;
   irSeconds: number;
+  _chorusRateB: AudioParam;
+  _chorusDepthA: GainNode;
+  _chorusDepthB: GainNode;
+  _reverbDamp: BiquadFilterNode;
+  _reverbPredelay: DelayNode;
 };
 
 /* ============================================================

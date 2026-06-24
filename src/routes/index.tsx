@@ -549,7 +549,6 @@ function Dropdown<T extends string>({
 function PhaseApp() {
   const [playing, setPlaying] = useState(false);
   const [scene, setScene] = useState<SceneKind>("wheel");
-  const [background, setBackground] = useState<BgKind>("drift");
   const [bpm, setBpm] = useState(90);
   const [fxState, setFxState] = useState<FxState>(DEFAULT_FX_STATE);
   const [fxOpen, setFxOpen] = useState(false);
@@ -562,7 +561,7 @@ function PhaseApp() {
   const bumpTopo = useCallback(() => setTopo((x) => x + 1), []);
   // cached canvas client rect for positioning DOM overlays
   const [canvasRect, setCanvasRect] = useState({ w: 0, h: 0 });
-  const [voices, setVoices] = useState<VoiceSel>({
+  const [voices] = useState<VoiceSel>({
     melo: "chime",
     bass: "bass",
     atmo: "pad",
@@ -581,7 +580,6 @@ function PhaseApp() {
   // Refs mirror state so the engine doesn't re-subscribe
   const playingRef = useRef(playing); playingRef.current = playing;
   const sceneRef = useRef(scene); sceneRef.current = scene;
-  const bgRef = useRef(background); bgRef.current = background;
   const voicesRef = useRef(voices); voicesRef.current = voices;
   const knobsRef = useRef(knobs); knobsRef.current = knobs;
   const bpmRef = useRef(bpm); bpmRef.current = bpm;
@@ -603,6 +601,8 @@ function PhaseApp() {
     startedAt: 0,
     paused: true,
     wheel: makeSeedWheel(),
+    pendulum: makeSeedPendulum(),
+    bars: makeSeedBars(),
   });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const grainPatternRef = useRef<CanvasPattern | null>(null);

@@ -1085,6 +1085,8 @@ function PhaseApp() {
             onBpm={setBpm}
             fxOpen={fxOpen}
             onToggleFx={() => setFxOpen((v) => !v)}
+            packsOpen={packsOpen}
+            onTogglePacks={() => setPacksOpen((v) => !v)}
           />
         )}
         {isWheel && (
@@ -1092,6 +1094,18 @@ function PhaseApp() {
             open={fxOpen}
             state={fxState}
             onChange={setFxState}
+          />
+        )}
+        {isWheel && (
+          <PacksDrawer
+            open={packsOpen}
+            selected={selectedPack}
+            onSelect={setSelectedPack}
+            onAudition={(spec) => {
+              const a = ensureAudio();
+              if (a.ctx.state === "suspended") a.ctx.resume();
+              playPackVoice(a.ctx, a.preFx, spec, 440, a.ctx.currentTime + 0.01);
+            }}
           />
         )}
       </main>

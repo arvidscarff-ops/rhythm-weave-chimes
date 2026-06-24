@@ -1948,19 +1948,24 @@ function PhaseReadout({
 }
 
 function PhaseChrome() {
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
+    setNow(new Date());
     const id = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(id);
   }, []);
 
   const pad = (n: number) => n.toString().padStart(2, "0");
-  const h24 = now.getHours();
-  const ampm = h24 >= 12 ? "PM" : "AM";
-  const h = ((h24 + 11) % 12) + 1;
-  const time = `${pad(h)}:${pad(now.getMinutes())}:${pad(now.getSeconds())} ${ampm}`;
-  const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-  const date = `${months[now.getMonth()]} ${pad(now.getDate())}, ${now.getFullYear()}`;
+  let time = "";
+  let date = "";
+  if (now) {
+    const h24 = now.getHours();
+    const ampm = h24 >= 12 ? "PM" : "AM";
+    const h = ((h24 + 11) % 12) + 1;
+    time = `${pad(h)}:${pad(now.getMinutes())}:${pad(now.getSeconds())} ${ampm}`;
+    const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+    date = `${months[now.getMonth()]} ${pad(now.getDate())}, ${now.getFullYear()}`;
+  }
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10">

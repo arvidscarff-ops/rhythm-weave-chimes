@@ -977,7 +977,7 @@ function PhaseApp() {
   return (
     <div
       className="min-h-screen w-full flex flex-col"
-      style={{ background: isWheel ? "#0b0b0d" : "var(--pr-bg-2)", color: "var(--pr-text)" }}
+      style={{ background: isWheel ? "oklch(18% 0.02 240)" : "var(--pr-bg-2)", color: "var(--pr-text)" }}
     >
       {/* TOP CONTROL STRIP — hidden in Wheel art mode */}
       {!isWheel && (
@@ -1054,7 +1054,7 @@ function PhaseApp() {
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full block"
-          style={{ background: isWheel ? "#0b0b0d" : "oklch(0.09 0.01 260)", cursor: isWheel ? "crosshair" : "default" }}
+          style={{ background: isWheel ? "oklch(18% 0.02 240)" : "oklch(0.09 0.01 260)", cursor: isWheel ? "crosshair" : "default" }}
           onPointerDown={onCanvasPointerDown}
           onPointerMove={onCanvasPointerMove}
           onPointerLeave={onCanvasPointerLeave}
@@ -1567,12 +1567,22 @@ function drawWheelScene(
   for (const ring of wh.rings) {
     const R = ringRadiusPx(ring, W, H);
     const hovered = ring.id === hoverRingId;
-    const base = hovered ? 0.22 : 0.08;
+    const base = hovered ? 0.20 : 0.06;
     ctx.strokeStyle = `rgba(255,255,255,${(base + ring.flash * 0.35).toFixed(3)})`;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 0.5;
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, TAU);
     ctx.stroke();
+
+    // ghost ratio label on the ring's right edge
+    const labelA = hovered ? 0.20 : 0.06;
+    ctx.save();
+    ctx.fillStyle = `rgba(255,255,255,${labelA.toFixed(3)})`;
+    ctx.font = `400 10px "JetBrains Mono", ui-monospace, monospace`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`${ring.beats}/${ring.subdivision}`, cx + R + 10, cy - R * 0.02);
+    ctx.restore();
   }
 
   // 2) trigger lines — quiet hairline chords with rim ticks
@@ -1581,8 +1591,8 @@ function drawWheelScene(
     const y1 = cy + Math.sin(line.angle) * maxR * 0.96;
     const x2 = cx - Math.cos(line.angle) * maxR * 0.96;
     const y2 = cy - Math.sin(line.angle) * maxR * 0.96;
-    ctx.strokeStyle = `rgba(255,255,255,${(0.12 + line.flash * 0.35).toFixed(3)})`;
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = `rgba(255,255,255,${(0.10 + line.flash * 0.30).toFixed(3)})`;
+    ctx.lineWidth = 0.5;
     ctx.beginPath();
     ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
     ctx.stroke();
@@ -1682,7 +1692,7 @@ function paintArtBackground(
   patternRef: { current: CanvasPattern | null },
 ) {
   // charcoal base
-  ctx.fillStyle = "#0b0b0d";
+  ctx.fillStyle = "oklch(18% 0.02 240)";
   ctx.fillRect(0, 0, W, H);
   // vignette
   const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.15, W / 2, H / 2, Math.max(W, H) * 0.75);
@@ -1701,11 +1711,14 @@ function paintArtBackground(
 function drawGhostReadout(
   ctx: CanvasRenderingContext2D, W: number, H: number, periodSec: number, opacity: number,
 ) {
-  const txt = `${periodSec.toFixed(2).padStart(5, "0")}s`;
+  const txt = `${periodSec.toFixed(2).padStart(5, "0")}S`;
   const size = Math.max(120, Math.min(280, Math.min(W, H) * 0.22));
   ctx.save();
-  ctx.fillStyle = `rgba(255,255,255,${(0.05 * opacity).toFixed(3)})`;
-  ctx.font = `300 ${size}px "Inter", system-ui, -apple-system, sans-serif`;
+  // 5% idle → 20% on full hover (opacity arg is 0..1 hover lerp)
+  const a = 0.05 + 0.15 * opacity;
+  ctx.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`;
+  ctx.font = `300 ${size}px "JetBrains Mono", ui-monospace, monospace`;
+  ctx.letterSpacing = "0.15em" as unknown as string;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(txt, W / 2, H / 2);
@@ -1810,7 +1823,9 @@ function RingChip({
         left, top,
         background: "transparent",
         color: "rgba(255,255,255,0.45)",
-        fontFamily: "'Inter', ui-sans-serif, system-ui",
+        fontFamily: "var(--pr-mono)",
+        letterSpacing: "0.15em",
+        textTransform: "uppercase",
         opacity: 0.6,
       }}
       onMouseEnter={() => onHover?.(true)}
@@ -1925,11 +1940,11 @@ function ArtDock({
 }) {
   return (
     <div
-      className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md"
+      className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-xl bg-neutral-950/40 pr-mono"
       style={{
-        background: "rgba(255,255,255,0.04)",
-        boxShadow: "0 8px 40px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.02)",
-        fontFamily: "'Inter', ui-sans-serif, system-ui",
+        boxShadow:
+          "0 18px 60px rgba(0,0,0,0.55), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.02)",
+        zIndex: 5,
       }}
     >
       <DockBtn label={playing ? "pause" : "play"} onClick={onTogglePlay} active={playing}>
@@ -1978,7 +1993,7 @@ function ArtDock({
           style={{ width: 120 }}
           title={`${bpm} bpm`}
         />
-        <div className="text-[10px] tabular-nums tracking-[0.18em] uppercase text-white/50">
+        <div className="pr-label tabular-nums text-white/55">
           {bpm}<span className="ml-1 text-white/30">bpm</span>
         </div>
       </div>
@@ -2026,13 +2041,13 @@ function FxDrawer({
   return (
     <div
       data-state={open ? "open" : "closed"}
-      className="fx-drawer absolute left-1/2 bottom-[88px] rounded-2xl border border-white/10 backdrop-blur-md"
+      className="fx-drawer absolute left-1/2 bottom-[88px] rounded-2xl border border-white/10 backdrop-blur-xl bg-neutral-950/40 pr-mono"
       style={{
         width: "min(720px, calc(100vw - 48px))",
         height: 260,
-        background: "rgba(10,10,12,0.55)",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.03)",
-        fontFamily: "'Inter', ui-sans-serif, system-ui",
+        boxShadow:
+          "0 24px 70px rgba(0,0,0,0.65), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.03)",
+        zIndex: 4,
       }}
     >
       <div className="h-full grid grid-cols-4 divide-x divide-white/[0.07]">
@@ -2194,12 +2209,12 @@ function PacksDrawer({
   return (
     <div
       data-state={open ? "open" : "closed"}
-      className="fx-drawer absolute left-1/2 bottom-[88px] rounded-2xl border border-white/10 backdrop-blur-md"
+      className="fx-drawer absolute left-1/2 bottom-[88px] rounded-2xl border border-white/10 backdrop-blur-xl bg-neutral-950/40 pr-mono"
       style={{
         width: "min(720px, calc(100vw - 48px))",
-        background: "rgba(10,10,12,0.55)",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.03)",
-        fontFamily: "'Inter', ui-sans-serif, system-ui",
+        boxShadow:
+          "0 24px 70px rgba(0,0,0,0.65), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.03)",
+        zIndex: 4,
       }}
     >
       <div className="px-5 pt-4 pb-2 flex items-baseline justify-between">

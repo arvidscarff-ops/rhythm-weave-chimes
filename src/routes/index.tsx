@@ -1948,8 +1948,10 @@ function PhaseReadout({
 
 type PanelId = "fx" | "packs" | "about";
 function PhaseChrome({
-  fxOpen, packsOpen, aboutOpen, onOpenPanel, onCloseAll,
+  scene, onScene, fxOpen, packsOpen, aboutOpen, onOpenPanel, onCloseAll,
 }: {
+  scene: SceneKind;
+  onScene: (s: SceneKind) => void;
   fxOpen: boolean;
   packsOpen: boolean;
   aboutOpen: boolean;
@@ -2008,11 +2010,23 @@ function PhaseChrome({
 
       {/* Left rail nav */}
       <nav className="absolute top-32 left-7 flex flex-col gap-0.5 pointer-events-auto">
+        <div className="pr-label text-white/30 mb-1">SCENE</div>
         <button
           className="pr-rail-link"
-          data-active={!fxOpen && !packsOpen && !aboutOpen ? "true" : undefined}
-          onClick={onCloseAll}
+          data-active={scene === "wheel" && !fxOpen && !packsOpen && !aboutOpen ? "true" : undefined}
+          onClick={() => { onScene("wheel"); onCloseAll(); }}
         >Wheel</button>
+        <button
+          className="pr-rail-link"
+          data-active={scene === "pendulum" && !fxOpen && !packsOpen && !aboutOpen ? "true" : undefined}
+          onClick={() => { onScene("pendulum"); onCloseAll(); }}
+        >Pendulum</button>
+        <button
+          className="pr-rail-link"
+          data-active={scene === "bars" && !fxOpen && !packsOpen && !aboutOpen ? "true" : undefined}
+          onClick={() => { onScene("bars"); onCloseAll(); }}
+        >Bars</button>
+        <div className="pr-label text-white/30 mt-3 mb-1">PANELS</div>
         <button
           className="pr-rail-link"
           data-active={fxOpen ? "true" : undefined}

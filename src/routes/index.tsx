@@ -1432,7 +1432,7 @@ function updateWheel(
   wh: WheelState, dt: number, audio: AudioGraph, bpm: number, voices: VoiceSel, knobs: Knobs,
 ) {
   const now = audio.ctx.currentTime;
-  const REFRACTORY = 0.04; // 40 ms
+  const REFRACTORY = 0.16; // prevents frame jitter and ambient voice pileups
 
   decayWheelFlashes(wh, dt);
 
@@ -1441,20 +1441,22 @@ function updateWheel(
     const omega = TAU / Math.max(0.001, period); // rad/s
     const sign = ring.direction;
     const prevPhase = ring.phase;
-    ring.phase = prevPhase + sign * omega * dt;
+    const nextPhase = prevPhase + sign * omega * dt;
+    ring.phase = nextPhase;
+    const movingForward = nextPhase >= prevPhase;
 
     const voice = resolveVoice(ring.voiceSlot, voices);
 
     for (const note of ring.notes) {
-      const prevWorld = norm2pi(note.angle + prevPhase * sign);
-      const newWorld = norm2pi(note.angle + ring.phase * sign);
+      const prevWorld = norm2pi(note.angle + prevPhase);
+      const newWorld = norm2pi(note.angle + nextPhase);
 
       // For each line, two target angles: angle and angle+π
       for (const line of wh.lines) {
         for (let s = 0; s < 2; s++) {
           const target = norm2pi(line.angle + s * Math.PI);
           let crossed = false;
-          if (sign > 0) {
+          if (movingForward) {
             const d = fwdDist(prevWorld, newWorld);
             const dt2 = fwdDist(prevWorld, target);
             if (dt2 > 0 && dt2 <= d) crossed = true;
@@ -1496,10 +1498,9 @@ function wheelHandleClick(wh: WheelState, px: number, py: number, W: number, H: 
   // 1) try to remove an existing note (within 14px)
   for (const ring of wh.rings) {
     const ringR = ringRadiusPx(ring, W, H);
-    const sign = ring.direction;
     for (let i = ring.notes.length - 1; i >= 0; i--) {
       const n = ring.notes[i];
-      const wn = norm2pi(n.angle + ring.phase * sign);
+      const wn = norm2pi(n.angle + ring.phase);
       const nx = cx + Math.cos(wn) * ringR;
       const ny = cy + Math.sin(wn) * ringR;
       if (Math.hypot(px - nx, py - ny) < 14) {
@@ -1520,8 +1521,7 @@ function wheelHandleClick(wh: WheelState, px: number, py: number, W: number, H: 
   });
   if (best) {
     const ring = best as WheelRing;
-    const sign = ring.direction;
-    const localAngle = norm2pi(ang - ring.phase * sign);
+    const localAngle = norm2pi(ang - ring.phase);
     const note: WheelNote = {
       id: uid("n"),
       angle: localAngle,
@@ -1589,10 +1589,9 @@ function drawWheelScene(
   // 3) notes — soft discs + kinetic trails
   for (const ring of wh.rings) {
     const R = ringRadiusPx(ring, W, H);
-    const sign = ring.direction;
     const color = voiceSlotColor(ring.voiceSlot, true);
     for (const n of ring.notes) {
-      const w = norm2pi(n.angle + ring.phase * sign);
+      const w = norm2pi(n.angle + ring.phase);
       const nx = cx + Math.cos(w) * R;
       const ny = cy + Math.sin(w) * R;
       const inten = n.flash;

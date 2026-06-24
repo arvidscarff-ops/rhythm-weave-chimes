@@ -1682,7 +1682,7 @@ function paintArtBackground(
   patternRef: { current: CanvasPattern | null },
 ) {
   // charcoal base
-  ctx.fillStyle = "#0b0b0d";
+  ctx.fillStyle = "oklch(18% 0.02 240)";
   ctx.fillRect(0, 0, W, H);
   // vignette
   const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.15, W / 2, H / 2, Math.max(W, H) * 0.75);
@@ -1701,11 +1701,14 @@ function paintArtBackground(
 function drawGhostReadout(
   ctx: CanvasRenderingContext2D, W: number, H: number, periodSec: number, opacity: number,
 ) {
-  const txt = `${periodSec.toFixed(2).padStart(5, "0")}s`;
+  const txt = `${periodSec.toFixed(2).padStart(5, "0")}S`;
   const size = Math.max(120, Math.min(280, Math.min(W, H) * 0.22));
   ctx.save();
-  ctx.fillStyle = `rgba(255,255,255,${(0.05 * opacity).toFixed(3)})`;
-  ctx.font = `300 ${size}px "Inter", system-ui, -apple-system, sans-serif`;
+  // 5% idle → 20% on full hover (opacity arg is 0..1 hover lerp)
+  const a = 0.05 + 0.15 * opacity;
+  ctx.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`;
+  ctx.font = `300 ${size}px "JetBrains Mono", ui-monospace, monospace`;
+  ctx.letterSpacing = "0.15em" as unknown as string;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(txt, W / 2, H / 2);

@@ -14,7 +14,6 @@ import {
   type GrainType,
   type ToneType,
 } from "@/lib/fx/fxState";
-import { playPackVoice } from "@/lib/sound/packs";
 import {
   BUILTIN_RUNTIME_PACKS,
   fetchCustomPacks,
@@ -48,8 +47,7 @@ export const Route = createFileRoute("/")({
  * ============================================================ */
 
 type VoiceKind = "chime" | "pluck" | "bell" | "pad" | "bass" | "none";
-type SceneKind = "wheel" | "polygon" | "sine" | "lissajous";
-type BgKind = "void" | "grid" | "drift";
+type SceneKind = "wheel" | "pendulum" | "bars";
 
 type Knobs = {
   mainVol: number;   // 0..1
@@ -94,6 +92,10 @@ type EngineState = {
   paused: boolean;
   // wheel
   wheel: WheelState;
+  // pendulum
+  pendulum: PendulumState;
+  // bars
+  bars: BarsState;
 };
 
 type AudioGraph = {
@@ -131,10 +133,10 @@ type AudioGraph = {
  * ============================================================ */
 
 const VOICES: VoiceKind[] = ["chime", "pluck", "bell", "pad", "bass", "none"];
-const SCENES: SceneKind[] = ["wheel", "polygon", "sine", "lissajous"];
-const BACKGROUNDS: BgKind[] = ["void", "grid", "drift"];
+const SCENES: SceneKind[] = ["wheel", "pendulum", "bars"];
 type VoiceSlot = "melo" | "bass" | "atmo";
 const VOICE_SLOTS: VoiceSlot[] = ["melo", "bass", "atmo"];
+void VOICES;
 
 type WheelNote = {
   id: string;
@@ -167,6 +169,34 @@ type WheelState = {
   rings: WheelRing[];
   lines: WheelLine[];
   lastFire: Map<string, number>;
+};
+
+/* ---- Pendulum scene ---- */
+type PendulumBob = {
+  id: string;
+  ratioIndex: number;     // 0..N → picks ratio from PEND_RATIOS
+  slotIndex: number;      // 0..5 → pack slot
+  pitchIndex: number;     // semitone offset
+  phase: number;          // 0..1 normalized SHM phase
+  prevSign: -1 | 1;       // last side
+  flash: number;          // 0..1 visual
+};
+type PendulumState = {
+  bobs: PendulumBob[];
+};
+
+/* ---- Bars scene ---- */
+type BarLane = {
+  id: string;
+  ratioIndex: number;     // 0..N → picks ratio from BAR_RATIOS
+  slotIndex: number;
+  pitchIndex: number;
+  phase: number;          // 0..1 playhead vertical position
+  flash: number;
+  lastTriggerY: number;   // for zigzag connector
+};
+type BarsState = {
+  lanes: BarLane[];
 };
 
 let _uid = 0;
@@ -230,6 +260,69 @@ const SCALE_DEG = [0, 3, 5, 7, 10];
 const ROOT_HZ = 110; // A2
 const MAX_ACTIVE_VOICES = 18;
 let activeVoiceCount = 0;
+void MAX_ACTIVE_VOICES; void activeVoiceCount;
+
+/* ---- Pendulum / Bars constants & seeds ---- */
+
+// Ratios that produce a slow phasing fan-out (Galileo pendulum style).
+// Index N → period multiplier; longer index = slower swing.
+const PEND_RATIOS = [1.0, 1.06, 1.13, 1.21, 1.30, 1.40, 1.51, 1.63, 1.76, 1.90, 2.05, 2.21];
+const BAR_RATIOS = [
+  { num: 3, den: 4 }, { num: 4, den: 5 }, { num: 5, den: 6 }, { num: 6, den: 7 },
+  { num: 7, den: 8 }, { num: 8, den: 9 }, { num: 9, den: 10 }, { num: 5, den: 8 },
+  { num: 4, den: 7 }, { num: 3, den: 8 }, { num: 7, den: 12 }, { num: 11, den: 13 },
+];
+
+function pendBaseSec(bpm: number) {
+  // Slowest pendulum's full half-cycle ≈ this many seconds at the given bpm.
+  // At 90 bpm → ~3.6s for one zero-cross-to-zero-cross.
+  return (60 / Math.max(20, bpm)) * 5.4;
+}
+
+function pendPeriodSec(b: PendulumBob, bpm: number) {
+  const r = PEND_RATIOS[b.ratioIndex % PEND_RATIOS.length];
+  return pendBaseSec(bpm) * r;
+}
+
+function barBaseSec(bpm: number) {
+  return (60 / Math.max(20, bpm)) * 4.0;
+}
+
+function barPeriodSec(l: BarLane, bpm: number) {
+  const r = BAR_RATIOS[l.ratioIndex % BAR_RATIOS.length];
+  return barBaseSec(bpm) * (r.den / r.num);
+}
+
+function pitchToFreq(semitones: number) {
+  // A3 (220) as root; pitchIndex 0 → A3.
+  return 220 * Math.pow(2, semitones / 12);
+}
+
+function makeSeedPendulum(): PendulumState {
+  return {
+    bobs: [
+      { id: uid("p"), ratioIndex: 0, slotIndex: 0, pitchIndex: 7, phase: 0,    prevSign: 1, flash: 0 },
+      { id: uid("p"), ratioIndex: 1, slotIndex: 1, pitchIndex: 5, phase: 0.1,  prevSign: 1, flash: 0 },
+      { id: uid("p"), ratioIndex: 2, slotIndex: 2, pitchIndex: 3, phase: 0.2,  prevSign: 1, flash: 0 },
+      { id: uid("p"), ratioIndex: 3, slotIndex: 3, pitchIndex: 0, phase: 0.3,  prevSign: 1, flash: 0 },
+      { id: uid("p"), ratioIndex: 4, slotIndex: 4, pitchIndex: -2, phase: 0.4, prevSign: 1, flash: 0 },
+      { id: uid("p"), ratioIndex: 5, slotIndex: 5, pitchIndex: -5, phase: 0.5, prevSign: 1, flash: 0 },
+    ],
+  };
+}
+
+function makeSeedBars(): BarsState {
+  return {
+    lanes: [
+      { id: uid("b"), ratioIndex: 0, slotIndex: 0, pitchIndex: 12, phase: 0,    flash: 0, lastTriggerY: 1 },
+      { id: uid("b"), ratioIndex: 1, slotIndex: 1, pitchIndex: 7,  phase: 0.07, flash: 0, lastTriggerY: 1 },
+      { id: uid("b"), ratioIndex: 2, slotIndex: 2, pitchIndex: 5,  phase: 0.14, flash: 0, lastTriggerY: 1 },
+      { id: uid("b"), ratioIndex: 3, slotIndex: 3, pitchIndex: 3,  phase: 0.21, flash: 0, lastTriggerY: 1 },
+      { id: uid("b"), ratioIndex: 4, slotIndex: 4, pitchIndex: 0,  phase: 0.28, flash: 0, lastTriggerY: 1 },
+      { id: uid("b"), ratioIndex: 5, slotIndex: 5, pitchIndex: -5, phase: 0.35, flash: 0, lastTriggerY: 1 },
+    ],
+  };
+}
 
 function vertexFreq(i: number, pitchSemi: number) {
   const deg = SCALE_DEG[i % SCALE_DEG.length];
@@ -519,7 +612,6 @@ function Dropdown<T extends string>({
 function PhaseApp() {
   const [playing, setPlaying] = useState(false);
   const [scene, setScene] = useState<SceneKind>("wheel");
-  const [background, setBackground] = useState<BgKind>("drift");
   const [bpm, setBpm] = useState(90);
   const [fxState, setFxState] = useState<FxState>(DEFAULT_FX_STATE);
   const [fxOpen, setFxOpen] = useState(false);
@@ -532,7 +624,7 @@ function PhaseApp() {
   const bumpTopo = useCallback(() => setTopo((x) => x + 1), []);
   // cached canvas client rect for positioning DOM overlays
   const [canvasRect, setCanvasRect] = useState({ w: 0, h: 0 });
-  const [voices, setVoices] = useState<VoiceSel>({
+  const [voices] = useState<VoiceSel>({
     melo: "chime",
     bass: "bass",
     atmo: "pad",
@@ -551,7 +643,6 @@ function PhaseApp() {
   // Refs mirror state so the engine doesn't re-subscribe
   const playingRef = useRef(playing); playingRef.current = playing;
   const sceneRef = useRef(scene); sceneRef.current = scene;
-  const bgRef = useRef(background); bgRef.current = background;
   const voicesRef = useRef(voices); voicesRef.current = voices;
   const knobsRef = useRef(knobs); knobsRef.current = knobs;
   const bpmRef = useRef(bpm); bpmRef.current = bpm;
@@ -573,6 +664,8 @@ function PhaseApp() {
     startedAt: 0,
     paused: true,
     wheel: makeSeedWheel(),
+    pendulum: makeSeedPendulum(),
+    bars: makeSeedBars(),
   });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const grainPatternRef = useRef<CanvasPattern | null>(null);
@@ -805,61 +898,6 @@ function PhaseApp() {
     warmCustomPack(a.ctx, activePack).catch(() => {});
   }, [activePack]);
 
-  /* ---- Reset rhythm when multiply / speed changes ---- */
-  useEffect(() => {
-    const e = engineRef.current;
-    const a = audioRef.current;
-    const now = a ? a.ctx.currentTime : 0;
-    const base = 8 / knobs.speed;
-    e.basePeriod = base;
-    e.nextFire = new Array(knobs.multiply).fill(0).map((_, i) => now + vertexPeriod(i, base) * 0.3);
-    e.lastFire = new Array(knobs.multiply).fill(-999);
-  }, [knobs.multiply, knobs.speed]);
-
-  /* ---- Scheduler (look-ahead 25ms tick) ---- */
-  useEffect(() => {
-    let interval = 0;
-    const tick = () => {
-      const a = audioRef.current;
-      if (!a || !playingRef.current) return;
-      // Wheel scene has its own RAF-driven triggering; skip polygon scheduler.
-      if (sceneRef.current === "wheel") return;
-      const e = engineRef.current;
-      const k = knobsRef.current;
-      const v = voicesRef.current;
-      const horizon = a.ctx.currentTime + 0.15;
-
-      // ensure arrays sized to multiply
-      if (e.nextFire.length !== k.multiply) {
-        const now = a.ctx.currentTime;
-        e.nextFire = new Array(k.multiply).fill(0).map((_, i) => now + vertexPeriod(i, e.basePeriod) * 0.3);
-        e.lastFire = new Array(k.multiply).fill(-999);
-      }
-
-      for (let i = 0; i < k.multiply; i++) {
-        const period = vertexPeriod(i, e.basePeriod);
-        while (e.nextFire[i] < horizon) {
-          const t = e.nextFire[i];
-          const voice = vertexVoice(i, v);
-          const freq = vertexFreq(i, k.pitch);
-          if (voice !== "none") {
-            playVoice(a.ctx, a.preFx, voice, freq, k.fx2, t);
-          }
-          e.pendingVisuals.push({
-            vertex: i,
-            time: t,
-            freq,
-            voice,
-            laneColor: vertexColor(i, v),
-          });
-          e.nextFire[i] = t + period;
-        }
-      }
-    };
-    interval = window.setInterval(tick, 25);
-    return () => clearInterval(interval);
-  }, []);
-
   /* ---- RAF render loop ---- */
   useEffect(() => {
     let raf = 0;
@@ -913,75 +951,40 @@ function PhaseApp() {
     const c = canvasRef.current; if (!c) return;
     const ctx2d = c.getContext("2d"); if (!ctx2d) return;
     const e = engineRef.current;
-    const k = knobsRef.current;
-    const v = voicesRef.current;
     const a = audioRef.current;
-    const audioNow = a ? a.ctx.currentTime : 0;
 
     const W = e.w, H = e.h;
     ctx2d.setTransform(e.dpr, 0, 0, e.dpr, 0, 0);
-    const isWheelScene = sceneRef.current === "wheel";
 
-    if (isWheelScene) {
-      // ART SURFACE: opaque charcoal base + vignette + tiled grain
-      paintArtBackground(ctx2d, W, H, grainPatternRef);
-    } else {
-      // background fade (creates motion trails) — non-wheel scenes
-      ctx2d.fillStyle = "oklch(0.09 0.01 260 / 0.35)";
-      ctx2d.fillRect(0, 0, W, H);
-      drawBackground(ctx2d, W, H, bgRef.current, e, dt);
-    }
+    // Always: art surface (transparent + bloom + grain)
+    paintArtBackground(ctx2d, W, H, grainPatternRef);
 
-    // process pending visual triggers whose time has come
-    if (a) {
-      const pv = e.pendingVisuals;
-      for (let i = pv.length - 1; i >= 0; i--) {
-        if (pv[i].time <= audioNow) {
-          const ev = pv[i];
-          if (ev.vertex < k.multiply) {
-            spawnTriggerVisual(e, ev, sceneRef.current, W, H, k);
-            e.lastFire[ev.vertex] = audioNow;
-          }
-          pv.splice(i, 1);
-        }
-      }
-    }
-
-    // draw scene
-    if (isWheelScene) {
-      // update wheel physics + trigger detection (audio + visuals)
-      if (a && playingRef.current) {
-        updateWheel(e.wheel, dt, a, bpmRef.current, voicesRef.current, knobsRef.current, packRef.current);
+    const playing = !!(a && playingRef.current);
+    const scene = sceneRef.current;
+    ctx2d.globalCompositeOperation = "lighter";
+    if (scene === "wheel") {
+      if (playing) {
+        updateWheel(e.wheel, dt, a!, bpmRef.current, voicesRef.current, knobsRef.current, packRef.current);
       } else {
-        // decay flashes even when paused
         decayWheelFlashes(e.wheel, dt);
       }
-      ctx2d.globalCompositeOperation = "lighter";
       drawWheelScene(ctx2d, W, H, e.wheel, voicesRef.current, dt, hoverRingIdRef.current);
+    } else if (scene === "pendulum") {
+      if (playing) {
+        updatePendulum(e.pendulum, dt, a!, bpmRef.current, knobsRef.current, packRef.current);
+      } else {
+        decayPendulumFlashes(e.pendulum, dt);
+      }
+      drawPendulumScene(ctx2d, W, H, e.pendulum, hoverRingIdRef.current);
     } else {
-      ctx2d.globalCompositeOperation = "lighter";
-      if (sceneRef.current === "polygon") drawPolygonScene(ctx2d, W, H, e, k, v, audioNow);
-      else if (sceneRef.current === "sine") drawSineScene(ctx2d, W, H, e, k, v, audioNow);
-      else drawLissajousScene(ctx2d, W, H, e, k, v, audioNow);
+      if (playing) {
+        updateBars(e.bars, dt, a!, bpmRef.current, knobsRef.current, packRef.current);
+      } else {
+        decayBarsFlashes(e.bars, dt);
+      }
+      drawBarsScene(ctx2d, W, H, e.bars, hoverRingIdRef.current);
     }
-
-    // particles
-    if (!isWheelScene) drawParticles(ctx2d, e, dt);
-
     ctx2d.globalCompositeOperation = "source-over";
-
-    if (!isWheelScene) {
-      ctx2d.save();
-      ctx2d.fillStyle = "oklch(0.6 0.04 80 / 0.07)";
-      ctx2d.font = "600 64px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto";
-      ctx2d.textAlign = "center";
-      ctx2d.textBaseline = "middle";
-      ctx2d.letterSpacing = "12px" as unknown as string;
-      ctx2d.fillText("PHASE", W / 2, H / 2 - 16);
-      ctx2d.font = "500 18px ui-sans-serif, system-ui";
-      ctx2d.fillText("RHYTHMS", W / 2, H / 2 + 30);
-      ctx2d.restore();
-    }
   };
 
   /* ---- Transport ---- */
@@ -989,15 +992,6 @@ function PhaseApp() {
     const a = ensureAudio();
     applyFxState(a, fxState);
     if (a.ctx.state === "suspended") await a.ctx.resume();
-    const e = engineRef.current;
-    if (!playing) {
-      // (re)seed timers anchored at now
-      const now = a.ctx.currentTime;
-      e.nextFire = new Array(knobs.multiply).fill(0).map((_, i) => now + vertexPeriod(i, e.basePeriod) * 0.2);
-      e.lastFire = new Array(knobs.multiply).fill(-999);
-      e.pendingVisuals = [];
-      e.startedAt = now;
-    }
     setPlaying((p) => !p);
   };
 
@@ -1089,480 +1083,140 @@ function PhaseApp() {
     bumpTopo();
   };
 
+  /* ---- Pendulum mutators ---- */
+  const addBob = () => {
+    const p = engineRef.current.pendulum;
+    const idx = p.bobs.length % PEND_RATIOS.length;
+    const slot = p.bobs.length % 6;
+    p.bobs.push({
+      id: uid("p"), ratioIndex: idx, slotIndex: slot,
+      pitchIndex: 7 - p.bobs.length * 2, phase: Math.random(),
+      prevSign: 1, flash: 0,
+    });
+    bumpTopo();
+  };
+  const clearBobs = () => {
+    engineRef.current.pendulum.bobs = [];
+    bumpTopo();
+  };
+
+  /* ---- Bars mutators ---- */
+  const addLane = () => {
+    const b = engineRef.current.bars;
+    const idx = b.lanes.length % BAR_RATIOS.length;
+    const slot = b.lanes.length % 6;
+    b.lanes.push({
+      id: uid("b"), ratioIndex: idx, slotIndex: slot,
+      pitchIndex: 12 - b.lanes.length * 3,
+      phase: Math.random() * 0.4, flash: 0, lastTriggerY: 1,
+    });
+    bumpTopo();
+  };
+  const clearLanes = () => {
+    engineRef.current.bars.lanes = [];
+    bumpTopo();
+  };
+
   return (
     <div
-      className={"min-h-screen w-full flex flex-col relative " + (isWheel ? "pr-stage" : "")}
-      style={{ background: isWheel ? undefined : "var(--pr-bg-2)", color: "var(--pr-text)" }}
+      className="min-h-screen w-full flex flex-col relative pr-stage"
+      style={{ color: "var(--pr-text)" }}
     >
-      {isWheel && (
-        <PhaseChrome
-          fxOpen={fxOpen}
-          packsOpen={packsOpen}
-          aboutOpen={aboutOpen}
-          onOpenPanel={(p) => {
-            setFxOpen(p === "fx" ? !fxOpen : false);
-            setPacksOpen(p === "packs" ? !packsOpen : false);
-            setAboutOpen(p === "about" ? !aboutOpen : false);
-          }}
-          onCloseAll={() => { setFxOpen(false); setPacksOpen(false); setAboutOpen(false); }}
-        />
-      )}
-      {isWheel && (
-        <PhaseReadout
-          wheel={engineRef.current.wheel}
-          bpm={bpm}
-          hoverRingId={hoverRing}
-          topo={topo}
-        />
-      )}
-      {/* TOP CONTROL STRIP — hidden in Wheel art mode */}
-      {!isWheel && (
-      <header
-        className="flex items-center gap-4 px-4 py-2.5 border-b"
-        style={{
-          background: "linear-gradient(180deg, oklch(0.16 0.013 260) 0%, oklch(0.13 0.012 260) 100%)",
-          borderColor: "var(--pr-line)",
-          minHeight: 72,
+      <PhaseChrome
+        scene={scene}
+        onScene={setScene}
+        fxOpen={fxOpen}
+        packsOpen={packsOpen}
+        aboutOpen={aboutOpen}
+        onOpenPanel={(p) => {
+          setFxOpen(p === "fx" ? !fxOpen : false);
+          setPacksOpen(p === "packs" ? !packsOpen : false);
+          setAboutOpen(p === "about" ? !aboutOpen : false);
         }}
-      >
-        <div className="flex items-end gap-3 pr-3 mr-1 border-r" style={{ borderColor: "var(--pr-line-soft)" }}>
-          <Dropdown label="scene" value={scene} options={SCENES} onChange={setScene} />
-          <Dropdown label="background" value={background} options={BACKGROUNDS} onChange={setBackground} />
-        </div>
-
-        <div className="flex items-end gap-3 pr-3 mr-1 border-r" style={{ borderColor: "var(--pr-line-soft)" }}>
-          <Dropdown label="melo-sound" value={voices.melo} options={VOICES} onChange={(v) => setVoices((s) => ({ ...s, melo: v }))} />
-          <Dropdown label="bass-sound" value={voices.bass} options={VOICES} onChange={(v) => setVoices((s) => ({ ...s, bass: v }))} />
-          <Dropdown label="atmo-sound" value={voices.atmo} options={VOICES} onChange={(v) => setVoices((s) => ({ ...s, atmo: v }))} />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Knob label="main-vol" value={knobs.mainVol} min={0} max={1} defaultValue={0.55}
-                display={(v) => `${Math.round(v * 100)}`}
-                onChange={(v) => setKnob("mainVol", v)} />
-          <Knob label="pitch" value={knobs.pitch} min={-12} max={12} step={1} integer defaultValue={0}
-                display={(v) => `${v > 0 ? "+" : ""}${Math.round(v)}`}
-                onChange={(v) => setKnob("pitch", v)} />
-          <Knob label="rev-mix" value={knobs.revMix} min={0} max={1} defaultValue={0.45}
-                display={(v) => `${Math.round(v * 100)}`}
-                onChange={(v) => setKnob("revMix", v)} />
-          <Knob label="rev-size" value={knobs.revSize} min={0.05} max={1.2} defaultValue={0.55}
-                display={(v) => `${Math.round(v * 100)}`}
-                onChange={(v) => setKnob("revSize", v)} />
-          {!isWheel && (
-            <>
-              <Knob label="speed" value={knobs.speed} min={0.25} max={2.5} defaultValue={1}
-                    display={(v) => v.toFixed(2)}
-                    onChange={(v) => setKnob("speed", v)} />
-              <Knob label="multiply" value={knobs.multiply} min={2} max={12} step={1} integer defaultValue={5}
-                    display={(v) => `${Math.round(v)}`}
-                    onChange={(v) => setKnob("multiply", v)} />
-            </>
-          )}
-          <Knob label="fx-1" value={knobs.fx1} min={200} max={8000} step={10} defaultValue={2400}
-                display={(v) => `${Math.round(v / 100)}`}
-                onChange={(v) => setKnob("fx1", v)} />
-          <Knob label="fx-2" value={knobs.fx2} min={0} max={40} step={1} integer defaultValue={8}
-                display={(v) => `${Math.round(v)}`}
-                onChange={(v) => setKnob("fx2", v)} />
-        </div>
-
-        <div className="ml-auto flex items-center gap-3">
-          <button
-            onClick={togglePlay}
-            className="h-9 px-4 rounded-sm text-[11px] tracking-[0.25em] uppercase transition-all"
-            style={{
-              background: playing ? "var(--pr-accent)" : "var(--pr-panel-2)",
-              color: playing ? "#1a1a22" : "var(--pr-text)",
-              boxShadow: playing
-                ? "0 0 22px oklch(0.88 0.15 90 / 0.5)"
-                : "inset 0 0 0 1px var(--pr-line)",
-            }}
-          >
-            {playing ? "■ pause" : "▶ play"}
-          </button>
-        </div>
-      </header>
-      )}
-
+        onCloseAll={() => { setFxOpen(false); setPacksOpen(false); setAboutOpen(false); }}
+      />
+      <PhaseReadout
+        scene={scene}
+        wheel={engineRef.current.wheel}
+        pendulum={engineRef.current.pendulum}
+        bars={engineRef.current.bars}
+        bpm={bpm}
+        hoverRingId={hoverRing}
+        topo={topo}
+      />
       {/* CANVAS */}
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
-        {isWheel ? (
-          <>
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 w-full h-full block"
-              style={{ background: "transparent", cursor: "crosshair" }}
-              onPointerDown={onCanvasPointerDown}
-              onPointerMove={onCanvasPointerMove}
-              onPointerLeave={onCanvasPointerLeave}
-            />
-            <WheelOverlays
-                wheel={engineRef.current.wheel}
-                topo={topo}
-                canvasW={canvasRect.w}
-                canvasH={canvasRect.h}
-                onAddRing={addRing}
-                onAddLine={addLine}
-                onRemoveRing={removeRing}
-                onRemoveLine={removeLine}
-                onSetLineAngle={setLineAngle}
-                onUpdateRing={updateRing}
-                onHoverRing={(id) => { hoverRingIdRef.current = id; setHoverRing(id); }}
-            />
-          </>
-        ) : (
-          <canvas
-            ref={canvasRef}
-            className="absolute inset-0 w-full h-full block"
-            style={{ background: "oklch(0.09 0.01 260)", cursor: "default" }}
-            onPointerDown={onCanvasPointerDown}
-            onPointerMove={onCanvasPointerMove}
-            onPointerLeave={onCanvasPointerLeave}
-          />
-        )}
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full block"
+          style={{ background: "transparent", cursor: isWheel ? "crosshair" : "default" }}
+          onPointerDown={onCanvasPointerDown}
+          onPointerMove={onCanvasPointerMove}
+          onPointerLeave={onCanvasPointerLeave}
+        />
         {isWheel && (
-          <ArtDock
-            playing={playing}
-            bpm={bpm}
-            onTogglePlay={togglePlay}
+          <WheelOverlays
+            wheel={engineRef.current.wheel}
+            topo={topo}
+            canvasW={canvasRect.w}
+            canvasH={canvasRect.h}
             onAddRing={addRing}
             onAddLine={addLine}
-            onClearLines={clearLines}
-            onBpm={setBpm}
-            fxOpen={fxOpen}
-            onToggleFx={() => {
-              const next = !fxOpen;
-              setFxOpen(next);
-              if (next) { setPacksOpen(false); setAboutOpen(false); }
-            }}
-            packsOpen={packsOpen}
-            onTogglePacks={() => {
-              const next = !packsOpen;
-              setPacksOpen(next);
-              if (next) { setFxOpen(false); setAboutOpen(false); }
-            }}
+            onRemoveRing={removeRing}
+            onRemoveLine={removeLine}
+            onSetLineAngle={setLineAngle}
+            onUpdateRing={updateRing}
+            onHoverRing={(id) => { hoverRingIdRef.current = id; setHoverRing(id); }}
           />
         )}
-        {isWheel && (
-          <FxDrawer
-            open={fxOpen}
-            state={fxState}
-            onChange={setFxState}
-          />
-        )}
-        {isWheel && (
-          <PacksDrawer
-            open={packsOpen}
-            packs={allPacks}
-            selected={selectedPack}
-            onSelect={setSelectedPack}
-            onAudition={(pack: RuntimePack, slotIndex: number) => {
-              const a = ensureAudio();
-              if (a.ctx.state === "suspended") a.ctx.resume();
-              triggerPackVoice(a.ctx, a.preFx, pack, slotIndex, 440, a.ctx.currentTime + 0.01);
-            }}
-          />
-        )}
-        {isWheel && <AboutDrawer open={aboutOpen} onClose={() => setAboutOpen(false)} />}
-      </main>
-
-      {/* BOTTOM BPM DOCK — hidden in Wheel art mode */}
-      {!isWheel && (
-      <footer
-        className="flex items-center gap-4 px-5 py-2.5 border-t"
-        style={{
-          background: "linear-gradient(0deg, oklch(0.16 0.013 260) 0%, oklch(0.13 0.012 260) 100%)",
-          borderColor: "var(--pr-line)",
-        }}
-      >
-        <div className="text-[9px] uppercase tracking-[0.2em]" style={{ color: "var(--pr-muted)" }}>
-          tempo
-        </div>
-        <input
-          type="range"
-          min={20} max={180} step={1}
-          value={bpm}
-          onChange={(e) => setBpm(parseInt(e.target.value, 10))}
-          className="pr-slider flex-1"
+        <ArtDock
+          scene={scene}
+          playing={playing}
+          bpm={bpm}
+          onTogglePlay={togglePlay}
+          onAddNode={() => {
+            if (scene === "wheel") addRing();
+            else if (scene === "pendulum") addBob();
+            else addLane();
+          }}
+          onAddLine={addLine}
+          onClearLines={() => {
+            if (scene === "wheel") clearLines();
+            else if (scene === "pendulum") clearBobs();
+            else clearLanes();
+          }}
+          onBpm={setBpm}
+          fxOpen={fxOpen}
+          onToggleFx={() => {
+            const next = !fxOpen;
+            setFxOpen(next);
+            if (next) { setPacksOpen(false); setAboutOpen(false); }
+          }}
+          packsOpen={packsOpen}
+          onTogglePacks={() => {
+            const next = !packsOpen;
+            setPacksOpen(next);
+            if (next) { setFxOpen(false); setAboutOpen(false); }
+          }}
         />
-        <div className="text-sm tabular-nums tracking-wider" style={{ color: "var(--pr-text)" }}>
-          {bpm} <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "var(--pr-muted)" }}>bpm</span>
-        </div>
-      </footer>
-      )}
+        <FxDrawer open={fxOpen} state={fxState} onChange={setFxState} />
+        <PacksDrawer
+          open={packsOpen}
+          packs={allPacks}
+          selected={selectedPack}
+          onSelect={setSelectedPack}
+          onAudition={(pack: RuntimePack, slotIndex: number) => {
+            const a = ensureAudio();
+            if (a.ctx.state === "suspended") a.ctx.resume();
+            triggerPackVoice(a.ctx, a.preFx, pack, slotIndex, 440, a.ctx.currentTime + 0.01);
+          }}
+        />
+        <AboutDrawer open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      </main>
     </div>
   );
 }
 
-/* ============================================================
- * Visual triggers — spawn particles per scene
- * ============================================================ */
-
-function spawnTriggerVisual(
-  e: EngineState, ev: TriggerEvent, scene: SceneKind, W: number, H: number, k: Knobs,
-) {
-  const slot = ev.vertex % 3;
-  const hue = slot === 0
-    ? "oklch(0.82 0.18 195 / a)"
-    : slot === 1
-    ? "oklch(0.72 0.22 310 / a)"
-    : "oklch(0.86 0.16 85 / a)";
-
-  let cx = W / 2, cy = H / 2;
-
-  if (scene === "polygon") {
-    const r = Math.min(W, H) * 0.36;
-    const ang = (ev.vertex / k.multiply) * Math.PI * 2 - Math.PI / 2;
-    cx = W / 2 + Math.cos(ang) * r;
-    cy = H / 2 + Math.sin(ang) * r;
-  } else if (scene === "sine") {
-    const spacing = (H * 0.7) / Math.max(1, k.multiply - 1);
-    cx = W * 0.18;
-    cy = H * 0.15 + ev.vertex * spacing;
-  } else {
-    // lissajous: position on curve at vertex's phase
-    const a = 3, b = 4;
-    const phase = (ev.vertex / k.multiply) * Math.PI * 2;
-    cx = W / 2 + Math.cos(a * phase) * W * 0.32;
-    cy = H / 2 + Math.sin(b * phase + Math.PI / 4) * H * 0.32;
-  }
-
-  const count = 18 + Math.floor(Math.random() * 10);
-  for (let i = 0; i < count; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const spd = 30 + Math.random() * 160;
-    e.particles.push({
-      x: cx, y: cy,
-      vx: Math.cos(a) * spd,
-      vy: Math.sin(a) * spd,
-      life: 0,
-      max: 0.8 + Math.random() * 1.4,
-      size: 0.6 + Math.random() * 1.8,
-      hue,
-    });
-  }
-
-  if (e.particles.length > 2400) e.particles.splice(0, e.particles.length - 2400);
-}
-
-/* ============================================================
- * Backgrounds
- * ============================================================ */
-
-function drawBackground(
-  ctx: CanvasRenderingContext2D, W: number, H: number, bg: BgKind, e: EngineState, dt: number,
-) {
-  if (bg === "void") return;
-  if (bg === "grid") {
-    ctx.save();
-    ctx.strokeStyle = "oklch(0.3 0.018 260 / 0.18)";
-    ctx.lineWidth = 1;
-    const step = 60;
-    for (let x = 0; x < W; x += step) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-    }
-    for (let y = 0; y < H; y += step) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-    }
-    ctx.restore();
-    return;
-  }
-  // drift
-  ctx.save();
-  for (const d of e.dust) {
-    d.x += d.vx * dt;
-    d.y += d.vy * dt;
-    if (d.x < 0) d.x = 1; if (d.x > 1) d.x = 0;
-    if (d.y < 0) d.y = 1; if (d.y > 1) d.y = 0;
-    ctx.fillStyle = `oklch(0.85 0.04 260 / ${d.a})`;
-    ctx.beginPath();
-    ctx.arc(d.x * W, d.y * H, d.s, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
-/* ============================================================
- * Particles
- * ============================================================ */
-
-function drawParticles(ctx: CanvasRenderingContext2D, e: EngineState, dt: number) {
-  const ps = e.particles;
-  for (let i = ps.length - 1; i >= 0; i--) {
-    const p = ps[i];
-    p.life += dt;
-    if (p.life >= p.max) { ps.splice(i, 1); continue; }
-    // ease
-    const k = 1 - Math.pow(0.05, dt); // drag
-    p.vx *= 1 - k * 0.6;
-    p.vy *= 1 - k * 0.6;
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-    const lifeT = p.life / p.max;
-    const alpha = (1 - lifeT) * 0.85;
-    ctx.fillStyle = p.hue.replace("a", alpha.toFixed(3));
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size * (1 - lifeT * 0.5), 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-/* ============================================================
- * Scenes
- * ============================================================ */
-
-function nodeGlow(
-  ctx: CanvasRenderingContext2D, x: number, y: number, color: string, intensity: number, baseR: number,
-) {
-  const r = baseR + intensity * 18;
-  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-  g.addColorStop(0, color.replace("a", (0.9 * (0.4 + intensity * 0.6)).toFixed(3)));
-  g.addColorStop(0.4, color.replace("a", (0.3 * intensity).toFixed(3)));
-  g.addColorStop(1, color.replace("a", "0"));
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fill();
-
-  // crisp ring
-  ctx.strokeStyle = color.replace("a", (0.6 + intensity * 0.4).toFixed(3));
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ctx.arc(x, y, baseR, 0, Math.PI * 2);
-  ctx.stroke();
-}
-
-function intensityFromLastFire(now: number, last: number) {
-  if (last < 0) return 0;
-  const dt = now - last;
-  if (dt < 0) return 0;
-  const decay = 0.6; // seconds
-  return Math.max(0, 1 - dt / decay);
-}
-
-function colorForVertex(i: number, v: VoiceSel): string {
-  const slot = i % 3;
-  const voice = slot === 0 ? v.melo : slot === 1 ? v.bass : v.atmo;
-  if (voice === "none") return "oklch(0.5 0.02 260 / a)";
-  if (slot === 0) return "oklch(0.82 0.18 195 / a)";
-  if (slot === 1) return "oklch(0.72 0.22 310 / a)";
-  return "oklch(0.86 0.16 85 / a)";
-}
-
-function drawPolygonScene(
-  ctx: CanvasRenderingContext2D, W: number, H: number, e: EngineState, k: Knobs, v: VoiceSel, now: number,
-) {
-  const cx = W / 2, cy = H / 2;
-  const R = Math.min(W, H) * 0.36;
-
-  // faint reference circle
-  ctx.strokeStyle = "oklch(0.5 0.03 260 / 0.15)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.arc(cx, cy, R, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // collect positions
-  const positions: { x: number; y: number; intensity: number; color: string }[] = [];
-  for (let i = 0; i < k.multiply; i++) {
-    const ang = (i / k.multiply) * Math.PI * 2 - Math.PI / 2;
-    positions.push({
-      x: cx + Math.cos(ang) * R,
-      y: cy + Math.sin(ang) * R,
-      intensity: intensityFromLastFire(now, e.lastFire[i] ?? -999),
-      color: colorForVertex(i, v),
-    });
-  }
-
-  // connecting web (lines between vertices that fired recently together)
-  for (let i = 0; i < positions.length; i++) {
-    for (let j = i + 1; j < positions.length; j++) {
-      const a = Math.min(positions[i].intensity, positions[j].intensity);
-      if (a < 0.04) continue;
-      ctx.strokeStyle = `oklch(0.82 0.08 220 / ${(a * 0.45).toFixed(3)})`;
-      ctx.lineWidth = 0.8;
-      ctx.beginPath();
-      ctx.moveTo(positions[i].x, positions[i].y);
-      ctx.lineTo(positions[j].x, positions[j].y);
-      ctx.stroke();
-    }
-  }
-
-  // nodes
-  for (const p of positions) {
-    nodeGlow(ctx, p.x, p.y, p.color, p.intensity, 9);
-  }
-}
-
-function drawSineScene(
-  ctx: CanvasRenderingContext2D, W: number, H: number, e: EngineState, k: Knobs, v: VoiceSel, now: number,
-) {
-  const colX = W * 0.18;
-  const top = H * 0.15;
-  const spacing = (H * 0.7) / Math.max(1, k.multiply - 1);
-
-  // axis line
-  ctx.strokeStyle = "oklch(0.45 0.03 260 / 0.18)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(colX, top - 20);
-  ctx.lineTo(colX, top + spacing * (k.multiply - 1) + 20);
-  ctx.stroke();
-
-  for (let i = 0; i < k.multiply; i++) {
-    const x = colX;
-    const y = top + i * spacing;
-    const intensity = intensityFromLastFire(now, e.lastFire[i] ?? -999);
-    const color = colorForVertex(i, v);
-    // expanding ring on trigger
-    if (intensity > 0) {
-      const r = 12 + (1 - intensity) * 80;
-      ctx.strokeStyle = color.replace("a", (intensity * 0.4).toFixed(3));
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.stroke();
-      // trailing streak rightward
-      const grd = ctx.createLinearGradient(x, y, W, y);
-      grd.addColorStop(0, color.replace("a", (intensity * 0.5).toFixed(3)));
-      grd.addColorStop(1, color.replace("a", "0"));
-      ctx.fillStyle = grd;
-      ctx.fillRect(x, y - 0.6 - intensity * 1.2, W - x, 1.2 + intensity * 2.4);
-    }
-    nodeGlow(ctx, x, y, color, intensity, 10);
-  }
-}
-
-function drawLissajousScene(
-  ctx: CanvasRenderingContext2D, W: number, H: number, e: EngineState, k: Knobs, v: VoiceSel, now: number,
-) {
-  const cx = W / 2, cy = H / 2;
-  const A = W * 0.32, B = H * 0.32;
-  const a = 3, b = 4;
-
-  // curve trail
-  ctx.strokeStyle = "oklch(0.7 0.08 220 / 0.18)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  const steps = 220;
-  for (let s = 0; s <= steps; s++) {
-    const t = (s / steps) * Math.PI * 2;
-    const x = cx + Math.cos(a * t) * A;
-    const y = cy + Math.sin(b * t + Math.PI / 4) * B;
-    if (s === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-
-  for (let i = 0; i < k.multiply; i++) {
-    const phase = (i / k.multiply) * Math.PI * 2;
-    const x = cx + Math.cos(a * phase) * A;
-    const y = cy + Math.sin(b * phase + Math.PI / 4) * B;
-    const intensity = intensityFromLastFire(now, e.lastFire[i] ?? -999);
-    nodeGlow(ctx, x, y, colorForVertex(i, v), intensity, 7);
-  }
-}
 
 /* ============================================================
  * Wheel — update, render, hit-testing, overlays
@@ -1858,6 +1512,186 @@ function paintArtBackground(
 
 // (ghost readout removed — numeric info now lives in the left-side PhaseReadout pile)
 
+/* ============================================================
+ * Pendulum scene — Galileo-style hanging bobs
+ * ============================================================ */
+
+function decayPendulumFlashes(pend: PendulumState, dt: number) {
+  const k = 1 - Math.exp(-dt * 3.2);
+  for (const b of pend.bobs) b.flash = Math.max(0, b.flash - k);
+}
+
+function updatePendulum(
+  pend: PendulumState, dt: number, audio: AudioGraph, bpm: number,
+  knobs: Knobs, pack: RuntimePack,
+) {
+  decayPendulumFlashes(pend, dt);
+  const now = audio.ctx.currentTime;
+  for (const b of pend.bobs) {
+    const period = pendPeriodSec(b, bpm);
+    const inc = dt / Math.max(0.001, period);
+    b.phase = (b.phase + inc) % 1;
+    // SHM displacement: sin(2π·phase). Trigger on zero-cross (sign flip).
+    const s = Math.sin(b.phase * Math.PI * 2);
+    const sign: 1 | -1 = s >= 0 ? 1 : -1;
+    if (sign !== b.prevSign) {
+      const freq = pitchToFreq(b.pitchIndex + knobs.pitch);
+      triggerPackVoice(audio.ctx, audio.preFx, pack, b.slotIndex, freq, now + 0.005);
+      b.flash = 1;
+      b.prevSign = sign;
+    }
+  }
+}
+
+function drawPendulumScene(
+  ctx: CanvasRenderingContext2D, W: number, H: number,
+  pend: PendulumState, hoverId: string | null,
+) {
+  const ax = W / 2;
+  const ay = H * 0.16;
+  const maxLen = H * 0.62;
+  const minLen = H * 0.30;
+  const n = pend.bobs.length;
+
+  // anchor bar
+  ctx.strokeStyle = "rgba(255,255,255,0.22)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(ax - 220, ay); ctx.lineTo(ax + 220, ay);
+  ctx.stroke();
+
+  pend.bobs.forEach((b, i) => {
+    const t = n === 1 ? 0.5 : i / (n - 1);
+    const len = minLen + (maxLen - minLen) * t;
+    // swing amplitude in radians (small angle illusion, looks meditative)
+    const amp = 0.55;
+    const ang = Math.sin(b.phase * Math.PI * 2) * amp;
+    const bx = ax + Math.sin(ang) * len;
+    const by = ay + Math.cos(ang) * len;
+    const hot = hoverId === b.id;
+
+    // string
+    ctx.strokeStyle = hot ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.22)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+    ctx.stroke();
+
+    // bob glow
+    const baseR = 6 + b.flash * 10;
+    const g = ctx.createRadialGradient(bx, by, 0, bx, by, 60);
+    const a = 0.35 + b.flash * 0.55;
+    g.addColorStop(0, `rgba(180, 220, 255, ${a})`);
+    g.addColorStop(0.4, `rgba(120, 180, 230, ${a * 0.4})`);
+    g.addColorStop(1, "rgba(120,180,230,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(bx, by, 60, 0, Math.PI * 2); ctx.fill();
+
+    // crisp ring
+    ctx.strokeStyle = `rgba(220,235,255,${0.55 + b.flash * 0.4})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(bx, by, baseR, 0, Math.PI * 2); ctx.stroke();
+  });
+}
+
+/* ============================================================
+ * Bars scene — vertical lanes with falling playheads
+ * ============================================================ */
+
+function decayBarsFlashes(bars: BarsState, dt: number) {
+  const k = 1 - Math.exp(-dt * 3.2);
+  for (const l of bars.lanes) l.flash = Math.max(0, l.flash - k);
+}
+
+function updateBars(
+  bars: BarsState, dt: number, audio: AudioGraph, bpm: number,
+  knobs: Knobs, pack: RuntimePack,
+) {
+  decayBarsFlashes(bars, dt);
+  const now = audio.ctx.currentTime;
+  for (const l of bars.lanes) {
+    const period = barPeriodSec(l, bpm);
+    const prev = l.phase;
+    l.phase = (l.phase + dt / Math.max(0.001, period)) % 1;
+    if (l.phase < prev) {
+      // wrapped → trigger
+      const freq = pitchToFreq(l.pitchIndex + knobs.pitch);
+      triggerPackVoice(audio.ctx, audio.preFx, pack, l.slotIndex, freq, now + 0.005);
+      l.flash = 1;
+      l.lastTriggerY = 1;
+    }
+  }
+}
+
+function drawBarsScene(
+  ctx: CanvasRenderingContext2D, W: number, H: number,
+  bars: BarsState, hoverId: string | null,
+) {
+  const n = bars.lanes.length;
+  if (n === 0) return;
+  const padX = W * 0.12;
+  const top = H * 0.16;
+  const bot = H * 0.84;
+  const usable = W - padX * 2;
+  const step = usable / (n - 1 || 1);
+
+  // baseline + ceiling hairlines
+  ctx.strokeStyle = "rgba(255,255,255,0.18)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(padX - 30, bot); ctx.lineTo(W - padX + 30, bot); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(padX - 30, top); ctx.lineTo(W - padX + 30, top); ctx.stroke();
+
+  const pts: { x: number; y: number; flash: number; hot: boolean; id: string }[] = [];
+
+  bars.lanes.forEach((l, i) => {
+    const x = n === 1 ? W / 2 : padX + step * i;
+    // lane track
+    ctx.strokeStyle = "rgba(255,255,255,0.10)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bot); ctx.stroke();
+
+    const y = top + (bot - top) * l.phase;
+    const hot = hoverId === l.id;
+    pts.push({ x, y: bot, flash: l.flash, hot, id: l.id });
+
+    // playhead glow
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 40);
+    g.addColorStop(0, "rgba(200,225,255,0.55)");
+    g.addColorStop(1, "rgba(200,225,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, 40, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = hot ? "rgba(255,255,255,0.85)" : "rgba(220,235,255,0.6)";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.stroke();
+
+    // bottom strike node
+    const sR = 4 + l.flash * 12;
+    const sa = 0.35 + l.flash * 0.55;
+    const sg = ctx.createRadialGradient(x, bot, 0, x, bot, 70);
+    sg.addColorStop(0, `rgba(180,220,255,${sa})`);
+    sg.addColorStop(1, "rgba(120,180,230,0)");
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.arc(x, bot, 70, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `rgba(220,235,255,${0.5 + l.flash * 0.5})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(x, bot, sR, 0, Math.PI * 2); ctx.stroke();
+  });
+
+  // zigzag connector along bottom nodes
+  if (pts.length > 1) {
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      const offY = i % 2 === 0 ? -8 : 8;
+      if (i === 0) ctx.moveTo(p.x, p.y + offY);
+      else ctx.lineTo(p.x, p.y + offY);
+    }
+    ctx.stroke();
+  }
+}
+
 /* ---- Wheel DOM overlays ---- */
 
 function WheelOverlays({
@@ -2060,28 +1894,49 @@ function LineHandle({
  * ============================================================ */
 
 function PhaseReadout({
-  wheel, bpm, hoverRingId, topo,
+  scene, wheel, pendulum, bars, bpm, hoverRingId, topo,
 }: {
+  scene: SceneKind;
   wheel: WheelState;
+  pendulum: PendulumState;
+  bars: BarsState;
   bpm: number;
   hoverRingId: string | null;
   topo: number;
 }) {
   void topo;
+  let rows: { id: string; label: string; period: number }[] = [];
+  if (scene === "wheel") {
+    rows = wheel.rings.map((r) => ({
+      id: r.id,
+      label: `${r.beats}/${r.subdivision}`,
+      period: ringPeriodSec(r, bpm),
+    }));
+  } else if (scene === "pendulum") {
+    rows = pendulum.bobs.map((b, i) => ({
+      id: b.id,
+      label: `P${i + 1}`,
+      period: pendPeriodSec(b, bpm),
+    }));
+  } else {
+    rows = bars.lanes.map((l) => {
+      const r = BAR_RATIOS[l.ratioIndex % BAR_RATIOS.length];
+      return { id: l.id, label: `${r.num}/${r.den}`, period: barPeriodSec(l, bpm) };
+    });
+  }
   return (
     <div className="pointer-events-none absolute left-7 z-10" style={{ top: 260 }}>
-      <div className="pr-label text-white/30 mb-2">READOUT</div>
+      <div className="pr-label text-white/30 mb-2">READOUT · {scene.toUpperCase()}</div>
       <div className="flex flex-col gap-1 tabular-nums">
-        {wheel.rings.map((r) => {
+        {rows.map((r) => {
           const active = r.id === hoverRingId;
-          const period = ringPeriodSec(r, bpm);
           return (
             <div
               key={r.id}
               className="pr-label transition-opacity"
               style={{ color: active ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.32)" }}
             >
-              {r.beats}/{r.subdivision} · {period.toFixed(2)}S
+              {r.label} · {r.period.toFixed(2)}S
             </div>
           );
         })}
@@ -2093,8 +1948,10 @@ function PhaseReadout({
 
 type PanelId = "fx" | "packs" | "about";
 function PhaseChrome({
-  fxOpen, packsOpen, aboutOpen, onOpenPanel, onCloseAll,
+  scene, onScene, fxOpen, packsOpen, aboutOpen, onOpenPanel, onCloseAll,
 }: {
+  scene: SceneKind;
+  onScene: (s: SceneKind) => void;
   fxOpen: boolean;
   packsOpen: boolean;
   aboutOpen: boolean;
@@ -2153,11 +2010,23 @@ function PhaseChrome({
 
       {/* Left rail nav */}
       <nav className="absolute top-32 left-7 flex flex-col gap-0.5 pointer-events-auto">
+        <div className="pr-label text-white/30 mb-1">SCENE</div>
         <button
           className="pr-rail-link"
-          data-active={!fxOpen && !packsOpen && !aboutOpen ? "true" : undefined}
-          onClick={onCloseAll}
+          data-active={scene === "wheel" && !fxOpen && !packsOpen && !aboutOpen ? "true" : undefined}
+          onClick={() => { onScene("wheel"); onCloseAll(); }}
         >Wheel</button>
+        <button
+          className="pr-rail-link"
+          data-active={scene === "pendulum" && !fxOpen && !packsOpen && !aboutOpen ? "true" : undefined}
+          onClick={() => { onScene("pendulum"); onCloseAll(); }}
+        >Pendulum</button>
+        <button
+          className="pr-rail-link"
+          data-active={scene === "bars" && !fxOpen && !packsOpen && !aboutOpen ? "true" : undefined}
+          onClick={() => { onScene("bars"); onCloseAll(); }}
+        >Bars</button>
+        <div className="pr-label text-white/30 mt-3 mb-1">PANELS</div>
         <button
           className="pr-rail-link"
           data-active={fxOpen ? "true" : undefined}
@@ -2205,13 +2074,14 @@ function PhaseChrome({
 }
 
 function ArtDock({
-  playing, bpm, onTogglePlay, onAddRing, onAddLine, onClearLines, onBpm, fxOpen, onToggleFx,
+  scene, playing, bpm, onTogglePlay, onAddNode, onAddLine, onClearLines, onBpm, fxOpen, onToggleFx,
   packsOpen, onTogglePacks,
 }: {
+  scene: SceneKind;
   playing: boolean;
   bpm: number;
   onTogglePlay: () => void;
-  onAddRing: () => void;
+  onAddNode: () => void;
   onAddLine: () => void;
   onClearLines: () => void;
   onBpm: (v: number) => void;
@@ -2220,6 +2090,8 @@ function ArtDock({
   packsOpen: boolean;
   onTogglePacks: () => void;
 }) {
+  const addLabel = scene === "wheel" ? "add circle" : scene === "pendulum" ? "add bob" : "add lane";
+  const clearLabel = scene === "wheel" ? "clear lines" : scene === "pendulum" ? "clear bobs" : "clear lanes";
   return (
     <div
       className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-xl bg-neutral-950/40 pr-mono"
@@ -2237,13 +2109,15 @@ function ArtDock({
         )}
       </DockBtn>
       <span className="h-4 w-px bg-white/10" />
-      <DockBtn label="add circle" onClick={onAddRing}>
+      <DockBtn label={addLabel} onClick={onAddNode}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9" /><path d="M12 8v8M8 12h8" strokeLinecap="round" /></svg>
       </DockBtn>
-      <DockBtn label="add line" onClick={onAddLine}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 20L20 4" /></svg>
-      </DockBtn>
-      <DockBtn label="clear lines" onClick={onClearLines}>
+      {scene === "wheel" && (
+        <DockBtn label="add line" onClick={onAddLine}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 20L20 4" /></svg>
+        </DockBtn>
+      )}
+      <DockBtn label={clearLabel} onClick={onClearLines}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M6 6l12 12M6 18L18 6" /></svg>
       </DockBtn>
       <span className="h-4 w-px bg-white/10" />

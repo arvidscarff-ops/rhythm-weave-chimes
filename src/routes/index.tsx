@@ -133,10 +133,10 @@ type AudioGraph = {
  * ============================================================ */
 
 const VOICES: VoiceKind[] = ["chime", "pluck", "bell", "pad", "bass", "none"];
-const SCENES: SceneKind[] = ["wheel", "polygon", "sine", "lissajous"];
-const BACKGROUNDS: BgKind[] = ["void", "grid", "drift"];
+const SCENES: SceneKind[] = ["wheel", "pendulum", "bars"];
 type VoiceSlot = "melo" | "bass" | "atmo";
 const VOICE_SLOTS: VoiceSlot[] = ["melo", "bass", "atmo"];
+void VOICES;
 
 type WheelNote = {
   id: string;

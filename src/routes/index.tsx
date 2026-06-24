@@ -1945,6 +1945,81 @@ function LineHandle({
  * Floating glass dock (Wheel art mode)
  * ============================================================ */
 
+/* ============================================================
+ * PhaseChrome — page-level HUD: wordmark, live clock, rail, meta
+ * ============================================================ */
+
+function PhaseChrome() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const h24 = now.getHours();
+  const ampm = h24 >= 12 ? "PM" : "AM";
+  const h = ((h24 + 11) % 12) + 1;
+  const time = `${pad(h)}:${pad(now.getMinutes())}:${pad(now.getSeconds())} ${ampm}`;
+  const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  const date = `${months[now.getMonth()]} ${pad(now.getDate())}, ${now.getFullYear()}`;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10">
+      {/* Wordmark — top-left */}
+      <div className="absolute top-6 left-7 flex items-center gap-2 pointer-events-auto">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" className="text-white/85">
+          <circle cx="12" cy="12" r="9" />
+          <circle cx="12" cy="12" r="3.5" />
+          <path d="M12 3v4M12 17v4M3 12h4M17 12h4" strokeLinecap="round" />
+        </svg>
+        <div className="text-white/90" style={{ fontFamily: "var(--pr-mono)", fontSize: 14, letterSpacing: "0.04em" }}>
+          Phase<span className="text-white/45 text-[10px] align-super">®</span>
+        </div>
+      </div>
+
+      {/* Clock + HUD icons — top-right */}
+      <div className="absolute top-6 right-8 flex flex-col items-end gap-2 pointer-events-auto">
+        <div className="pr-label text-white/80 tabular-nums">{time}</div>
+        <div className="pr-label text-white/45 tabular-nums">{date}</div>
+        <div className="flex items-center gap-2 mt-1">
+          <button className="pr-hud-ring" title="ambient">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4a8 8 0 100 16V4z"/></svg>
+          </button>
+          <button className="pr-hud-ring" title="phase">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <path d="M12 3v18M3 12h18M5.5 5.5l13 13M18.5 5.5l-13 13"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Left rail nav */}
+      <nav className="absolute top-32 left-7 flex flex-col gap-0.5 pointer-events-auto">
+        <a className="pr-rail-link" data-active="true">Wheel</a>
+        <a className="pr-rail-link">FX</a>
+        <a className="pr-rail-link">Packs</a>
+        <a className="pr-rail-link">About</a>
+      </nav>
+
+      {/* Bottom-left tagline */}
+      <div className="absolute bottom-6 left-7 pointer-events-auto">
+        <div className="pr-label text-white/55 leading-[1.7]">
+          GENERATIVE<br />
+          POLYRHYTHMIC<br />
+          AMBIENT INSTRUMENT.
+        </div>
+      </div>
+
+      {/* Bottom-right meta */}
+      <div className="absolute bottom-6 right-8 text-right pointer-events-auto">
+        <div className="pr-label text-white/55">© 2026 PHASE, INC.</div>
+        <div className="pr-label text-white/35 mt-1">X / GITHUB</div>
+      </div>
+    </div>
+  );
+}
+
 function ArtDock({
   playing, bpm, onTogglePlay, onAddRing, onAddLine, onClearLines, onBpm, fxOpen, onToggleFx,
   packsOpen, onTogglePacks,

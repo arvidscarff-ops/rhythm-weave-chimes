@@ -977,7 +977,7 @@ function PhaseApp() {
   return (
     <div
       className="min-h-screen w-full flex flex-col"
-      style={{ background: isWheel ? "#0b0b0d" : "var(--pr-bg-2)", color: "var(--pr-text)" }}
+      style={{ background: isWheel ? "oklch(18% 0.02 240)" : "var(--pr-bg-2)", color: "var(--pr-text)" }}
     >
       {/* TOP CONTROL STRIP — hidden in Wheel art mode */}
       {!isWheel && (
@@ -1054,7 +1054,7 @@ function PhaseApp() {
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full block"
-          style={{ background: isWheel ? "#0b0b0d" : "oklch(0.09 0.01 260)", cursor: isWheel ? "crosshair" : "default" }}
+          style={{ background: isWheel ? "oklch(18% 0.02 240)" : "oklch(0.09 0.01 260)", cursor: isWheel ? "crosshair" : "default" }}
           onPointerDown={onCanvasPointerDown}
           onPointerMove={onCanvasPointerMove}
           onPointerLeave={onCanvasPointerLeave}

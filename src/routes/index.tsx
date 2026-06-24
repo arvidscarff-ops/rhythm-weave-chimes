@@ -1894,28 +1894,49 @@ function LineHandle({
  * ============================================================ */
 
 function PhaseReadout({
-  wheel, bpm, hoverRingId, topo,
+  scene, wheel, pendulum, bars, bpm, hoverRingId, topo,
 }: {
+  scene: SceneKind;
   wheel: WheelState;
+  pendulum: PendulumState;
+  bars: BarsState;
   bpm: number;
   hoverRingId: string | null;
   topo: number;
 }) {
   void topo;
+  let rows: { id: string; label: string; period: number }[] = [];
+  if (scene === "wheel") {
+    rows = wheel.rings.map((r) => ({
+      id: r.id,
+      label: `${r.beats}/${r.subdivision}`,
+      period: ringPeriodSec(r, bpm),
+    }));
+  } else if (scene === "pendulum") {
+    rows = pendulum.bobs.map((b, i) => ({
+      id: b.id,
+      label: `P${i + 1}`,
+      period: pendPeriodSec(b, bpm),
+    }));
+  } else {
+    rows = bars.lanes.map((l) => {
+      const r = BAR_RATIOS[l.ratioIndex % BAR_RATIOS.length];
+      return { id: l.id, label: `${r.num}/${r.den}`, period: barPeriodSec(l, bpm) };
+    });
+  }
   return (
     <div className="pointer-events-none absolute left-7 z-10" style={{ top: 260 }}>
-      <div className="pr-label text-white/30 mb-2">READOUT</div>
+      <div className="pr-label text-white/30 mb-2">READOUT · {scene.toUpperCase()}</div>
       <div className="flex flex-col gap-1 tabular-nums">
-        {wheel.rings.map((r) => {
+        {rows.map((r) => {
           const active = r.id === hoverRingId;
-          const period = ringPeriodSec(r, bpm);
           return (
             <div
               key={r.id}
               className="pr-label transition-opacity"
               style={{ color: active ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.32)" }}
             >
-              {r.beats}/{r.subdivision} · {period.toFixed(2)}S
+              {r.label} · {r.period.toFixed(2)}S
             </div>
           );
         })}

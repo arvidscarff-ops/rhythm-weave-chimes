@@ -1403,94 +1403,90 @@ function wheelHandleClick(wh: WheelState, px: number, py: number, W: number, H: 
   return false;
 }
 
+const burstTracker = new WeakMap<object, number>();
+function maybeBurst(
+  key: object, intensity: number,
+  starbursts: { x: number; y: number; life: number; max: number }[],
+  x: number, y: number, sparkles: Sparkle[],
+) {
+  const prev = burstTracker.get(key) ?? 0;
+  burstTracker.set(key, intensity);
+  if (intensity > 0.85 && prev < 0.5 && starbursts.length < 12) {
+    starbursts.push({ x, y, life: 0.45, max: 0.45 });
+    // burst of sparkles for extra "glitter"
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 4 + Math.random() * 18;
+      spawnSparkle(sparkles, x + Math.cos(a) * r, y + Math.sin(a) * r, 200);
+    }
+  }
+}
+
 function drawWheelScene(
-  ctx: CanvasRenderingContext2D, W: number, H: number, wh: WheelState, voices: VoiceSel,
-  _dt: number = 0, hoverRingId: string | null = null,
+  ctx: CanvasRenderingContext2D, W: number, H: number, wh: WheelState,
+  dt: number, T: number, pal: LaserPalette, hoverRingId: string | null,
+  sparkles: Sparkle[], starbursts: { x: number; y: number; life: number; max: number }[],
 ) {
   const cx = W / 2, cy = H / 2;
   const maxR = Math.min(W, H) / 2;
 
-  // 1) rings — restrained 1px hairlines, brighten on flash or hover
+  // central emitter glow — the laser "source"
+  drawBurnDot(ctx, cx, cy, pal, 0.55, 4);
+
+  // 1) rings as laser arcs
   for (const ring of wh.rings) {
     const R = ringRadiusPx(ring, W, H);
     const hovered = ring.id === hoverRingId;
-    const base = hovered ? 0.20 : 0.06;
-    ctx.strokeStyle = `rgba(255,255,255,${(base + ring.flash * 0.35).toFixed(3)})`;
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, TAU);
-    ctx.stroke();
+    const seed = hashSeed(ring.id);
+    const intensity = (hovered ? 0.85 : 0.55) + ring.flash * 0.6;
+    drawLaserArc(ctx, cx, cy, R, pal, { intensity, seed, t: T });
+    // ambient shimmer along the ring
+    sparkleArc(sparkles, cx, cy, R, hovered ? 6 : 2.5, dt, 140);
   }
 
-  // 2) trigger lines — quiet hairline chords with rim ticks
+  // 2) trigger lines as laser beams
   for (const line of wh.lines) {
-    const x1 = cx + Math.cos(line.angle) * maxR * 0.96;
-    const y1 = cy + Math.sin(line.angle) * maxR * 0.96;
-    const x2 = cx - Math.cos(line.angle) * maxR * 0.96;
-    const y2 = cy - Math.sin(line.angle) * maxR * 0.96;
-    ctx.strokeStyle = `rgba(255,255,255,${(0.10 + line.flash * 0.30).toFixed(3)})`;
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-    ctx.stroke();
-    // ink-bleed ripple at each crossing (Fluid Inversion)
+    const x1 = cx + Math.cos(line.angle) * maxR * 0.98;
+    const y1 = cy + Math.sin(line.angle) * maxR * 0.98;
+    const x2 = cx - Math.cos(line.angle) * maxR * 0.98;
+    const y2 = cy - Math.sin(line.angle) * maxR * 0.98;
+    const seed = hashSeed(line.id);
+    const intensity = 0.65 + line.flash * 0.65;
+    drawLaserLine(ctx, x1, y1, x2, y2, pal, { intensity, seed, t: T });
+    // beam endpoint burns
+    drawBurnDot(ctx, x1, y1, pal, 0.45 + line.flash * 0.6, 4);
+    drawBurnDot(ctx, x2, y2, pal, 0.45 + line.flash * 0.6, 4);
+    // glittering scatter along the beam
+    sparkleLine(sparkles, x1, y1, x2, y2, 4 + line.flash * 18, dt, 140);
+
+    // promote crossing sparks into starbursts
     for (const s of line.sparks) {
       const sx = cx + Math.cos(s.x) * s.y * (Math.min(W, H) / 2);
       const sy = cy + Math.sin(s.x) * s.y * (Math.min(W, H) / 2);
-      // s.t starts at 0.6 (life). Convert to elapsed k in [0..1] (life 0.5s scaled).
-      const elapsed = 0.6 - s.t;
-      const k = Math.max(0, Math.min(1, elapsed / 0.5));
-      const radius = 40 * (1 - Math.pow(1 - k, 3)); // exp ease-out
-      const alpha = Math.pow(1 - k, 2.2) * 0.55;
-      if (alpha < 0.01) continue;
-      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, Math.max(2, radius));
-      g.addColorStop(0, `rgba(255,255,255,0)`);
-      g.addColorStop(0.55, `rgba(255,255,255,${(alpha * 0.9).toFixed(3)})`);
-      g.addColorStop(1, `rgba(255,255,255,0)`);
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(sx, sy, Math.max(2, radius), 0, TAU);
-      ctx.fill();
+      // s.t starts at 0.6 — fire burst only on first frame
+      if (s.t > 0.58 && starbursts.length < 12) {
+        starbursts.push({ x: sx, y: sy, life: 0.5, max: 0.5 });
+      }
     }
   }
 
-  // 3) notes — soft discs + kinetic trails
+  // 3) notes — bright laser-tipped beads with kinetic glitter trails
   for (const ring of wh.rings) {
     const R = ringRadiusPx(ring, W, H);
-    const color = voiceSlotColor(ring.voiceSlot, true);
     for (const n of ring.notes) {
       const w = norm2pi(n.angle + ring.phase);
       const nx = cx + Math.cos(w) * R;
       const ny = cy + Math.sin(w) * R;
-      const inten = n.flash;
-
-      // kinetic trail (6 samples behind the note)
       const trail = getTrail(n);
-      // draw oldest → newest
       for (let i = 0; i < trail.length; i++) {
         const p = trail[i];
         const tk = (i + 1) / (trail.length + 1);
-        const tr = 1.4 + tk * 2.2;
-        const ta = 0.04 + tk * 0.08;
-        ctx.fillStyle = color.replace("a", ta.toFixed(3));
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, tr, 0, TAU);
-        ctx.fill();
+        drawBurnDot(ctx, p.x, p.y, pal, 0.18 * tk, 2);
       }
-      // sample current position into trail (cap length)
       trail.push({ x: nx, y: ny });
       if (trail.length > 6) trail.shift();
-
-      // soft note disc
-      const baseR = 3.5 + inten * 5;
-      const g = ctx.createRadialGradient(nx, ny, 0, nx, ny, baseR + 10);
-      g.addColorStop(0, color.replace("a", (0.85).toFixed(3)));
-      g.addColorStop(0.45, color.replace("a", (0.3 + inten * 0.4).toFixed(3)));
-      g.addColorStop(1, color.replace("a", "0"));
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(nx, ny, baseR + 10, 0, TAU);
-      ctx.fill();
+      drawBurnDot(ctx, nx, ny, pal, 0.7 + n.flash * 0.4, 5);
+      maybeBurst(n, n.flash, starbursts, nx, ny, sparkles);
     }
   }
 }

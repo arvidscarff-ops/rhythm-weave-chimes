@@ -976,7 +976,7 @@ function PhaseApp() {
 
   return (
     <div
-      className={"min-h-screen w-full flex flex-col " + (isWheel ? "pr-stage" : "")}
+      className={"min-h-screen w-full flex flex-col relative " + (isWheel ? "pr-stage" : "")}
       style={{ background: isWheel ? undefined : "var(--pr-bg-2)", color: "var(--pr-text)" }}
     >
       {isWheel && <PhaseChrome />}

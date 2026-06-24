@@ -1006,75 +1006,40 @@ function PhaseApp() {
     const c = canvasRef.current; if (!c) return;
     const ctx2d = c.getContext("2d"); if (!ctx2d) return;
     const e = engineRef.current;
-    const k = knobsRef.current;
-    const v = voicesRef.current;
     const a = audioRef.current;
-    const audioNow = a ? a.ctx.currentTime : 0;
 
     const W = e.w, H = e.h;
     ctx2d.setTransform(e.dpr, 0, 0, e.dpr, 0, 0);
-    const isWheelScene = sceneRef.current === "wheel";
 
-    if (isWheelScene) {
-      // ART SURFACE: opaque charcoal base + vignette + tiled grain
-      paintArtBackground(ctx2d, W, H, grainPatternRef);
-    } else {
-      // background fade (creates motion trails) — non-wheel scenes
-      ctx2d.fillStyle = "oklch(0.09 0.01 260 / 0.35)";
-      ctx2d.fillRect(0, 0, W, H);
-      drawBackground(ctx2d, W, H, bgRef.current, e, dt);
-    }
+    // Always: art surface (transparent + bloom + grain)
+    paintArtBackground(ctx2d, W, H, grainPatternRef);
 
-    // process pending visual triggers whose time has come
-    if (a) {
-      const pv = e.pendingVisuals;
-      for (let i = pv.length - 1; i >= 0; i--) {
-        if (pv[i].time <= audioNow) {
-          const ev = pv[i];
-          if (ev.vertex < k.multiply) {
-            spawnTriggerVisual(e, ev, sceneRef.current, W, H, k);
-            e.lastFire[ev.vertex] = audioNow;
-          }
-          pv.splice(i, 1);
-        }
-      }
-    }
-
-    // draw scene
-    if (isWheelScene) {
-      // update wheel physics + trigger detection (audio + visuals)
-      if (a && playingRef.current) {
-        updateWheel(e.wheel, dt, a, bpmRef.current, voicesRef.current, knobsRef.current, packRef.current);
+    const playing = !!(a && playingRef.current);
+    const scene = sceneRef.current;
+    ctx2d.globalCompositeOperation = "lighter";
+    if (scene === "wheel") {
+      if (playing) {
+        updateWheel(e.wheel, dt, a!, bpmRef.current, voicesRef.current, knobsRef.current, packRef.current);
       } else {
-        // decay flashes even when paused
         decayWheelFlashes(e.wheel, dt);
       }
-      ctx2d.globalCompositeOperation = "lighter";
       drawWheelScene(ctx2d, W, H, e.wheel, voicesRef.current, dt, hoverRingIdRef.current);
+    } else if (scene === "pendulum") {
+      if (playing) {
+        updatePendulum(e.pendulum, dt, a!, bpmRef.current, knobsRef.current, packRef.current);
+      } else {
+        decayPendulumFlashes(e.pendulum, dt);
+      }
+      drawPendulumScene(ctx2d, W, H, e.pendulum, hoverRingIdRef.current);
     } else {
-      ctx2d.globalCompositeOperation = "lighter";
-      if (sceneRef.current === "polygon") drawPolygonScene(ctx2d, W, H, e, k, v, audioNow);
-      else if (sceneRef.current === "sine") drawSineScene(ctx2d, W, H, e, k, v, audioNow);
-      else drawLissajousScene(ctx2d, W, H, e, k, v, audioNow);
+      if (playing) {
+        updateBars(e.bars, dt, a!, bpmRef.current, knobsRef.current, packRef.current);
+      } else {
+        decayBarsFlashes(e.bars, dt);
+      }
+      drawBarsScene(ctx2d, W, H, e.bars, hoverRingIdRef.current);
     }
-
-    // particles
-    if (!isWheelScene) drawParticles(ctx2d, e, dt);
-
     ctx2d.globalCompositeOperation = "source-over";
-
-    if (!isWheelScene) {
-      ctx2d.save();
-      ctx2d.fillStyle = "oklch(0.6 0.04 80 / 0.07)";
-      ctx2d.font = "600 64px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto";
-      ctx2d.textAlign = "center";
-      ctx2d.textBaseline = "middle";
-      ctx2d.letterSpacing = "12px" as unknown as string;
-      ctx2d.fillText("PHASE", W / 2, H / 2 - 16);
-      ctx2d.font = "500 18px ui-sans-serif, system-ui";
-      ctx2d.fillText("RHYTHMS", W / 2, H / 2 + 30);
-      ctx2d.restore();
-    }
   };
 
   /* ---- Transport ---- */
@@ -1082,15 +1047,6 @@ function PhaseApp() {
     const a = ensureAudio();
     applyFxState(a, fxState);
     if (a.ctx.state === "suspended") await a.ctx.resume();
-    const e = engineRef.current;
-    if (!playing) {
-      // (re)seed timers anchored at now
-      const now = a.ctx.currentTime;
-      e.nextFire = new Array(knobs.multiply).fill(0).map((_, i) => now + vertexPeriod(i, e.basePeriod) * 0.2);
-      e.lastFire = new Array(knobs.multiply).fill(-999);
-      e.pendingVisuals = [];
-      e.startedAt = now;
-    }
     setPlaying((p) => !p);
   };
 

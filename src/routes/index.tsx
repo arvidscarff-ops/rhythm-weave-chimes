@@ -1061,8 +1061,7 @@ function PhaseApp() {
               onPointerMove={onCanvasPointerMove}
               onPointerLeave={onCanvasPointerLeave}
             />
-            <div className="absolute inset-0 pointer-events-none">
-              <WheelOverlays
+            <WheelOverlays
                 wheel={engineRef.current.wheel}
                 topo={topo}
                 canvasW={canvasRect.w}
@@ -1074,8 +1073,7 @@ function PhaseApp() {
                 onSetLineAngle={setLineAngle}
                 onUpdateRing={updateRing}
                 onHoverRing={(id) => { hoverRingIdRef.current = id; setHoverRing(id); }}
-              />
-            </div>
+            />
           </>
         ) : (
           <canvas

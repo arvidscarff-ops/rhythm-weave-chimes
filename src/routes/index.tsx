@@ -1823,7 +1823,9 @@ function RingChip({
         left, top,
         background: "transparent",
         color: "rgba(255,255,255,0.45)",
-        fontFamily: "'Inter', ui-sans-serif, system-ui",
+        fontFamily: "var(--pr-mono)",
+        letterSpacing: "0.15em",
+        textTransform: "uppercase",
         opacity: 0.6,
       }}
       onMouseEnter={() => onHover?.(true)}

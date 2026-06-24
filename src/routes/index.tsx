@@ -2066,6 +2066,7 @@ function PhaseChrome({
   onOpenPanel: (p: PanelId) => void;
   onCloseAll: () => void;
 }) {
+  const { user, isAdmin } = useAuth();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
@@ -2137,6 +2138,17 @@ function PhaseChrome({
           data-active={aboutOpen ? "true" : undefined}
           onClick={() => onOpenPanel("about")}
         >About</button>
+        {isAdmin && (
+          <Link to="/dev" className="pr-rail-link">Dev</Link>
+        )}
+        {!user ? (
+          <Link to="/auth" className="pr-rail-link">Sign in</Link>
+        ) : (
+          <button className="pr-rail-link" onClick={async () => {
+            const { supabase } = await import("@/integrations/supabase/client");
+            await supabase.auth.signOut();
+          }}>Sign out</button>
+        )}
       </nav>
 
       {/* Bottom-left tagline */}

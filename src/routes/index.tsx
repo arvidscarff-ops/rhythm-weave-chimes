@@ -981,6 +981,7 @@ function PhaseApp() {
             setPacksOpen(p === "packs" ? !packsOpen : false);
             setAboutOpen(p === "about" ? !aboutOpen : false);
           }}
+          onCloseAll={() => { setFxOpen(false); setPacksOpen(false); setAboutOpen(false); }}
         />
       )}
       {isWheel && (

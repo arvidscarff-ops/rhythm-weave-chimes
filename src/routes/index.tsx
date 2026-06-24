@@ -898,61 +898,6 @@ function PhaseApp() {
     warmCustomPack(a.ctx, activePack).catch(() => {});
   }, [activePack]);
 
-  /* ---- Reset rhythm when multiply / speed changes ---- */
-  useEffect(() => {
-    const e = engineRef.current;
-    const a = audioRef.current;
-    const now = a ? a.ctx.currentTime : 0;
-    const base = 8 / knobs.speed;
-    e.basePeriod = base;
-    e.nextFire = new Array(knobs.multiply).fill(0).map((_, i) => now + vertexPeriod(i, base) * 0.3);
-    e.lastFire = new Array(knobs.multiply).fill(-999);
-  }, [knobs.multiply, knobs.speed]);
-
-  /* ---- Scheduler (look-ahead 25ms tick) ---- */
-  useEffect(() => {
-    let interval = 0;
-    const tick = () => {
-      const a = audioRef.current;
-      if (!a || !playingRef.current) return;
-      // Wheel scene has its own RAF-driven triggering; skip polygon scheduler.
-      if (sceneRef.current === "wheel") return;
-      const e = engineRef.current;
-      const k = knobsRef.current;
-      const v = voicesRef.current;
-      const horizon = a.ctx.currentTime + 0.15;
-
-      // ensure arrays sized to multiply
-      if (e.nextFire.length !== k.multiply) {
-        const now = a.ctx.currentTime;
-        e.nextFire = new Array(k.multiply).fill(0).map((_, i) => now + vertexPeriod(i, e.basePeriod) * 0.3);
-        e.lastFire = new Array(k.multiply).fill(-999);
-      }
-
-      for (let i = 0; i < k.multiply; i++) {
-        const period = vertexPeriod(i, e.basePeriod);
-        while (e.nextFire[i] < horizon) {
-          const t = e.nextFire[i];
-          const voice = vertexVoice(i, v);
-          const freq = vertexFreq(i, k.pitch);
-          if (voice !== "none") {
-            playVoice(a.ctx, a.preFx, voice, freq, k.fx2, t);
-          }
-          e.pendingVisuals.push({
-            vertex: i,
-            time: t,
-            freq,
-            voice,
-            laneColor: vertexColor(i, v),
-          });
-          e.nextFire[i] = t + period;
-        }
-      }
-    };
-    interval = window.setInterval(tick, 25);
-    return () => clearInterval(interval);
-  }, []);
-
   /* ---- RAF render loop ---- */
   useEffect(() => {
     let raf = 0;

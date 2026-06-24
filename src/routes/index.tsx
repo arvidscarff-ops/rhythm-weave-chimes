@@ -1579,7 +1579,9 @@ function updatePendulum(
 
 function drawPendulumScene(
   ctx: CanvasRenderingContext2D, W: number, H: number,
-  pend: PendulumState, hoverId: string | null,
+  pend: PendulumState, dt: number, T: number, pal: LaserPalette,
+  hoverId: string | null,
+  sparkles: Sparkle[], starbursts: { x: number; y: number; life: number; max: number }[],
 ) {
   const ax = W / 2;
   const ay = H * 0.16;
@@ -1587,44 +1589,28 @@ function drawPendulumScene(
   const minLen = H * 0.30;
   const n = pend.bobs.length;
 
-  // anchor bar
-  ctx.strokeStyle = "rgba(255,255,255,0.22)";
-  ctx.lineWidth = 0.5;
-  ctx.beginPath();
-  ctx.moveTo(ax - 220, ay); ctx.lineTo(ax + 220, ay);
-  ctx.stroke();
+  // anchor bar as a thin laser
+  drawLaserLine(ctx, ax - 240, ay, ax + 240, ay, pal,
+    { intensity: 0.55, seed: 0.13, t: T });
+  drawBurnDot(ctx, ax - 240, ay, pal, 0.45, 3);
+  drawBurnDot(ctx, ax + 240, ay, pal, 0.45, 3);
 
   pend.bobs.forEach((b, i) => {
     const t = n === 1 ? 0.5 : i / (n - 1);
     const len = minLen + (maxLen - minLen) * t;
-    // swing amplitude in radians (small angle illusion, looks meditative)
     const amp = 0.55;
     const ang = Math.sin(b.phase * Math.PI * 2) * amp;
     const bx = ax + Math.sin(ang) * len;
     const by = ay + Math.cos(ang) * len;
     const hot = hoverId === b.id;
+    const seed = hashSeed(b.id);
+    const intensity = (hot ? 0.85 : 0.6) + b.flash * 0.55;
 
-    // string
-    ctx.strokeStyle = hot ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.22)";
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
-    ctx.stroke();
+    drawLaserLine(ctx, ax, ay, bx, by, pal, { intensity, seed, t: T });
+    sparkleLine(sparkles, ax, ay, bx, by, hot ? 5 : 2, dt, 140);
 
-    // bob glow
-    const baseR = 6 + b.flash * 10;
-    const g = ctx.createRadialGradient(bx, by, 0, bx, by, 60);
-    const a = 0.35 + b.flash * 0.55;
-    g.addColorStop(0, `rgba(180, 220, 255, ${a})`);
-    g.addColorStop(0.4, `rgba(120, 180, 230, ${a * 0.4})`);
-    g.addColorStop(1, "rgba(120,180,230,0)");
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(bx, by, 60, 0, Math.PI * 2); ctx.fill();
-
-    // crisp ring
-    ctx.strokeStyle = `rgba(220,235,255,${0.55 + b.flash * 0.4})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(bx, by, baseR, 0, Math.PI * 2); ctx.stroke();
+    drawBurnDot(ctx, bx, by, pal, 0.8 + b.flash * 0.6, 6 + b.flash * 4);
+    maybeBurst(b, b.flash, starbursts, bx, by, sparkles);
   });
 }
 

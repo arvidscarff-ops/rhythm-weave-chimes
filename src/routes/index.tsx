@@ -508,6 +508,7 @@ function PhaseApp() {
   const [fxState, setFxState] = useState<FxState>(DEFAULT_FX_STATE);
   const [fxOpen, setFxOpen] = useState(false);
   const [packsOpen, setPacksOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [selectedPack, setSelectedPack] = useState<PackId>("moss");
   // topology bump: rings/lines/notes counts so DOM overlays re-render
   const [topo, setTopo] = useState(0);
@@ -970,7 +971,19 @@ function PhaseApp() {
       className={"min-h-screen w-full flex flex-col relative " + (isWheel ? "pr-stage" : "")}
       style={{ background: isWheel ? undefined : "var(--pr-bg-2)", color: "var(--pr-text)" }}
     >
-      {isWheel && <PhaseChrome />}
+      {isWheel && (
+        <PhaseChrome
+          fxOpen={fxOpen}
+          packsOpen={packsOpen}
+          aboutOpen={aboutOpen}
+          onOpenPanel={(p) => {
+            setFxOpen(p === "fx" ? !fxOpen : false);
+            setPacksOpen(p === "packs" ? !packsOpen : false);
+            setAboutOpen(p === "about" ? !aboutOpen : false);
+          }}
+          onCloseAll={() => { setFxOpen(false); setPacksOpen(false); setAboutOpen(false); }}
+        />
+      )}
       {isWheel && (
         <PhaseReadout
           wheel={engineRef.current.wheel}
@@ -1095,9 +1108,17 @@ function PhaseApp() {
             onClearLines={clearLines}
             onBpm={setBpm}
             fxOpen={fxOpen}
-            onToggleFx={() => setFxOpen((v) => !v)}
+            onToggleFx={() => {
+              const next = !fxOpen;
+              setFxOpen(next);
+              if (next) { setPacksOpen(false); setAboutOpen(false); }
+            }}
             packsOpen={packsOpen}
-            onTogglePacks={() => setPacksOpen((v) => !v)}
+            onTogglePacks={() => {
+              const next = !packsOpen;
+              setPacksOpen(next);
+              if (next) { setFxOpen(false); setAboutOpen(false); }
+            }}
           />
         )}
         {isWheel && (
@@ -1119,6 +1140,7 @@ function PhaseApp() {
             }}
           />
         )}
+        {isWheel && <AboutDrawer open={aboutOpen} onClose={() => setAboutOpen(false)} />}
       </main>
 
       {/* BOTTOM BPM DOCK — hidden in Wheel art mode */}
@@ -1947,7 +1969,16 @@ function PhaseReadout({
   );
 }
 
-function PhaseChrome() {
+type PanelId = "fx" | "packs" | "about";
+function PhaseChrome({
+  fxOpen, packsOpen, aboutOpen, onOpenPanel, onCloseAll,
+}: {
+  fxOpen: boolean;
+  packsOpen: boolean;
+  aboutOpen: boolean;
+  onOpenPanel: (p: PanelId) => void;
+  onCloseAll: () => void;
+}) {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
@@ -1999,10 +2030,26 @@ function PhaseChrome() {
 
       {/* Left rail nav */}
       <nav className="absolute top-32 left-7 flex flex-col gap-0.5 pointer-events-auto">
-        <a className="pr-rail-link" data-active="true">Wheel</a>
-        <a className="pr-rail-link">FX</a>
-        <a className="pr-rail-link">Packs</a>
-        <a className="pr-rail-link">About</a>
+        <button
+          className="pr-rail-link"
+          data-active={!fxOpen && !packsOpen && !aboutOpen ? "true" : undefined}
+          onClick={onCloseAll}
+        >Wheel</button>
+        <button
+          className="pr-rail-link"
+          data-active={fxOpen ? "true" : undefined}
+          onClick={() => onOpenPanel("fx")}
+        >FX</button>
+        <button
+          className="pr-rail-link"
+          data-active={packsOpen ? "true" : undefined}
+          onClick={() => onOpenPanel("packs")}
+        >Packs</button>
+        <button
+          className="pr-rail-link"
+          data-active={aboutOpen ? "true" : undefined}
+          onClick={() => onOpenPanel("about")}
+        >About</button>
       </nav>
 
       {/* Bottom-left tagline */}
@@ -2151,7 +2198,7 @@ function FxDrawer({
         zIndex: 4,
       }}
     >
-      <div className="h-full grid grid-cols-4 divide-x divide-white/[0.07]">
+      <div className="pr-stagger h-full grid grid-cols-4 divide-x divide-white/[0.07]">
         <FxChannel
           title="reverb"
           types={["room", "hall", "plate", "cosmic"] as ReverbType[]}
@@ -2324,7 +2371,7 @@ function PacksDrawer({
           ring index → voice · hover to audition
         </div>
       </div>
-      <div className="px-3 pb-4 grid grid-cols-3 gap-3">
+      <div className="pr-stagger px-3 pb-4 grid grid-cols-3 gap-3">
         {PACK_IDS.map((pid) => {
           const pack = PACKS[pid];
           const active = pid === selected;
@@ -2371,6 +2418,70 @@ function PacksDrawer({
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+ * About Drawer — project info window
+ * ============================================================ */
+
+function AboutDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const sections: { label: string; body: string }[] = [
+    {
+      label: "concept",
+      body:
+        "Phase is a generative polyrhythmic instrument. Concentric rings rotate at independent rates; whenever a ring crosses a radial line, a note sounds. Compositions emerge from the slow drift of mathematics into and out of phase.",
+    },
+    {
+      label: "engine",
+      body:
+        "All sound is synthesised live in the browser through the Web Audio API — additive partials, FM operators and filtered noise routed through reverb, chorus, grain and tone. No samples. No network. Just numbers becoming air.",
+    },
+    {
+      label: "interaction",
+      body:
+        "Click the canvas to add rings and lines. Hover any ring to inspect its period. Use the dock to load a sound pack, sculpt the FX chain or set the project tempo. Hold space to pause time.",
+    },
+    {
+      label: "credits",
+      body:
+        "Designed and engineered as a study in ambient interfaces. Typography in JetBrains Mono. Colour space in OKLCH. Built with TanStack Start.",
+    },
+  ];
+  return (
+    <div
+      data-state={open ? "open" : "closed"}
+      className="fx-drawer absolute left-1/2 bottom-[88px] rounded-2xl border border-white/10 backdrop-blur-xl bg-neutral-950/40 pr-mono"
+      style={{
+        width: "min(560px, calc(100vw - 48px))",
+        boxShadow:
+          "0 24px 70px rgba(0,0,0,0.65), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.03)",
+        zIndex: 4,
+      }}
+    >
+      <div className="px-5 pt-4 pb-3 flex items-baseline justify-between border-b border-white/[0.06]">
+        <div className="text-[10px] tracking-[0.22em] uppercase text-white/70">about · phase</div>
+        <button
+          onClick={onClose}
+          className="text-[9px] tracking-[0.22em] uppercase text-white/40 hover:text-white/90 transition-colors"
+          aria-label="close"
+        >
+          close
+        </button>
+      </div>
+      <div className="pr-stagger px-5 py-4 flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
+        {sections.map((s) => (
+          <div key={s.label} className="flex flex-col gap-1.5">
+            <div className="text-[9px] tracking-[0.22em] uppercase text-white/40">{s.label}</div>
+            <p className="text-[11.5px] leading-[1.65] text-white/75">{s.body}</p>
+          </div>
+        ))}
+        <div className="flex items-center justify-between pt-2 border-t border-white/[0.05]">
+          <span className="text-[9px] tracking-[0.22em] uppercase text-white/35">v 0.4 · 2026</span>
+          <span className="text-[9px] tracking-[0.22em] uppercase text-white/35">© phase, inc.</span>
+        </div>
       </div>
     </div>
   );

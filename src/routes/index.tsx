@@ -1107,9 +1107,17 @@ function PhaseApp() {
             onClearLines={clearLines}
             onBpm={setBpm}
             fxOpen={fxOpen}
-            onToggleFx={() => setFxOpen((v) => !v)}
+            onToggleFx={() => {
+              const next = !fxOpen;
+              setFxOpen(next);
+              if (next) { setPacksOpen(false); setAboutOpen(false); }
+            }}
             packsOpen={packsOpen}
-            onTogglePacks={() => setPacksOpen((v) => !v)}
+            onTogglePacks={() => {
+              const next = !packsOpen;
+              setPacksOpen(next);
+              if (next) { setFxOpen(false); setAboutOpen(false); }
+            }}
           />
         )}
         {isWheel && (

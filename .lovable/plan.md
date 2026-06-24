@@ -1,56 +1,60 @@
-## Sound Packs Panel
 
-Add a folded "Packs" window that expands upward from the bottom ArtDock (mirroring the FX drawer pattern). User clicks a pack → every note's voice is reassigned by ring index (ring 0 → voice 0, ring 1 → voice 1, … wrapping at 6).
+# Phase — Design System Enforcement Pass
 
-### The 3 packs (6 voices each, all pure Web Audio)
+Acknowledging the four-pillar visual contract. This pass aligns the existing app (charcoal canvas, wheel engine, ArtDock, FX & Packs drawers) to the exact tokens, with no generic shadcn surfaces leaking through.
 
-**MOSS** — organic, ethereal, wet
-1. Glass Bell — detuned sine triad, long bell envelope
-2. Moss Pluck — triangle + lowpass with fast pluck env, soft body
-3. Droplet — pitched sine blip with rapid downward pitch sweep + tiny noise tick
-4. Reed Pad — stacked sawtooth through narrow bandpass, slow attack
-5. Air Chime — high sine + filtered noise puff
-6. Sub Hum — sine sub with very slow LFO on amp
+## 1. Global Canvas & Texture
 
-**PRISM** — bright, crystalline, sharp
-1. Crystal — FM (sine carrier, sine modulator @ 3:1), short bell tail
-2. Spark Pluck — square through resonant lowpass, ultra-fast decay
-3. Glass Ping — two high sines a fifth apart, very short
-4. Shimmer — sine + octave-up sine, slow tremolo
-5. Coin — bandpass-filtered noise burst pitched up
-6. Ribbon Bass — triangle bass with light saturation curve
-
-**OBSIDIAN** — dark, metallic, deep
-1. Mallet — FM with inharmonic ratio (1:1.41) for metallic clang
-2. Dub Pluck — sine + sub-sine, lowpass sweep down
-3. Stone — short filtered-noise hit + pitched thump
-4. Drone Pad — detuned sawtooth pair, very slow attack/release
-5. Iron Bell — three inharmonic sine partials, medium decay
-6. Cavern Sub — sine sub with pitch dip on attack
-
-### Implementation
-
-**`src/lib/sound/packs.ts`** (new)
-- Export `VoiceId` type, `PackId = 'moss' | 'prism' | 'obsidian'`.
-- Export `PACKS: Record<PackId, { name, blurb, voices: VoiceSpec[] }>`.
-- `VoiceSpec` = pure data: `{ id, name, kind: 'chime'|'pluck'|'bell'|'pad'|'bass'|'fm'|'droplet'|'noise', params: {...} }`.
-- Export `playPackVoice(ctx, dest, spec, freq, when, velocity)` — single dispatcher that builds the right oscillator/filter/envelope graph per `kind`. Uses the same gain-staging discipline as current `playVoice` (low peaks, refractory respected by caller, cleanup on stop).
+**`src/styles.css`**
+- Replace current `--pr-bg` with `oklch(18% 0.02 240)`; set as `body` background.
+- Add a fixed full-viewport `::before` noise layer: tiny SVG noise data-URI, `mix-blend-mode: overlay`, `opacity: 0.06`, `pointer-events: none`, `z-index: 0`.
+- Define a `--pr-grain-strength` token so the canvas renderer and the CSS layer stay in sync (we keep the existing in-canvas cached noise pattern for the art surface, but lower its alpha so the two layers compound to ~8% perceived grain instead of stacking).
+- Register a tracking utility chain (`.pr-mono`, `.pr-label`) bound to a monospace stack (`"JetBrains Mono", ui-monospace, …`) with `text-xs` + `tracking-[0.15em]` + `uppercase`. Load JetBrains Mono via `<link>` in `src/routes/__root.tsx` (never `@import` a URL in CSS per the v4 rules).
 
 **`src/routes/index.tsx`**
-- Extend `WheelState.rings[i]` with `voiceIndex: number` (0–5), default = ring creation order mod 6. Notes already inherit voice from ring, so no per-note change needed.
-- Add `selectedPack: PackId` to engine state, default `'moss'`.
-- In the wheel trigger path, replace the current `playVoice` call with `playPackVoice(ctx, fxIn, PACKS[selectedPack].voices[ring.voiceIndex], freq, when, vel)`.
-- Add `PacksDrawer` component (sibling of `FxDrawer`): glass panel, `rounded-2xl`, `backdrop-blur-md`, border `white/10`, expands upward from the dock with a scale+fade transition (~220ms, ease-out). Width ~520px, height auto, never taller than ~38vh.
-- Layout inside drawer: three pack cards in a row. Each card shows pack name in Inter 14px tracking-wide, a one-line blurb at 60% opacity, and a 2×3 grid of voice chips (name only). Selected pack has a hairline ring + faint inner glow. Hovering a voice chip auditions that voice once at A4.
-- Add a "Packs" toggle button to `ArtDock` next to the existing FX toggle, same hairline styling.
-- Selecting a pack: set `selectedPack`, no other state change. All future triggers use the new pack; ring→voice mapping is preserved.
+- Swap any remaining geometric-sans labels (dock button captions, drawer headers, BPM readout, ghost readout, ring chips) to `.pr-label`.
+- Cap label sizes at `text-xs`; values/ratios use the same class but with tabular-nums.
 
-**Animation**
-- Use existing keyframes: drawer panel uses `animate-scale-in` on open, fades out on close via local state + `transition-opacity duration-200`.
-- Origin set to `bottom center` so it physically grows from the dock.
+## 2. Ghost Readouts & HUD
 
-### Out of scope
-- No per-note voice override UI (mapping stays ring-based as chosen).
-- No saving/loading packs to storage.
-- No changes to FX drawer, BPM, or trigger math.
-- No new dependencies.
+Canvas-side in `updateWheel` / scene draw:
+- Replace any 1px concentric guide strokes with `ctx.lineWidth = 0.5` (account for devicePixelRatio so it stays a true hairline) using `rgba(255,255,255,0.06)`.
+- Render ring period text (e.g. `4/4`, `11/13`) and lane labels directly on the canvas in the monospace family at **5–8% alpha** baseline. Track a `hoverRingId` (already partially present for the ghost readout) and tween its alpha toward `0.20` via the same `setTargetAtTime`-style decay we use for ripples — never reach 1.0.
+- The existing center "Ghost Readout" stays but is rebound to the same opacity rules (`0.05` idle → `0.20` on hover) and uses the monospace family.
+
+## 3. Kinetic Trigger Lines
+
+Refactor line rendering in the wheel scene:
+- Trigger lines idle as the same 0.5px hairlines at ~10% alpha (just enough to read geometry).
+- On a note crossing, push an `InkBleed` event onto an array keyed by line id with `{ x, y, t0, life: 0.9s }`.
+- Each frame, for every active bleed, draw a `createRadialGradient` along the line normal: inner stop `rgba(230,230,255,a)` where `a` follows an exponential decay `a = a0 * exp(-k * dt)` (mirror of `setTargetAtTime` with τ≈0.18s), outer stop transparent. Radius grows from 0 → 56px with an ease-out curve.
+- Composite with `globalCompositeOperation = 'lighter'` only inside the bleed pass, then restore — prevents the rest of the scene from blooming.
+- Retire the current hard "flash on trigger" segment redraw.
+
+## 4. Floating Dock Glassmorphism
+
+`ArtDock`, `FxDrawer`, `PacksDrawer`:
+- Container: `bg-neutral-950/40 backdrop-blur-xl` + a 1px hairline border via `border border-white/10` and an inner gradient ring (`shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]`) for the top highlight.
+- Dock root: `rounded-full` pill; secondary panels (FX, Packs): `rounded-2xl`.
+- Buttons inside: ghost style, no shadcn `Button` variant — bare `<button>` with `.pr-label`, hover state = border opacity 10 → 20, never a fill flash.
+- BPM slider already uses `.pr-hairline-slider`; recolor thumb/track to neutral whites at low alpha so it reads as etched glass.
+- Remove any residual rounded-md / solid card backgrounds in drawer internals; replace voice chips and FX preset chips with hairline-bordered pills matching the same token set.
+
+## 5. Color & Component Guardrails
+
+- Purge any bright blue / shadcn primary leftovers from the wheel/dock surface (audit `index.tsx` + drawers). All accents become warm-neutral whites or the existing `--pr-melo` / `--pr-harm` tokens dialed to ≤ 40% alpha.
+- No `Input`, `Card`, `Select`, `Slider` (shadcn) inside the art surface — confirmed during pass; if any creep in, replace with native `<button>` / `<input type="range">` styled via `.pr-*` utilities.
+
+## Technical notes
+
+- All canvas alpha decays reuse one helper `decayAlpha(a0, t, tau)` so HUD hover, ink bleeds, and trail fades share a single math curve.
+- Hairline strokes use `ctx.lineWidth = 0.5 / (dpr / window.devicePixelRatio)` guard; on high-DPR displays this still resolves to a sub-pixel line.
+- No new dependencies. JetBrains Mono loaded via `<link rel="stylesheet">` in `__root.tsx` head.
+
+## Files touched
+
+- `src/styles.css` — tokens, grain layer, monospace utilities, dock/drawer glass classes, slider restyle.
+- `src/routes/__root.tsx` — font `<link>` tags.
+- `src/routes/index.tsx` — canvas hairlines, ghost-readout alpha curve, ink-bleed renderer, dock + drawer markup/classes, label typography.
+
+No changes to audio engine, FX state, or sound pack logic — this is purely the visual contract.

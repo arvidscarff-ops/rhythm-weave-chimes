@@ -1,34 +1,46 @@
-## Why the distortion happens
+## What is most likely causing the distortion
 
-The audio graph clips at the destination. Three compounding causes:
+The strongest suspect is not the oscillator synth itself or the browser audio method. It looks like a trigger-logic bug in the Wheel mode:
 
-1. **Per-voice peaks are too hot.** Each voice sums 2–3 oscillators at 0.3–0.55 gain into one envelope that then ramps to `peak = 0.45–0.7`. A single `pluck` or `bass` note already hits ~1.0 instantaneous on transients.
-2. **Parallel mix adds, never attenuates.** `shelf → dryToMaster (gain 1.0)` AND `shelf → chorusDelay → chorusMix (0.5)` AND `shelf → delay → wet` AND `shelf → grain → grainMix` all sum into `master`. Dry is never reduced when chorus/wet/grain are added — the bus sits at 1.5–2.5× before `master.gain`.
-3. **No limiter before `ctx.destination`.** Any sum > 1.0 hard-clips in the browser output stage, which on a MacBook's built-in DAC sounds like crunchy/fizzy distortion exactly when several circles fire together.
+- Reverse-spinning rings appear to apply direction twice.
+- That can make the crossing detector think a note crossed a trigger line almost every frame.
+- The current refractory window is only 40ms, so a reverse ring can repeatedly fire dense bass/pad notes many times per second.
+- Those long-release voices then stack into the reverb/delay bus and overload the output, which sounds like heavy distortion/crunch.
 
-## Fix (audio engine only, no UI changes)
+Secondary contributors:
 
-**File:** `src/routes/index.tsx`
+- Dry + chorus + reverb are summed in parallel, so FX can raise level even when the voice peaks are lowered.
+- Long bass/pad releases overlap heavily.
+- Feedback-based delay/reverb can build up if many notes are accidentally triggered.
+- MacBook speakers can make clipping/low-mid buildup sound especially harsh, but they are probably revealing a real app-side issue.
 
-1. **Add a master limiter.** Insert a `DynamicsCompressorNode` between `master` and `ctx.destination` with brickwall-ish settings: `threshold = -6`, `knee = 0`, `ratio = 20`, `attack = 0.003`, `release = 0.12`. Store as `a.limiter`.
-2. **Add a headroom trim.** New `busTrim` GainNode at `0.5` placed between the parallel sends and `master` (i.e. everything that currently `.connect(master)` connects to `busTrim` instead, and `busTrim.connect(master)`). Gives ~6 dB of headroom for the four parallel paths.
-3. **Make chorus a true send.** Lower `chorusMix.gain` default to `0.25` (mapping in `applyKnobs` already scales it; clamp upper bound to `0.5`).
-4. **Tame per-voice peaks** in `playVoice`: drop `peak` values to `chime 0.32`, `pluck 0.42`, `bell 0.3`, `pad 0.28`, `bass 0.42`. Scale the inner oscillator gains by ~0.7 as well so harmonic stacks don't sum past 1.0.
-5. **Reduce delay feedback default** from `0.55` to `0.38` to prevent buildup distortion when many notes hit.
-6. **Cap `mainVol`** effective output: in `applyKnobs`, write `master.gain` as `knobs.mainVol * 0.85`.
+## Would switching sound storage/playback methods help?
 
-After this, the chain looks like:
+Probably not. Using samples, buffers, or another playback method would not solve the core issue if the app is firing too many notes or summing FX too hot.
 
-```text
-voices → preFx → filter → shelf ─┬─ dryToMaster ──┐
-                                 ├─ chorus ───────┤
-                                 ├─ delay → wet ──┼─→ busTrim → master → limiter → destination
-                                 └─ grain ────────┘
-```
+The native Web Audio oscillator approach is still the right fit for this app. If we ever want a different timbre, we could pre-render synth notes into `AudioBuffer`s, but that would be an optimization/tone choice, not the distortion fix.
 
-No visual/FX-panel changes. All slider ranges stay the same; only internal scaling and the limiter are added, so the FX presets continue to behave as before but without clipping.
+## Fix plan
 
-## Out of scope
+1. **Fix Wheel crossing math**
+   - Treat ring phase as the actual signed world rotation.
+   - Compute previous/current note world angles without applying direction a second time.
+   - Determine crossing direction from the actual phase delta.
 
-- No changes to the FX drawer UI, presets, or `fxState.ts` shape.
-- No changes to the canvas rendering or sequencer timing.
+2. **Add a musical trigger guard**
+   - Increase the per note-line refractory window from `40ms` to something more ambient-safe, likely `120–180ms`.
+   - Prevent accidental rapid retriggers from frame jitter or line overlap.
+
+3. **Add output safety at the voice layer**
+   - Track active voices and cap simultaneous voices.
+   - If too many voices are active, skip or shorten the quietest/oldest new triggers instead of letting them pile up.
+
+4. **Tame FX summing**
+   - Convert dry/wet/chorus levels to safer gain staging so enabling FX does not multiply loudness.
+   - Add a gentle high-pass before the limiter to remove low-frequency buildup.
+
+5. **Verify with a debug meter**
+   - Temporarily add an internal peak meter/log counter while testing.
+   - Confirm notes are firing only at true line intersections and output no longer slams the limiter.
+
+Expected result: the current synth remains, but the distortion should disappear because we stop the accidental trigger storm and keep the FX bus within safe headroom.

@@ -1139,6 +1139,7 @@ function PhaseApp() {
             }}
           />
         )}
+        {isWheel && <AboutDrawer open={aboutOpen} onClose={() => setAboutOpen(false)} />}
       </main>
 
       {/* BOTTOM BPM DOCK — hidden in Wheel art mode */}

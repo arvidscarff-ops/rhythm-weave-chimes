@@ -656,6 +656,7 @@ function PhaseApp() {
     fx1: 2400,
     fx2: 8,
   });
+  const [laserColor, setLaserColor] = useState<LaserColorKey>("green");
 
   // Refs mirror state so the engine doesn't re-subscribe
   const playingRef = useRef(playing); playingRef.current = playing;
@@ -663,6 +664,10 @@ function PhaseApp() {
   const voicesRef = useRef(voices); voicesRef.current = voices;
   const knobsRef = useRef(knobs); knobsRef.current = knobs;
   const bpmRef = useRef(bpm); bpmRef.current = bpm;
+  const laserColorRef = useRef(laserColor); laserColorRef.current = laserColor;
+  const sparkleRef = useRef<Sparkle[]>([]);
+  const starburstRef = useRef<{ x: number; y: number; life: number; max: number }[]>([]);
+  const elapsedRef = useRef(0);
   // Resolve currently-selected pack into a RuntimePack (built-in or custom).
   const allPacks: RuntimePack[] = [...BUILTIN_RUNTIME_PACKS, ...customPacks];
   const activePack: RuntimePack =

@@ -90,6 +90,8 @@ type EngineState = {
 type AudioGraph = {
   ctx: AudioContext;
   master: GainNode;
+  busTrim: GainNode;
+  limiter: DynamicsCompressorNode;
   preFx: GainNode;       // input bus
   filter: BiquadFilterNode;
   shelf: BiquadFilterNode;

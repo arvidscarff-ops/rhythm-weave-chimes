@@ -171,6 +171,34 @@ type WheelState = {
   lastFire: Map<string, number>;
 };
 
+/* ---- Pendulum scene ---- */
+type PendulumBob = {
+  id: string;
+  ratioIndex: number;     // 0..N → picks ratio from PEND_RATIOS
+  slotIndex: number;      // 0..5 → pack slot
+  pitchIndex: number;     // semitone offset
+  phase: number;          // 0..1 normalized SHM phase
+  prevSign: -1 | 1;       // last side
+  flash: number;          // 0..1 visual
+};
+type PendulumState = {
+  bobs: PendulumBob[];
+};
+
+/* ---- Bars scene ---- */
+type BarLane = {
+  id: string;
+  ratioIndex: number;     // 0..N → picks ratio from BAR_RATIOS
+  slotIndex: number;
+  pitchIndex: number;
+  phase: number;          // 0..1 playhead vertical position
+  flash: number;
+  lastTriggerY: number;   // for zigzag connector
+};
+type BarsState = {
+  lanes: BarLane[];
+};
+
 let _uid = 0;
 const uid = (p = "id") => `${p}_${++_uid}`;
 

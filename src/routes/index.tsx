@@ -2039,13 +2039,13 @@ function FxDrawer({
   return (
     <div
       data-state={open ? "open" : "closed"}
-      className="fx-drawer absolute left-1/2 bottom-[88px] rounded-2xl border border-white/10 backdrop-blur-md"
+      className="fx-drawer absolute left-1/2 bottom-[88px] rounded-2xl border border-white/10 backdrop-blur-xl bg-neutral-950/40 pr-mono"
       style={{
         width: "min(720px, calc(100vw - 48px))",
         height: 260,
-        background: "rgba(10,10,12,0.55)",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.03)",
-        fontFamily: "'Inter', ui-sans-serif, system-ui",
+        boxShadow:
+          "0 24px 70px rgba(0,0,0,0.65), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.03)",
+        zIndex: 4,
       }}
     >
       <div className="h-full grid grid-cols-4 divide-x divide-white/[0.07]">
@@ -2207,12 +2207,12 @@ function PacksDrawer({
   return (
     <div
       data-state={open ? "open" : "closed"}
-      className="fx-drawer absolute left-1/2 bottom-[88px] rounded-2xl border border-white/10 backdrop-blur-md"
+      className="fx-drawer absolute left-1/2 bottom-[88px] rounded-2xl border border-white/10 backdrop-blur-xl bg-neutral-950/40 pr-mono"
       style={{
         width: "min(720px, calc(100vw - 48px))",
-        background: "rgba(10,10,12,0.55)",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.03)",
-        fontFamily: "'Inter', ui-sans-serif, system-ui",
+        boxShadow:
+          "0 24px 70px rgba(0,0,0,0.65), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.03)",
+        zIndex: 4,
       }}
     >
       <div className="px-5 pt-4 pb-2 flex items-baseline justify-between">

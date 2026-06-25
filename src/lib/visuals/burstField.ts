@@ -180,7 +180,12 @@ export function spawnBurst(x: number, y: number, opts: BurstOptions = {}) {
   const energy = Math.max(0.25, Math.min(1.2, opts.energy ?? 0.7));
   const seed = Math.random();
   const rnd = mulberry32(Math.floor(seed * 1e9));
-  const hue = ((opts.hue ?? rnd()) * Math.PI * 2) + neuralHueBias() * 0.45 + rnd() * 0.9;
+  // If the caller passed a hue, lock the burst's dominant color to that
+  // note's color with only a hairline jitter so the burst reads as the note.
+  // Otherwise fall back to seed + neural-palette bias.
+  const hue = opts.hue != null
+    ? (opts.hue * Math.PI * 2) + (rnd() - 0.5) * 0.08
+    : (rnd() * Math.PI * 2) + neuralHueBias() * 0.45 + rnd() * 0.9;
 
   const b = pick();
   b.alive = true;

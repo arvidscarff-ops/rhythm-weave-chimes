@@ -1498,11 +1498,8 @@ function drawWheelScene(
       const nx = cx + Math.cos(w) * R;
       const ny = cy + Math.sin(w) * R;
       const inten = n.flash;
-      // Resting breath — each note pulses with its own phase so they're never in lockstep.
+      // Each orb's deterministic phase keeps them out of lockstep.
       const nPhase = hashPhase(n.id);
-      const breath = 0.5 + 0.5 * Math.sin(t * 0.6 + nPhase);
-      const breathR = 1 + 0.18 * (breath * 2 - 1);
-      const breathA = 0.75 + 0.35 * (breath * 2 - 1);
 
       // kinetic trail (6 samples behind the note)
       const trail = getTrail(n);

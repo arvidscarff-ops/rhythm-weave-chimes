@@ -23,7 +23,8 @@ import {
 } from "@/lib/sound/runtimePacks";
 import { flashBus } from "@/lib/neural/flashBus";
 import { spawnBurst, updateBursts, drawBursts } from "@/lib/visuals/burstField";
-import { drawOrb, hueToOrbTpl } from "@/lib/visuals/orbDot";
+import { hueToOrbTpl } from "@/lib/visuals/orbDot";
+import { siriOrbLayer } from "@/lib/visuals/siriOrbLayer";
 import {
   NEURAL_PRESETS,
   loadNeuralSettings,
@@ -218,6 +219,12 @@ function voiceSlotColor(slot: VoiceSlot, withAlpha = false): string {
     slot === "bass" ? "oklch(0.72 0.22 310" :
                       "oklch(0.86 0.16 85";
   return withAlpha ? `${base} / a)` : `${base})`;
+}
+
+function voiceSlotHue(slot: VoiceSlot): number {
+  if (slot === "melo") return 195 / 360;
+  if (slot === "bass") return 310 / 360;
+  return 85 / 360;
 }
 
 function resolveVoice(slot: VoiceSlot, sel: VoiceSel): VoiceKind {
@@ -927,6 +934,7 @@ function PhaseApp() {
       grainPatternRef.current = null; // regenerate grain to match dpr
     };
     onResize();
+    if (canvasRef.current?.parentElement) siriOrbLayer.mount(canvasRef.current.parentElement);
     window.addEventListener("resize", onResize);
 
     // seed dust
@@ -953,6 +961,7 @@ function PhaseApp() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
+      siriOrbLayer.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -969,6 +978,7 @@ function PhaseApp() {
 
     // Always: art surface (transparent + bloom + grain)
     paintArtBackground(ctx2d, W, H, grainPatternRef);
+    siriOrbLayer.begin(performance.now() / 1000);
 
     const playing = !!(a && playingRef.current);
     const scene = sceneRef.current;
@@ -997,6 +1007,7 @@ function PhaseApp() {
     }
     updateBursts(dt);
     drawBursts(ctx2d);
+    siriOrbLayer.end();
     ctx2d.globalCompositeOperation = "source-over";
   };
 
@@ -1518,14 +1529,9 @@ function drawWheelScene(
       trail.push({ x: nx, y: ny });
       if (trail.length > 6) trail.shift();
 
-      // Living orb — chromatic-aberration core + white-hot center + voice halo
-      drawOrb(ctx, nx, ny, {
-        colorTpl: color,
-        radius: 3.5 + inten * 5,
-        energy: inten,
-        time: t,
-        phase: nPhase,
-      });
+      void color;
+      void nPhase;
+      siriOrbLayer.place(`wheel:${ring.id}:${n.id}`, nx, ny, 50 + inten * 14, inten, voiceSlotHue(ring.voiceSlot));
     }
   }
 }
@@ -1673,14 +1679,9 @@ function drawPendulumScene(
     ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
     ctx.stroke();
 
-    // Living orb bob
-    drawOrb(ctx, bx, by, {
-      colorTpl: hueToOrbTpl(i * 0.13 + 0.55, 0.86, 0.16),
-      radius: 5 + b.flash * 4 + (hot ? 1.5 : 0),
-      energy: b.flash,
-      time: tNow,
-      phase: i * 1.37,
-    });
+    void tNow;
+    void hueToOrbTpl;
+    siriOrbLayer.place(`pend:${b.id}`, bx, by, 58 + b.flash * 14 + (hot ? 8 : 0), b.flash, i * 0.13 + 0.55);
   });
 }
 
@@ -1755,24 +1756,11 @@ function drawBarsScene(
     const hot = hoverId === l.id;
     pts.push({ x, y: bot, flash: l.flash, hot, id: l.id });
 
-    // Living orb playhead
-    const tpl = hueToOrbTpl(i * 0.13 + 0.5, 0.85, 0.16);
-    drawOrb(ctx, x, y, {
-      colorTpl: tpl,
-      radius: 4 + (hot ? 1.2 : 0),
-      energy: 0,
-      time: tNow,
-      phase: i * 1.81,
-      haloAmount: 0.7,
-    });
+    void tNow;
+    const hue = i * 0.13 + 0.5;
+    siriOrbLayer.place(`bars:head:${l.id}`, x, y, 44 + (hot ? 8 : 0), 0, hue);
     // bottom strike node (swells on trigger)
-    drawOrb(ctx, x, bot, {
-      colorTpl: tpl,
-      radius: 4 + l.flash * 6,
-      energy: l.flash,
-      time: tNow,
-      phase: i * 2.13 + 1.0,
-    });
+    siriOrbLayer.place(`bars:strike:${l.id}`, x, bot, 46 + l.flash * 16, l.flash, hue);
   });
 
   // zigzag connector along bottom nodes

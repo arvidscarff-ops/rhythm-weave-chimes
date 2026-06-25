@@ -1,62 +1,43 @@
-## Goal
+# Unified metaball orb field
 
-Make every note dot an actual SiriWave **fluid-dots** orb — the exact WebGL shader from the reference — not a 2D-canvas imitation. They should be noticeably larger than the current dots.
+## Problem
+Each orb is currently drawn in its own scissored viewport, so the GLSL `smin()` only blends the 6 internal dots of that orb. Orbs can never merge with each other — they read as separate spheres no matter how close they sit.
+
+To get the Siri "one living blob that splits and re-fuses" feel, every orb must contribute to the **same** signed-distance field in a single full-canvas pass.
 
 ## Approach
+Rewrite `src/lib/visuals/siriOrbLayer.ts` so the WebGL layer is one full-viewport shader pass that consumes an array of orb instances (position, radius, energy, hue, seed) as uniforms and computes one shared SDF across all of them.
 
-The reference component spins up one WebGL canvas per orb. That doesn't scale (browsers cap ~16 WebGL contexts and we can have many orbs across Wheel/Pendulum/Bars). Instead, render all orbs through **one shared WebGL overlay canvas** that runs the same fluid-dots fragment shader per orb via `gl.scissor` + `gl.viewport`, so the pixels on screen are byte-for-byte the shader's output.
+### Shader changes (`FLUID_DOTS_SHADER`)
+- Add uniforms:
+  - `uniform int  uCount;`
+  - `uniform vec4 uOrbA[MAX_ORBS];` — `xy` = center (pixels), `z` = radius (pixels), `w` = energy
+  - `uniform vec2 uOrbB[MAX_ORBS];` — `x` = hue, `y` = seed
+- `MAX_ORBS = 32` (cap; if more requested, drop lowest-energy extras).
+- Replace per-orb `scene()` with a global `field(fragCoord)` that:
+  1. Loops `i = 0..uCount-1`.
+  2. For each orb, computes its 6 inner dots in **screen space** using the existing motion vocabulary (merge cycle, scatter/return, gather/burst), scaled by that orb's radius and seeded by `iSeed = uOrbB[i].y`.
+  3. Folds all dots (across all orbs) into a single `total3` via `smin(.., .., SMOOTH_K_GLOBAL)`.
+- Use a slightly larger `SMOOTH_K_GLOBAL` (~0.18 in normalized units) for cross-orb welding, while keeping intra-orb dots tight.
+- Cross-orb welding only activates when two orbs are within ~1.6× their combined radii (smin naturally handles this — distant orbs don't affect each other).
+- Keep the chromatic aberration / spectral edge / white-hot core math, but applied to the unified field so highlights wrap the merged silhouette.
+- Tint accumulator (`cAcc`) weighted per dot by that orb's hue + energy, so blended regions show a smooth hue gradient.
 
-## Files
+### Layer API (unchanged surface)
+`mount/begin/place/end` keep the same signatures so `src/routes/index.tsx` needs no changes. Internally:
+- `place()` pushes to an instance array.
+- `end()` uploads uniforms once, draws one fullscreen triangle, then clears.
+- No per-orb viewport/scissor.
 
-### New: `src/lib/visuals/siriOrbLayer.ts`
+### Performance
+- Single draw call per frame instead of N.
+- Loop bound is the constant `MAX_ORBS`; early-out via `if (i >= uCount) break;` (WebGL1 allows this with a constant max).
+- Fragment cost scales with `uCount`; 32 orbs × 6 dots × 3 channels is comfortably real-time at 1× DPR cap (already in place).
 
-A singleton overlay manager.
+### Files touched
+- `src/lib/visuals/siriOrbLayer.ts` — full rewrite of shader + `end()`; public API unchanged.
 
-- Creates a full-viewport `<canvas>` (absolute, `pointer-events:none`, `mix-blend-mode: screen`, behind the HUD but above the background shader) and a WebGL1 context.
-- Compiles the **verbatim** `FLUID_DOTS_SHADER` from the reference (vertex = fullscreen triangle). Uniforms: `iResolution` (orb pixel dim), `iTime`, plus new `iEnergy` (0..1) and `iHue` (rotates the shader's internal hue base) so each orb can have a voice-color tint and trigger flash without changing the algorithm.
-- API:
-  - `mount(parentEl)` — attach overlay matching the scene canvas's bounding rect (ResizeObserver on the scene canvas keeps it synced).
-  - `begin(timeSec)` — clear, store time.
-  - `place(id, cssX, cssY, sizeCss, energy, hue)` — schedule one orb at that center.
-  - `end()` — one pass: for each scheduled orb, set `viewport`+`scissor` to its square box, upload uniforms, draw the triangle. Reset state.
-- Pool entries keyed by `id` (string) so each orb keeps a stable `seedT` (time offset) for unique phase — without that, every orb runs the same shader frame and they look identical.
+No changes to `src/routes/index.tsx` or any scene code.
 
-### Modify: `src/routes/index.tsx`
-
-- Mount the overlay once in the scene effect, sized to the scene canvas.
-- Replace every `drawOrb(ctx, x, y, {...})` call (Wheel notes, Pendulum bobs, Bars playheads) with `siriOrbLayer.place(id, x, y, size, energy, hue)`. The `drawOrb` helper stays in the file for now but is unused by the live scenes.
-- `size` ≈ `48px` for Wheel notes (vs. ~10px today), `56px` for Pendulum bobs, `44px` for Bars heads — tunable constants.
-- Per-orb `id`: `"wheel:<ringIdx>"`, `"pend:<idx>"`, `"bars:<idx>"`.
-- Per-orb `energy`: reuse the existing trigger-decay value already passed to `drawOrb`.
-- Per-orb `hue`: existing `hueToOrbTpl` source hue.
-- Wrap each scene draw with `siriOrbLayer.begin(t)` / `siriOrbLayer.end()`.
-
-### Modify: `src/lib/visuals/orbDot.ts`
-
-Leave the file in place (no other callers to break), but mark `drawOrb` as legacy in a one-line comment. No behavior change.
-
-## Shader integration details
-
-- Use the **exact** `FLUID_DOTS_SHADER` source you pasted — no edits to the metaball math.
-- Two tiny additions only:
-  - `uniform float iEnergy;` — multiplies `gBright` and adds a brief `flash` so triggers visibly bloom inside the orb.
-  - `uniform float iHue;` — added to the shader's internal `hue` so each orb leans into its voice color while keeping the spectral aberration.
-- `iTime = sharedTime + perOrbSeed` so every orb is at a different point in the merge/scatter/gather cycle.
-
-## Layering
-
-- Background NeuralNoise shader stays the bottom layer.
-- Scene 2D canvas (rings, trigger lines, halos) sits above it.
-- SiriOrb overlay sits above the scene canvas, with `mix-blend-mode: screen` so the orbs read as additive light on top of the rings.
-- HUD/dock/readouts stay on top via existing z-index.
-
-## Out of scope
-
-- Burst field, NeuralNoise background, audio, scheduler, sound packs — untouched.
-- No changes to physics, ring spacing, or trigger logic.
-
-## Validation
-
-- Visual check in all three scenes: orbs should look like a Siri pill of six dancing metaballs, not a glowing dot.
-- Performance check: one WebGL context, one program, ≤ ~30 small viewport draws per frame — should stay smooth.
-- Confirm trigger flash visibly pulses each orb on note hit.
+## Result
+Nearby orbs (e.g. two notes on adjacent rings, or a cluster on the Bars scene) visibly stretch, neck, and fuse into a single chromatic blob with one continuous glow — matching the Siri reference's "living shape" behavior. Solo orbs still look identical to today.

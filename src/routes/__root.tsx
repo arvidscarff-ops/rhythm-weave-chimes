@@ -12,6 +12,12 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { NeuralNoise } from "../components/ui/neural-noise";
+import {
+  loadNeuralSettings,
+  presetById,
+  subscribeNeuralSettings,
+  type NeuralSettings,
+} from "../lib/neural/palette";
 
 function NotFoundComponent() {
   return (
@@ -130,6 +136,17 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    const apply = (s: NeuralSettings) => {
+      const p = presetById(s.presetId);
+      const root = document.documentElement;
+      if (p.stage) root.style.setProperty("--pr-stage-bg", p.stage);
+      else root.style.removeProperty("--pr-stage-bg");
+    };
+    apply(loadNeuralSettings());
+    return subscribeNeuralSettings(apply);
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { PhaseDock } from "@/components/dock/PhaseDock";
 import {
   DEFAULT_FX_STATE,
   applyFxState,
@@ -623,12 +625,10 @@ function PhaseApp() {
   const [scene, setScene] = useState<SceneKind>("wheel");
   const [bpm, setBpm] = useState(90);
   const [fxState, setFxState] = useState<FxState>(DEFAULT_FX_STATE);
-  const [fxOpen, setFxOpen] = useState(false);
-  const [packsOpen, setPacksOpen] = useState(false);
-  const [aboutOpen, setAboutOpen] = useState(false);
-  const [visualsOpen, setVisualsOpen] = useState(false);
   const [selectedPack, setSelectedPack] = useState<string>("moss");
   const [customPacks, setCustomPacks] = useState<RuntimePack[]>([]);
+  const [neural, setNeural] = useState<NeuralSettings>(() => loadNeuralSettings());
+  const auth = useAuth();
   // topology bump: rings/lines/notes counts so DOM overlays re-render
   const [topo, setTopo] = useState(0);
   const bumpTopo = useCallback(() => setTopo((x) => x + 1), []);
@@ -898,7 +898,7 @@ function PhaseApp() {
     load();
     // Re-fetch when packs drawer opens so newly-published packs appear without reload.
     return () => { cancelled = true; };
-  }, [packsOpen]);
+  }, []);
 
   // Pre-decode samples for the active custom pack as soon as it's selected.
   useEffect(() => {
@@ -1134,21 +1134,6 @@ function PhaseApp() {
       className="min-h-screen w-full flex flex-col relative pr-stage"
       style={{ color: "var(--pr-text)" }}
     >
-      <PhaseChrome
-        scene={scene}
-        onScene={setScene}
-        fxOpen={fxOpen}
-        packsOpen={packsOpen}
-        aboutOpen={aboutOpen}
-        visualsOpen={visualsOpen}
-        onOpenPanel={(p) => {
-          setFxOpen(p === "fx" ? !fxOpen : false);
-          setPacksOpen(p === "packs" ? !packsOpen : false);
-          setAboutOpen(p === "about" ? !aboutOpen : false);
-          setVisualsOpen(p === "visuals" ? !visualsOpen : false);
-        }}
-        onCloseAll={() => { setFxOpen(false); setPacksOpen(false); setAboutOpen(false); setVisualsOpen(false); }}
-      />
       <PhaseReadout
         scene={scene}
         wheel={engineRef.current.wheel}
@@ -1183,51 +1168,29 @@ function PhaseApp() {
             onHoverRing={(id) => { hoverRingIdRef.current = id; setHoverRing(id); }}
           />
         )}
-        <ArtDock
-          scene={scene}
-          playing={playing}
-          bpm={bpm}
-          onTogglePlay={togglePlay}
-          onAddNode={() => {
-            if (scene === "wheel") addRing();
-            else if (scene === "pendulum") addBob();
-            else addLane();
-          }}
-          onAddLine={addLine}
-          onClearLines={() => {
-            if (scene === "wheel") clearLines();
-            else if (scene === "pendulum") clearBobs();
-            else clearLanes();
-          }}
-          onBpm={setBpm}
-          fxOpen={fxOpen}
-          onToggleFx={() => {
-            const next = !fxOpen;
-            setFxOpen(next);
-            if (next) { setPacksOpen(false); setAboutOpen(false); }
-          }}
-          packsOpen={packsOpen}
-          onTogglePacks={() => {
-            const next = !packsOpen;
-            setPacksOpen(next);
-            if (next) { setFxOpen(false); setAboutOpen(false); }
-          }}
-        />
-        <FxDrawer open={fxOpen} state={fxState} onChange={setFxState} />
-        <PacksDrawer
-          open={packsOpen}
-          packs={allPacks}
-          selected={selectedPack}
-          onSelect={setSelectedPack}
-          onAudition={(pack: RuntimePack, slotIndex: number) => {
-            const a = ensureAudio();
-            if (a.ctx.state === "suspended") a.ctx.resume();
-            triggerPackVoice(a.ctx, a.preFx, pack, slotIndex, 440, a.ctx.currentTime + 0.01);
-          }}
-        />
-        <AboutDrawer open={aboutOpen} onClose={() => setAboutOpen(false)} />
-        <VisualsDrawer open={visualsOpen} />
       </main>
+      <PhaseDock
+        playing={playing}
+        onTogglePlay={togglePlay}
+        scene={scene}
+        onScene={setScene}
+        multiply={knobs.multiply}
+        onMultiply={(n) => setKnobs((k) => ({ ...k, multiply: n }))}
+        bpm={bpm}
+        onBpm={setBpm}
+        speed={knobs.speed}
+        onSpeed={(n) => setKnobs((k) => ({ ...k, speed: n }))}
+        fx={fxState}
+        onFx={setFxState}
+        packs={allPacks}
+        packId={selectedPack}
+        onPackId={setSelectedPack}
+        neural={neural}
+        onNeural={(s) => { setNeural(s); saveNeuralSettings(s); }}
+        authed={!!auth.user}
+        email={auth.user?.email ?? null}
+        onSignOut={() => { supabase.auth.signOut(); }}
+      />
     </div>
   );
 }

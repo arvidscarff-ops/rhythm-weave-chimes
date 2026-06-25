@@ -1,43 +1,20 @@
-# Unified metaball orb field
+## Plan
 
-## Problem
-Each orb is currently drawn in its own scissored viewport, so the GLSL `smin()` only blends the 6 internal dots of that orb. Orbs can never merge with each other — they read as separate spheres no matter how close they sit.
+1. **Remove dark-energy contribution from the burst sprites**
+   - Change the procedural burst sprite so RGB stays near-white / high-luminance while noise only controls alpha and shape.
+   - Avoid multiplying color channels by low noise values in a way that creates smoky/dark colored patches.
 
-To get the Siri "one living blob that splits and re-fuses" feel, every orb must contribute to the **same** signed-distance field in a single full-canvas pass.
+2. **Switch burst rendering to “luminance mask + additive tint”**
+   - Treat the organic shader/noise pattern as a transparency mask, not as visible dark pigment.
+   - Keep unique seed-driven shapes, but ensure every visible pixel is light-emitting: white-hot core, pale colored edges, transparent elsewhere.
 
-## Approach
-Rewrite `src/lib/visuals/siriOrbLayer.ts` so the WebGL layer is one full-viewport shader pass that consumes an array of orb instances (position, radius, energy, hue, seed) as uniforms and computes one shared SDF across all of them.
+3. **Soften the global background shader’s darker readable patches**
+   - Adjust `NeuralNoise` so its pattern is less like a semi-transparent colored texture and more like faint additive caustics.
+   - Bias color toward a lighter tint before opacity is applied, reduce contrast, and let low-intensity areas fade out instead of showing as dark shapes.
 
-### Shader changes (`FLUID_DOTS_SHADER`)
-- Add uniforms:
-  - `uniform int  uCount;`
-  - `uniform vec4 uOrbA[MAX_ORBS];` — `xy` = center (pixels), `z` = radius (pixels), `w` = energy
-  - `uniform vec2 uOrbB[MAX_ORBS];` — `x` = hue, `y` = seed
-- `MAX_ORBS = 32` (cap; if more requested, drop lowest-energy extras).
-- Replace per-orb `scene()` with a global `field(fragCoord)` that:
-  1. Loops `i = 0..uCount-1`.
-  2. For each orb, computes its 6 inner dots in **screen space** using the existing motion vocabulary (merge cycle, scatter/return, gather/burst), scaled by that orb's radius and seeded by `iSeed = uOrbB[i].y`.
-  3. Folds all dots (across all orbs) into a single `total3` via `smin(.., .., SMOOTH_K_GLOBAL)`.
-- Use a slightly larger `SMOOTH_K_GLOBAL` (~0.18 in normalized units) for cross-orb welding, while keeping intra-orb dots tight.
-- Cross-orb welding only activates when two orbs are within ~1.6× their combined radii (smin naturally handles this — distant orbs don't affect each other).
-- Keep the chromatic aberration / spectral edge / white-hot core math, but applied to the unified field so highlights wrap the merged silhouette.
-- Tint accumulator (`cAcc`) weighted per dot by that orb's hue + energy, so blended regions show a smooth hue gradient.
+4. **Preserve the current organic motion and reactivity**
+   - Keep the slow “thick water” movement, note-trigger flashes, and unique burst variation.
+   - Do not change the music engine, scene logic, controls, or pack/FX features.
 
-### Layer API (unchanged surface)
-`mount/begin/place/end` keep the same signatures so `src/routes/index.tsx` needs no changes. Internally:
-- `place()` pushes to an instance array.
-- `end()` uploads uniforms once, draws one fullscreen triangle, then clears.
-- No per-orb viewport/scissor.
-
-### Performance
-- Single draw call per frame instead of N.
-- Loop bound is the constant `MAX_ORBS`; early-out via `if (i >= uCount) break;` (WebGL1 allows this with a constant max).
-- Fragment cost scales with `uCount`; 32 orbs × 6 dots × 3 channels is comfortably real-time at 1× DPR cap (already in place).
-
-### Files touched
-- `src/lib/visuals/siriOrbLayer.ts` — full rewrite of shader + `end()`; public API unchanged.
-
-No changes to `src/routes/index.tsx` or any scene code.
-
-## Result
-Nearby orbs (e.g. two notes on adjacent rings, or a cluster on the Bars scene) visibly stretch, neck, and fuse into a single chromatic blob with one continuous glow — matching the Siri reference's "living shape" behavior. Solo orbs still look identical to today.
+5. **Verify visually**
+   - Check the preview for burst events and background behavior to confirm there are no dark colored spots, only subtle light blooms over the dark interface.

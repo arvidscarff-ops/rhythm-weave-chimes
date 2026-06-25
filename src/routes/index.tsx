@@ -26,6 +26,10 @@ import {
 import { flashBus } from "@/lib/neural/flashBus";
 import { spawnBurst, updateBursts, drawBursts } from "@/lib/visuals/burstField";
 import {
+  composerAdvance, resetComposerSources, loadComposerSettings,
+  saveComposerSettings, type ComposerSettings,
+} from "@/lib/music/composer";
+import {
   NEURAL_PRESETS,
   loadNeuralSettings,
   saveNeuralSettings,
@@ -628,6 +632,7 @@ function PhaseApp() {
   const [selectedPack, setSelectedPack] = useState<string>("moss");
   const [customPacks, setCustomPacks] = useState<RuntimePack[]>([]);
   const [neural, setNeural] = useState<NeuralSettings>(() => loadNeuralSettings());
+  const [composer, setComposer] = useState<ComposerSettings>(() => loadComposerSettings());
   const auth = useAuth();
   // topology bump: rings/lines/notes counts so DOM overlays re-render
   const [topo, setTopo] = useState(0);
@@ -1004,6 +1009,7 @@ function PhaseApp() {
     const a = ensureAudio();
     applyFxState(a, fxState);
     if (a.ctx.state === "suspended") await a.ctx.resume();
+    if (playingRef.current) resetComposerSources();
     setPlaying((p) => !p);
   };
 
@@ -1187,6 +1193,8 @@ function PhaseApp() {
         onPackId={setSelectedPack}
         neural={neural}
         onNeural={(s) => { setNeural(s); saveNeuralSettings(s); }}
+        composer={composer}
+        onComposer={(s) => { setComposer(s); saveComposerSettings(s); }}
         authed={!!auth.user}
         email={auth.user?.email ?? null}
         onSignOut={() => { supabase.auth.signOut(); }}
@@ -1281,8 +1289,12 @@ function updateWheel(
             wh.lastFire.set(key, now);
 
             if (voiceLegacy !== "none") {
-              const freq = vertexFreq(note.pitchIndex, knobs.pitch);
-              triggerPackVoice(audio.ctx, audio.preFx, pack, ri, freq, now);
+              const fallback = vertexFreq(note.pitchIndex, 0);
+              const sourceId = `wheel:${ring.id}:${note.id}`;
+              const { play, freq } = composerAdvance(sourceId, ri, fallback);
+              if (!play) continue; // rest → skip audio + visual flash
+              const out = freq * Math.pow(2, knobs.pitch / 12);
+              triggerPackVoice(audio.ctx, audio.preFx, pack, ri, out, now);
             }
             note.flash = 1;
             ring.flash = Math.max(ring.flash, 0.7);
@@ -1614,10 +1626,14 @@ function updatePendulum(
     const s = Math.sin(b.phase * Math.PI * 2);
     const sign: 1 | -1 = s >= 0 ? 1 : -1;
     if (sign !== b.prevSign) {
-      const freq = pitchToFreq(b.pitchIndex + knobs.pitch);
-      triggerPackVoice(audio.ctx, audio.preFx, pack, b.slotIndex, freq, now + 0.005);
-      b.flash = 1;
+      const fallback = pitchToFreq(b.pitchIndex);
+      const sourceId = `pend:${b.id}`;
+      const { play, freq } = composerAdvance(sourceId, b.slotIndex, fallback);
       b.prevSign = sign;
+      if (!play) return;
+      const out = freq * Math.pow(2, knobs.pitch / 12);
+      triggerPackVoice(audio.ctx, audio.preFx, pack, b.slotIndex, out, now + 0.005);
+      b.flash = 1;
       if (W > 0 && H > 0) {
         const t = n <= 1 ? 0.5 : i / (n - 1);
         const len = minLen + (maxLen - minLen) * t;
@@ -1708,8 +1724,12 @@ function updateBars(
     l.phase = (l.phase + dt / Math.max(0.001, period)) % 1;
     if (l.phase < prev) {
       // wrapped → trigger
-      const freq = pitchToFreq(l.pitchIndex + knobs.pitch);
-      triggerPackVoice(audio.ctx, audio.preFx, pack, l.slotIndex, freq, now + 0.005);
+      const fallback = pitchToFreq(l.pitchIndex);
+      const sourceId = `bars:${l.id}`;
+      const { play, freq } = composerAdvance(sourceId, l.slotIndex, fallback);
+      if (!play) return;
+      const out = freq * Math.pow(2, knobs.pitch / 12);
+      triggerPackVoice(audio.ctx, audio.preFx, pack, l.slotIndex, out, now + 0.005);
       l.flash = 1;
       l.lastTriggerY = 1;
       if (W > 0 && H > 0) {

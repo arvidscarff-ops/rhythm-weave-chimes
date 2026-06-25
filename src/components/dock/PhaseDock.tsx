@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
-  Play, Pause, Layers, Sliders, Music3, Eye, MoreHorizontal,
+  Play, Pause, Layers, Sliders, Music3, Eye, MoreHorizontal, Sparkles,
   Info, Wrench, LogIn, LogOut,
 } from "lucide-react";
 import {
@@ -16,6 +16,12 @@ import {
 } from "@/lib/fx/fxState";
 import { NEURAL_PRESETS, type NeuralSettings } from "@/lib/neural/palette";
 import type { RuntimePack } from "@/lib/sound/runtimePacks";
+import {
+  SCALES, ROOT_NAMES, type ScaleId, type RootName,
+} from "@/lib/music/scales";
+import {
+  type ComposerSettings, type SlotSettings, type NoteMode, patternFor,
+} from "@/lib/music/composer";
 import { cn } from "@/lib/utils";
 
 export type SceneKind = "wheel" | "pendulum" | "bars";
@@ -43,6 +49,9 @@ type Props = {
 
   neural: NeuralSettings;
   onNeural: (s: NeuralSettings) => void;
+
+  composer: ComposerSettings;
+  onComposer: (s: ComposerSettings) => void;
 
   authed: boolean;
   email?: string | null;
@@ -81,6 +90,7 @@ export function PhaseDock(p: Props) {
 
         <SceneMenu scene={p.scene} onScene={p.onScene} multiply={p.multiply} onMultiply={p.onMultiply} />
         <FxMenu fx={p.fx} onFx={p.onFx} />
+        <ComposeMenu composer={p.composer} onComposer={p.onComposer} />
         <PacksMenu packs={p.packs} packId={p.packId} onPackId={p.onPackId} />
         <VisualsMenu neural={p.neural} onNeural={p.onNeural} />
 
@@ -292,6 +302,126 @@ function MixRow({ label, value, onChange }: { label: string; value: number; onCh
 }
 
 /* =================== Packs menu =================== */
+/* =================== Compose menu =================== */
+function ComposeMenu({
+  composer, onComposer,
+}: { composer: ComposerSettings; onComposer: (s: ComposerSettings) => void }) {
+  const [open, setOpen] = useState(false);
+
+  const setSlot = (i: number, patch: Partial<SlotSettings>) => {
+    const slots = composer.slots.map((s, idx) => (idx === i ? { ...s, ...patch } : s));
+    onComposer({ ...composer, slots });
+  };
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger className={DOCK_BTN}>
+        <Sparkles className="h-4 w-4" /> Compose
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="center">
+        <DropdownMenuPage id="main">
+          <DropdownMenuLabel>Composer</DropdownMenuLabel>
+          <DropdownMenuCheckboxItem
+            checked={composer.enabled}
+            onCheckedChange={(v) => onComposer({ ...composer, enabled: !!v })}
+          >Enabled</DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuPageTrigger targetId="key">
+            Key <span className="ml-auto text-foreground/50">{composer.root} {SCALES[composer.scale].label}</span>
+          </DropdownMenuPageTrigger>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Voices</DropdownMenuLabel>
+          {composer.slots.map((s, i) => (
+            <DropdownMenuPageTrigger key={i} targetId={`slot-${i}`}>
+              Voice {i + 1}
+              <span className="ml-auto text-foreground/50 tabular-nums">
+                E({s.k},{s.n}) · {s.noteMode.slice(0, 3)}
+              </span>
+            </DropdownMenuPageTrigger>
+          ))}
+        </DropdownMenuPage>
+
+        <DropdownMenuPage id="key">
+          <DropdownMenuLabel>Root</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={composer.root}
+            onValueChange={(v) => onComposer({ ...composer, root: v as RootName })}
+          >
+            {ROOT_NAMES.map((r) => (
+              <DropdownMenuRadioItem key={r} value={r}>{r}</DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Scale</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={composer.scale}
+            onValueChange={(v) => onComposer({ ...composer, scale: v as ScaleId })}
+          >
+            {(Object.keys(SCALES) as ScaleId[]).map((k) => (
+              <DropdownMenuRadioItem key={k} value={k}>{SCALES[k].label}</DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuPage>
+
+        {composer.slots.map((s, i) => (
+          <DropdownMenuPage key={i} id={`slot-${i}`}>
+            <DropdownMenuLabel>Voice {i + 1}</DropdownMenuLabel>
+            <PatternPreview slot={s} />
+            <NumRow label="Hits (k)"    value={s.k}        min={0}  max={s.n} onChange={(v) => setSlot(i, { k: Math.min(v, s.n) })} />
+            <NumRow label="Steps (n)"   value={s.n}        min={1}  max={16}  onChange={(v) => setSlot(i, { n: v, k: Math.min(s.k, v), rotation: s.rotation % v })} />
+            <NumRow label="Rotate"      value={s.rotation} min={0}  max={Math.max(0, s.n - 1)} onChange={(v) => setSlot(i, { rotation: v })} />
+            <NumRow label="Oct Low"     value={s.octaveLow}  min={1} max={7} onChange={(v) => setSlot(i, { octaveLow: Math.min(v, s.octaveHigh) })} />
+            <NumRow label="Oct High"    value={s.octaveHigh} min={1} max={7} onChange={(v) => setSlot(i, { octaveHigh: Math.max(v, s.octaveLow) })} />
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Note mode</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={s.noteMode}
+              onValueChange={(v) => setSlot(i, { noteMode: v as NoteMode })}
+            >
+              {(["sequential", "random", "arpeggio", "brownian"] as NoteMode[]).map((m) => (
+                <DropdownMenuRadioItem key={m} value={m} className="capitalize">{m}</DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuPage>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function NumRow({
+  label, value, min, max, onChange,
+}: { label: string; value: number; min: number; max: number; onChange: (n: number) => void }) {
+  return (
+    <div className="m3-item-enter flex items-center gap-3 px-4 py-2 text-[11px] uppercase tracking-[0.16em] text-foreground/55">
+      <span className="w-16">{label}</span>
+      <input
+        type="range" min={min} max={max} step={1} value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="dock-range h-1 flex-1 cursor-pointer appearance-none rounded-full bg-white/10 accent-foreground"
+      />
+      <span className="w-6 text-right tabular-nums text-foreground/80">{value}</span>
+    </div>
+  );
+}
+
+function PatternPreview({ slot }: { slot: SlotSettings }) {
+  const pat = patternFor(slot);
+  return (
+    <div className="m3-item-enter flex flex-wrap items-center gap-1 px-4 pt-2 pb-3">
+      {pat.map((on, i) => (
+        <span
+          key={i}
+          className={cn(
+            "h-2 w-2 rounded-full",
+            on ? "bg-foreground" : "bg-white/15",
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
 function PacksMenu({
   packs, packId, onPackId,
 }: { packs: RuntimePack[]; packId: string; onPackId: (id: string) => void }) {

@@ -86,13 +86,19 @@ function fbm(x: number, y: number, seed: number) {
   return sum;
 }
 
-// --- Phosphor palette ---
+// --- Phosphor palette (light-biased: floor lifted so no channel goes dark) ---
 function phosphorColor(s: number): [number, number, number] {
-  return [
-    0.55 + 0.45 * Math.cos(s),
-    0.55 + 0.45 * Math.cos(s + 1.0),
-    0.55 + 0.45 * Math.cos(s + 8.0),
-  ];
+  // Tint around white. Each channel sits in ~[0.78, 1.0], so the bloom always
+  // reads as "light with a hue" rather than a saturated dark color.
+  let r = 0.88 + 0.12 * Math.cos(s);
+  let g = 0.88 + 0.12 * Math.cos(s + 1.0);
+  let b = 0.88 + 0.12 * Math.cos(s + 8.0);
+  // Normalize toward the brightest channel so the overall luminance stays high.
+  const m = Math.max(r, g, b);
+  if (m > 0) { const k = 1 / m; r *= k; g *= k; b *= k; }
+  // Pull back toward white a touch for that "incandescent" feel.
+  const w = 0.35;
+  return [r * (1 - w) + w, g * (1 - w) + w, b * (1 - w) + w];
 }
 
 // --- Sprite renderer: domain-warped noise → phosphor colorize → RGBA ---
@@ -131,12 +137,17 @@ function renderSprite(seed: number, hue: number, energy: number): HTMLCanvasElem
       const mask = Math.pow(1 - Math.min(1, rr), 1.6);
       const v = fil * mask * filaments * (0.7 + 0.6 * energy);
       if (v < 0.005) { data[i + 3] = 0; continue; }
-      // phosphor color rotated by local noise so each filament shimmers
+      // phosphor color rotated by local noise so each filament shimmers,
+      // then lifted toward white at bright cores so the bloom reads as light.
       const [r, g, b] = phosphorColor(hue + n * 1.4 + rr * 0.6);
-      data[i]     = Math.min(255, Math.round(r * 255 * v * 1.2));
-      data[i + 1] = Math.min(255, Math.round(g * 255 * v * 1.2));
-      data[i + 2] = Math.min(255, Math.round(b * 255 * v * 1.2));
-      data[i + 3] = Math.min(255, Math.round(v * 255));
+      const hot = Math.min(1, v * 1.6); // white-hot core lift
+      const rr2 = r * (1 - hot) + 1 * hot;
+      const gg2 = g * (1 - hot) + 1 * hot;
+      const bb2 = b * (1 - hot) + 1 * hot;
+      data[i]     = Math.min(255, Math.round(rr2 * 255 * v * 1.35));
+      data[i + 1] = Math.min(255, Math.round(gg2 * 255 * v * 1.35));
+      data[i + 2] = Math.min(255, Math.round(bb2 * 255 * v * 1.35));
+      data[i + 3] = Math.min(255, Math.round(Math.min(1, v * 1.1) * 255));
     }
   }
   ctx.putImageData(img, 0, 0);

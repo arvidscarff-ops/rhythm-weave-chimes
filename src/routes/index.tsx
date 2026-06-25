@@ -1005,6 +1005,7 @@ function PhaseApp() {
     const a = ensureAudio();
     applyFxState(a, fxState);
     if (a.ctx.state === "suspended") await a.ctx.resume();
+    if (playingRef.current) resetComposerSources();
     setPlaying((p) => !p);
   };
 

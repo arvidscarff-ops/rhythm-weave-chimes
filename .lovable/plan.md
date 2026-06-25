@@ -1,34 +1,49 @@
 ## Goal
-Spread the neural pattern more evenly across the viewport and stop bright clusters from blooming out to white. Same mesmerizing feel, lower contrast.
 
-## Why it clusters and blows out today
-In `src/components/ui/neural-noise.tsx`:
-- `noise = 1.2 * pow(noise, 3.0); noise += pow(noise, 10.0);` — the `pow(noise, 10.0)` term is a brightness booster that snowballs wherever the pattern is already dense, producing fully-white hot spots.
-- `noise = max(0.0, noise - 0.5);` — a hard threshold that kills the dim filaments and leaves only the strongest cluster visible.
-- `noise *= (1.0 - length(vUv - 0.5));` — a strong radial vignette that concentrates everything near the center.
-- Alpha = `noise * u_opacity` is then clamped to `1.0`, so peaks saturate.
+Make the wheel feel quietly alive. Rings, straight trigger lines, and note dots get a soft energy-beam shimmer — slow gradient flow at rest, a brief bloom on trigger — matching the neural-noise background's "thick water" feel.
 
-## Changes (visual only)
-File: `src/components/ui/neural-noise.tsx` — fragment shader only.
+No Unicorn Studio embed (heavy, can't sync to audio, would fight the neural-noise background). All effects rendered in the existing canvas.
 
-1. Replace the hot-spot booster with a softer curve:
-   - `noise = 1.0 * pow(noise, 1.6);` (was `1.2 * pow(noise, 3.0)`)
-   - Drop the `+= pow(noise, 10.0)` term entirely (this is the main cause of white-out).
-2. Lower the threshold so faint filaments stay visible everywhere:
-   - `noise = max(0.0, noise - 0.18);` (was `- 0.5`)
-3. Soften the vignette so the pattern fills more of the screen:
-   - `noise *= mix(0.55, 1.0, 1.0 - length(vUv - 0.5));` — even the corners get ~55% weight instead of fading to 0.
-4. Cap brightness before colorizing so nothing can saturate to white:
-   - `noise = min(noise, 0.55);`
-5. Slightly tighten the alpha contribution so the wider coverage doesn't make the whole screen feel heavier:
-   - Keep `u_opacity` ceiling at `0.55`, but compute alpha as `noise * u_opacity * 0.9` and clamp to `0.6`.
+## Scope
 
-## Out of scope
-- No changes to flash behavior, cursor easing, palette, settings UI, or audio wiring.
-- No changes to `palette.ts` defaults — opacity/speed defaults stay where we just set them.
-- Hydration warning from the Leather browser extension is not a code issue; not touched.
+Files touched:
+- `src/routes/index.tsx` — only the wheel scene's draw helpers.
+
+Out of scope: Pendulum and Bars scenes (can follow once we like the wheel), audio engine, layout, dock, panels.
+
+The `energy-beam.tsx` + demo files are not added — we're adopting the *aesthetic*, not the Unicorn Studio runtime. (If you'd rather have the actual component file copied into `src/components/ui/` for later use, say so and I'll include it.)
+
+## Visual recipe ("barely breathing")
+
+Each element gets a base layer + a slow shimmer + a trigger bloom.
+
+1. Rings (concentric circles)
+   - Keep current 0.5px hairline as the base.
+   - Add a second pass: a conic-style gradient stroke at ~10% alpha that slowly rotates (period ~24s). Achieved by stroking the arc in N short segments whose alpha follows `0.5 + 0.5 * sin(theta - t * 0.07)`.
+   - On trigger: temporary additive glow ring (shadowBlur 18, alpha 0.35) decaying over ~600ms.
+
+2. Straight trigger lines (radii)
+   - Base: existing 0.5px line at ~25% alpha.
+   - Shimmer: a traveling highlight — a short bright segment (~12% of the line length) sliding from center→rim every ~8s, alpha peak 0.18.
+   - On trigger: full-line flash, alpha 0.6 → 0, decaying ~500ms with shadowBlur 14.
+
+3. Note dots
+   - Base: filled dot as today.
+   - Resting breath: radius modulated `r * (1 + 0.06 * sin(t * 0.6 + phase))`, alpha `0.85 + 0.15 * sin(...)`. Each dot gets a deterministic phase from its id so they don't pulse in lockstep.
+   - On trigger: additive halo (radial gradient, 3× radius, alpha 0.5 → 0) over ~700ms. This replaces / refines the current flash.
+
+All shimmer math uses the existing RAF clock — no new timers.
+
+Color: pull from current ring/line palette; halos use the ring's hue at higher luminance so we stay inside the teal/cyan field. No new tokens.
+
+Performance: shimmer adds ~Nrings × 64 segments + Nlines short strokes per frame. Negligible at current counts. `shadowBlur` only used during decaying trigger windows, not every frame.
+
+## Tailwind / CSS
+
+No CSS changes. The provided `index.css` snippet (`--bg-dark: #000000`, `tw-animate-css`) conflicts with our teal palette and isn't needed for a canvas-only effect, so we skip it.
 
 ## Acceptance
-- The pattern is visible across the full viewport (including corners), not just a single bright cluster.
-- No pure-white hot spots at default settings; everything reads as soft, tinted filaments.
-- Idle motion and flash behavior unchanged from the previous pass — still slow, viscous, no jitter.
+
+- At rest: rings show a slow rotating sheen, lines show a faint traveling highlight, dots breathe gently and out of phase. No element ever fully whites out.
+- On note trigger: line flashes, ring blooms briefly at the hit point, dot halos out — all decaying within ~700ms.
+- No frame-rate regression; no new dependencies; Pendulum/Bars unchanged.

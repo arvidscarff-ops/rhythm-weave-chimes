@@ -109,23 +109,28 @@ export function NeuralNoise({ settings, zIndex = 0, blendMode = "plus-lighter" }
 
         float t = u_speed * u_time * (u_reduce > 0.5 ? 0.0 : 1.0);
         float noise = neuro(uv, t, p);
-        // softer contrast — keep faint filaments visible everywhere, no white-out
-        noise = pow(noise, 1.6);
-        noise = max(0.0, noise - 0.18);
-        // gentle vignette: corners keep ~55% weight instead of fading to 0
-        noise *= mix(0.55, 1.0, 1.0 - length(vUv - 0.5));
-        // hard cap so peaks can't saturate to pure white
-        noise = min(noise, 0.55);
+        // Emissive caustics: only bright filaments contribute. Lower values
+        // fade completely to transparent so the shader never deposits a
+        // dark colored pigment over the charcoal background.
+        noise = pow(noise, 1.9);
+        noise = smoothstep(0.10, 0.55, noise);
+        // gentle vignette
+        noise *= mix(0.65, 1.0, 1.0 - length(vUv - 0.5));
+        noise = min(noise, 0.6);
 
-        // gradient between A & B via breathing mix + spatial drift
+        // Color stays light: tint shifts hue but luminance is pinned high
+        // by lifting toward white before being scaled by the emissive mask.
         float g = clamp(u_mix * 0.6 + 0.4 * vUv.y + 0.2 * vUv.x, 0.0, 1.0);
-        vec3 col = mix(u_colorA, u_colorB, g) * noise;
+        vec3 tint = mix(u_colorA, u_colorB, g);
+        vec3 lit  = mix(tint, vec3(1.0), 0.35);
+        // brighter cores lift further toward white-hot
+        float hot = smoothstep(0.25, 0.6, noise);
+        vec3 col  = mix(lit, vec3(1.0), hot * 0.55) * noise;
 
-        // gentle additive bloom in the palette color (no geometry warp)
-        vec3 bloomCol = mix(u_colorA, u_colorB, g);
-        col += bloomCol * flash * 0.12;
+        // gentle additive bloom (light only)
+        col += lit * flash * 0.18;
 
-        float a = noise * u_opacity * 0.9 + flash * 0.18 * u_opacity;
+        float a = noise * u_opacity + flash * 0.22 * u_opacity;
         gl_FragColor = vec4(col, clamp(a, 0.0, 0.6));
       }
     `;

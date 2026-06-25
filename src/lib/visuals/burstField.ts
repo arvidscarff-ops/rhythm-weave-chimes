@@ -137,17 +137,18 @@ function renderSprite(seed: number, hue: number, energy: number): HTMLCanvasElem
       const mask = Math.pow(1 - Math.min(1, rr), 1.6);
       const v = fil * mask * filaments * (0.7 + 0.6 * energy);
       if (v < 0.005) { data[i + 3] = 0; continue; }
-      // phosphor color rotated by local noise so each filament shimmers,
-      // then lifted toward white at bright cores so the bloom reads as light.
+      // Emissive-only: keep RGB pinned to a bright tint so the additive
+      // blit never deposits dark colored pigment. Noise drives ALPHA only,
+      // and bright cores lift the tint all the way to white-hot.
       const [r, g, b] = phosphorColor(hue + n * 1.4 + rr * 0.6);
-      const hot = Math.min(1, v * 1.6); // white-hot core lift
+      const hot = Math.min(1, v * 1.8);
       const rr2 = r * (1 - hot) + 1 * hot;
       const gg2 = g * (1 - hot) + 1 * hot;
       const bb2 = b * (1 - hot) + 1 * hot;
-      data[i]     = Math.min(255, Math.round(rr2 * 255 * v * 1.35));
-      data[i + 1] = Math.min(255, Math.round(gg2 * 255 * v * 1.35));
-      data[i + 2] = Math.min(255, Math.round(bb2 * 255 * v * 1.35));
-      data[i + 3] = Math.min(255, Math.round(Math.min(1, v * 1.1) * 255));
+      data[i]     = Math.round(rr2 * 255);
+      data[i + 1] = Math.round(gg2 * 255);
+      data[i + 2] = Math.round(bb2 * 255);
+      data[i + 3] = Math.min(255, Math.round(Math.min(1, v * 1.35) * 255));
     }
   }
   ctx.putImageData(img, 0, 0);

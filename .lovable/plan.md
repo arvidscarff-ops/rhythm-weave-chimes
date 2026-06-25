@@ -1,35 +1,42 @@
-# Reactive Lens Flare Overlay
+# Subtler, Organic, Note-Colored Light
 
-Yes — doable cleanly within the budget. The flash bus already broadcasts every note trigger (`src/lib/neural/flashBus.ts`) and `burstField.ts` consumes those events for blooms. We add a third subscriber: a canvas overlay that renders an artistic, abstract anamorphic-style lens flare driven by the same energy.
+Three coordinated fixes so flares and bursts feel like the same living organism, tinted by whatever note just played.
 
-## What you'll see
+## 1. Carry note color through the flash bus
 
-- A soft, painterly flare layer sitting above the neural background and below the dock.
-- Each note bloom emits an answering flare: a horizontal anamorphic streak, a chromatic core, 2–3 ghost orbs along the optical axis, and a faint iris halo.
-- Flares inherit the active neural palette hue (so OBSIDIAN stays moody, ACID gets toxic green, etc.) plus a per-burst hue jitter so it never looks mechanical.
-- Energy from many simultaneous notes accumulates into a global "bloom pressure" that gently brightens and lengthens streaks during dense passages, then decays.
-- Honors `prefers-reduced-motion` and the existing Visuals → Glow / Flow sliders for intensity.
+Right now `flashBus.flash(x, y, intensity)` only carries position + intensity, so the lens flare has to guess color from the global preset. The bursts already receive a per-call `hue`, but the flares don't.
 
-Purely additive blending, no DOM, no new dependencies.
+- Extend `NeuralFlash` and `flashBus.flash` with an optional `hue` (0..1).
+- Update the three trigger sites in `src/routes/index.tsx` (Wheel, Pendulum, Bars) to pass the same hue they already pass to `spawnBurst`, so a single note emits one consistent color across burst + flare + neural background.
+- `NeuralNoise`'s flash handler ignores extra fields, so it stays compatible.
+
+## 2. Lens flare: organic, subtle, note-tinted
+
+Rewrite `drawFlares` in `src/lib/visuals/lensFlare.ts` to remove the rectangular streak and lean fully into soft, living forms:
+
+- **Color source:** if the flash carried a hue, convert HSL→RGB and use that as the flare's base color; fall back to palette only when absent.
+- **No more `fillRect` streaks.** Replace with an organic bloom built from:
+  - A primary soft elliptical halo (radial gradient, very low alpha, gently elongated on a per-flare random angle — not always horizontal).
+  - 3–5 wispy "filaments" drawn as quadratic-bezier ribbons with hairline stroke width and additive alpha, offset and curved with seeded noise so each flare looks hand-drawn.
+  - Ghost orbs kept, but smaller, fewer (1–2), and only when energy is high.
+- **Subtlety pass:** roughly halve all alphas (halo ~0.18 max, filaments ~0.06, core ~0.4), shorten radii, raise the global opacity floor so it never spikes harsh. Tie max intensity to `neural.opacity` so the Visuals → Glow slider remains the master.
+- **Motion:** the ellipse rotates a few degrees over its lifetime and filaments drift outward slightly, so the flare breathes instead of just fading.
+
+## 3. Bursts: respect the note hue
+
+In `src/lib/visuals/burstField.ts`, when `opts.hue` is provided, lock the burst's color to that hue (skip the neural-bias blend and the broad seed-driven phosphor randomness for the dominant tint). Keep a tiny per-burst jitter (±0.04) for life, but the dominant color must read as the note's color. Sprite recoloring stays — only the hue input changes.
 
 ## Files
 
-New:
-- `src/lib/visuals/lensFlare.ts` — flare state, `spawnFlare(x,y,opts)`, `updateFlares(dt)`, `drawFlares(ctx, w, h)`. Subscribes to `flashBus` and to neural settings for palette + intensity.
-
 Edited:
-- `src/routes/index.tsx` — in the existing rAF render loop, after `drawBursts(ctx)` call `updateFlares(dt)` + `drawFlares(ctx, w, h)` on the same canvas. No new canvas element.
+- `src/lib/neural/flashBus.ts` — add optional `hue` field.
+- `src/routes/index.tsx` — pass `hue` into the three `flashBus.flash(...)` calls (same value already passed to `spawnBurst`).
+- `src/lib/visuals/lensFlare.ts` — note-hue coloring, organic bloom + bezier filaments replacing the rectangle, alpha/radius tuning, breathing rotation.
+- `src/lib/visuals/burstField.ts` — honor `opts.hue` as the dominant color.
 
-No changes to audio, composer, dock, or routes.
-
-## Technical notes
-
-- Flare primitives drawn with radial + linear gradients and `globalCompositeOperation = "lighter"`, matching `burstField`'s additive approach.
-- Anamorphic streak = thin tall-aspect radial gradient stretched on the x-axis, with a subtle RGB split (3 offset draws in R/G/B-tinted alpha) for chromatic aberration.
-- Ghosts placed along the line from burst position to canvas center, sized/colored by a seeded PRNG so each note's flare feels unique but stable.
-- Envelope: ~80ms attack, ~900ms eased release; cap at ~24 concurrent flares with slot recycling (same pattern as `burstField`).
-- Reads `neuralHueBias()` style helper to stay palette-coherent; multiplies output alpha by Visuals "Glow" setting so users can tone it down or off.
+No new files. No changes to audio, composer, dock, routes, or UI controls.
 
 ## Out of scope
 
-No new UI controls this pass (uses existing Glow/Flow). No shader work — 2D canvas keeps it inside budget.
+- No new visual settings; everything still flows through Visuals → Glow.
+- No shader work; stays on the existing 2D canvas.

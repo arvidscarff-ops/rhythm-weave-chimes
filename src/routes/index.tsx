@@ -1309,8 +1309,11 @@ function updateWheel(
               const rr = ringRadiusPx(ring, W, H);
               const fx = (W / 2 + Math.cos(target) * rr) / W;
               const fy = (H / 2 + Math.sin(target) * rr) / H;
-              flashBus.flash(fx, fy, 0.85);
-              spawnBurst(fx * W, fy * H, { hue: ri * 0.37 + 0.1, energy: 0.85 });
+              {
+                const hue = ri * 0.37 + 0.1;
+                flashBus.flash(fx, fy, 0.85, hue);
+                spawnBurst(fx * W, fy * H, { hue, energy: 0.85 });
+              }
             }
           }
         }
@@ -1643,8 +1646,11 @@ function updatePendulum(
         const ang = Math.sin(b.phase * Math.PI * 2) * 0.55;
         const bx = ax + Math.sin(ang) * len;
         const by = ay + Math.cos(ang) * len;
-        flashBus.flash(bx / W, by / H, 0.8);
-        spawnBurst(bx, by, { hue: i * 0.41 + 0.6, energy: 0.7 });
+        {
+          const hue = i * 0.41 + 0.6;
+          flashBus.flash(bx / W, by / H, 0.8, hue);
+          spawnBurst(bx, by, { hue, energy: 0.7 });
+        }
       }
     }
   });
@@ -1737,8 +1743,11 @@ function updateBars(
       l.lastTriggerY = 1;
       if (W > 0 && H > 0) {
         const x = padX + step * i;
-        flashBus.flash(x / W, bot / H, 0.8);
-        spawnBurst(x, bot, { hue: i * 0.29 + 0.25, energy: 0.75 });
+        {
+          const hue = i * 0.29 + 0.25;
+          flashBus.flash(x / W, bot / H, 0.8, hue);
+          spawnBurst(x, bot, { hue, energy: 0.75 });
+        }
       }
     }
   });

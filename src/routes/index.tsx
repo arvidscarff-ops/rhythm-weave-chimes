@@ -1403,17 +1403,17 @@ function drawWheelScene(
     ctx.arc(cx, cy, R, 0, TAU);
     ctx.stroke();
 
-    // Slow conic sheen — N short arcs whose alpha sweeps around the ring.
+    // Slow tidal sheen — wide bright arc drifts around the ring, never fully dark.
     // Deterministic per-ring phase so rings don't shimmer in lockstep.
     const ringPhase = hashPhase(ring.id);
-    const SEG = 64;
+    const SEG = 24;
     const sweep = TAU / SEG;
-    const sheenPeak = hovered ? 0.16 : 0.10;
+    const sheenPeak = hovered ? 0.32 : 0.22;
     ctx.lineWidth = 0.5;
     for (let i = 0; i < SEG; i++) {
       const a0 = i * sweep;
-      const s = 0.5 + 0.5 * Math.sin(a0 - t * 0.26 + ringPhase);
-      const alpha = sheenPeak * Math.pow(s, 3);
+      const s = 0.5 + 0.5 * Math.sin(a0 - t * 0.18 + ringPhase);
+      const alpha = sheenPeak * (s * s);
       if (alpha < 0.005) continue;
       ctx.strokeStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
       ctx.beginPath();
@@ -1441,25 +1441,15 @@ function drawWheelScene(
     const y1 = cy + Math.sin(line.angle) * maxR * 0.96;
     const x2 = cx - Math.cos(line.angle) * maxR * 0.96;
     const y2 = cy - Math.sin(line.angle) * maxR * 0.96;
-    ctx.strokeStyle = `rgba(255,255,255,${(0.10 + line.flash * 0.30).toFixed(3)})`;
+    // Whole-chord breath — line itself gently brightens and dims on a slow sine.
+    const linePhase = hashPhase(String(line.angle.toFixed(4)));
+    const lineBreath = 0.5 + 0.5 * Math.sin(t * 0.32 + linePhase); // ~6.3s period
+    const lineAlpha = 0.08 + lineBreath * 0.12 + line.flash * 0.30;
+    ctx.strokeStyle = `rgba(255,255,255,${lineAlpha.toFixed(3)})`;
     ctx.lineWidth = 0.5;
     ctx.beginPath();
     ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
     ctx.stroke();
-
-    // Traveling highlight — a short bright segment slides center→rim every ~8s.
-    const linePhase = hashPhase(String(line.angle.toFixed(4)));
-    const u = ((t * 0.125 + linePhase) % 1); // 0..1 along the half-line, period 8s
-    const segLen = 0.12; // 12% of half-line length
-    const hx = cx + Math.cos(line.angle) * maxR * 0.96 * (u * 2 - 1);
-    const hy = cy + Math.sin(line.angle) * maxR * 0.96 * (u * 2 - 1);
-    const hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, maxR * segLen);
-    hg.addColorStop(0, "rgba(255,255,255,0.18)");
-    hg.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = hg;
-    ctx.beginPath();
-    ctx.arc(hx, hy, maxR * segLen, 0, TAU);
-    ctx.fill();
 
     // Trigger flash — whole-line bloom while line.flash decays
     if (line.flash > 0.02) {
@@ -1506,8 +1496,8 @@ function drawWheelScene(
       // Resting breath — each note pulses with its own phase so they're never in lockstep.
       const nPhase = hashPhase(n.id);
       const breath = 0.5 + 0.5 * Math.sin(t * 0.6 + nPhase);
-      const breathR = 1 + 0.06 * (breath * 2 - 1);
-      const breathA = 0.85 + 0.15 * (breath * 2 - 1);
+      const breathR = 1 + 0.18 * (breath * 2 - 1);
+      const breathA = 0.75 + 0.35 * (breath * 2 - 1);
 
       // kinetic trail (6 samples behind the note)
       const trail = getTrail(n);
@@ -1536,6 +1526,19 @@ function drawWheelScene(
       ctx.beginPath();
       ctx.arc(nx, ny, baseR + 10, 0, TAU);
       ctx.fill();
+
+      // Slow breath halo — quiet glow that swells with each note's own phase.
+      {
+        const haloR = baseR * 2.2 + 8;
+        const ha = (0.06 + 0.06 * breath);
+        const bg = ctx.createRadialGradient(nx, ny, 0, nx, ny, haloR);
+        bg.addColorStop(0, color.replace("a", ha.toFixed(3)));
+        bg.addColorStop(1, color.replace("a", "0"));
+        ctx.fillStyle = bg;
+        ctx.beginPath();
+        ctx.arc(nx, ny, haloR, 0, TAU);
+        ctx.fill();
+      }
 
       // trigger halo — wide additive bloom decaying with n.flash
       if (inten > 0.02) {

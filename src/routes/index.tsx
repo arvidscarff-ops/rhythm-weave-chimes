@@ -25,6 +25,7 @@ import {
 } from "@/lib/sound/runtimePacks";
 import { flashBus } from "@/lib/neural/flashBus";
 import { spawnBurst, updateBursts, drawBursts } from "@/lib/visuals/burstField";
+import { composerAdvance, resetComposerSources } from "@/lib/music/composer";
 import {
   NEURAL_PRESETS,
   loadNeuralSettings,

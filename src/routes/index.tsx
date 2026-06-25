@@ -1137,12 +1137,14 @@ function PhaseApp() {
         fxOpen={fxOpen}
         packsOpen={packsOpen}
         aboutOpen={aboutOpen}
+        visualsOpen={visualsOpen}
         onOpenPanel={(p) => {
           setFxOpen(p === "fx" ? !fxOpen : false);
           setPacksOpen(p === "packs" ? !packsOpen : false);
           setAboutOpen(p === "about" ? !aboutOpen : false);
+          setVisualsOpen(p === "visuals" ? !visualsOpen : false);
         }}
-        onCloseAll={() => { setFxOpen(false); setPacksOpen(false); setAboutOpen(false); }}
+        onCloseAll={() => { setFxOpen(false); setPacksOpen(false); setAboutOpen(false); setVisualsOpen(false); }}
       />
       <PhaseReadout
         scene={scene}

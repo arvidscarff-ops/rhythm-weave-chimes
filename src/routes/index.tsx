@@ -1647,6 +1647,7 @@ function drawPendulumScene(
   const maxLen = H * 0.62;
   const minLen = H * 0.30;
   const n = pend.bobs.length;
+  const tNow = performance.now() / 1000;
 
   // anchor bar
   ctx.strokeStyle = "rgba(255,255,255,0.22)";
@@ -1672,20 +1673,14 @@ function drawPendulumScene(
     ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
     ctx.stroke();
 
-    // bob glow
-    const baseR = 6 + b.flash * 10;
-    const g = ctx.createRadialGradient(bx, by, 0, bx, by, 60);
-    const a = 0.35 + b.flash * 0.55;
-    g.addColorStop(0, `rgba(180, 220, 255, ${a})`);
-    g.addColorStop(0.4, `rgba(120, 180, 230, ${a * 0.4})`);
-    g.addColorStop(1, "rgba(120,180,230,0)");
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(bx, by, 60, 0, Math.PI * 2); ctx.fill();
-
-    // crisp ring
-    ctx.strokeStyle = `rgba(220,235,255,${0.55 + b.flash * 0.4})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(bx, by, baseR, 0, Math.PI * 2); ctx.stroke();
+    // Living orb bob
+    drawOrb(ctx, bx, by, {
+      colorTpl: hueToOrbTpl(i * 0.13 + 0.55, 0.86, 0.16),
+      radius: 5 + b.flash * 4 + (hot ? 1.5 : 0),
+      energy: b.flash,
+      time: tNow,
+      phase: i * 1.37,
+    });
   });
 }
 
@@ -1739,6 +1734,7 @@ function drawBarsScene(
   const bot = H * 0.84;
   const usable = W - padX * 2;
   const step = usable / (n - 1 || 1);
+  const tNow = performance.now() / 1000;
 
   // baseline + ceiling hairlines
   ctx.strokeStyle = "rgba(255,255,255,0.18)";
@@ -1759,27 +1755,24 @@ function drawBarsScene(
     const hot = hoverId === l.id;
     pts.push({ x, y: bot, flash: l.flash, hot, id: l.id });
 
-    // playhead glow
-    const g = ctx.createRadialGradient(x, y, 0, x, y, 40);
-    g.addColorStop(0, "rgba(200,225,255,0.55)");
-    g.addColorStop(1, "rgba(200,225,255,0)");
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(x, y, 40, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = hot ? "rgba(255,255,255,0.85)" : "rgba(220,235,255,0.6)";
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.stroke();
-
-    // bottom strike node
-    const sR = 4 + l.flash * 12;
-    const sa = 0.35 + l.flash * 0.55;
-    const sg = ctx.createRadialGradient(x, bot, 0, x, bot, 70);
-    sg.addColorStop(0, `rgba(180,220,255,${sa})`);
-    sg.addColorStop(1, "rgba(120,180,230,0)");
-    ctx.fillStyle = sg;
-    ctx.beginPath(); ctx.arc(x, bot, 70, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = `rgba(220,235,255,${0.5 + l.flash * 0.5})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(x, bot, sR, 0, Math.PI * 2); ctx.stroke();
+    // Living orb playhead
+    const tpl = hueToOrbTpl(i * 0.13 + 0.5, 0.85, 0.16);
+    drawOrb(ctx, x, y, {
+      colorTpl: tpl,
+      radius: 4 + (hot ? 1.2 : 0),
+      energy: 0,
+      time: tNow,
+      phase: i * 1.81,
+      haloAmount: 0.7,
+    });
+    // bottom strike node (swells on trigger)
+    drawOrb(ctx, x, bot, {
+      colorTpl: tpl,
+      radius: 4 + l.flash * 6,
+      energy: l.flash,
+      time: tNow,
+      phase: i * 2.13 + 1.0,
+    });
   });
 
   // zigzag connector along bottom nodes

@@ -1160,14 +1160,16 @@ function PhaseApp() {
       />
       {/* CANVAS */}
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
+        <DotAtmosphere bpm={bpm} playing={playing} />
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full block"
-          style={{ background: "transparent", cursor: isWheel ? "crosshair" : "default" }}
+          style={{ background: "transparent", cursor: isWheel ? "crosshair" : "default", zIndex: 1 }}
           onPointerDown={onCanvasPointerDown}
           onPointerMove={onCanvasPointerMove}
           onPointerLeave={onCanvasPointerLeave}
         />
+        <ShockwaveLayer />
         {isWheel && (
           <WheelOverlays
             wheel={engineRef.current.wheel}

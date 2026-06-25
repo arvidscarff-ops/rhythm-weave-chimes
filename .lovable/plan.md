@@ -1,31 +1,52 @@
-## Goal
-Make the Visuals → Background presets visually distinct, and add a near-black "Obsidian" dark mode preset that also dims the app's stage background (not just the shader tint).
+# Generative Composer
 
-## Changes
+Turn each ring from "random pulse on intersection" into a musical voice that plays **in-key notes** following a **Euclidean rhythm pattern**. The polyrhythmic phasing stays exactly as it is — we just decide *which* trigger crossings actually fire, and *which note* they play.
 
-### 1. `src/lib/neural/palette.ts` — bolder, more differentiated presets
-Replace the current 6 presets (all mid-saturation teal/violet siblings) with 6 dramatically different palettes, each with a strong `colorB` partner so the shader actually gradients:
+## What you'll get in the UI
 
-- `aurora` — icy mint → electric cyan (cool, bright)
-- `ember` — molten orange → deep crimson (hot, warm)
-- `violet` — magenta → indigo (vivid, saturated)
-- `acid` — chartreuse → toxic green (high-chroma pop, new)
-- `phase` — hot pink → cobalt blue (synthwave contrast)
-- `obsidian` — near-black charcoal → faint steel blue (dark mode, very low luminance)
+A new **Composer** entry in the dock (or nested under Scene → ring config) with, per ring:
 
-Extend `NeuralPreset` with an optional `stage` field carrying a CSS gradient string. Only `obsidian` sets one (near-black radial field); other presets leave it undefined and inherit the existing teal stage.
+- **Scale** dropdown — Major, Minor, Dorian, Mixolydian, Pentatonic Maj/Min, Blues, Hirajoshi (Japanese), Phrygian Dominant, Whole Tone, Chromatic.
+- **Root note** — C through B.
+- **Octave range** — low/high bounds (e.g. C3–C5) the ring picks from.
+- **Pattern (Euclidean)** — two numbers `E(k, n)`: *k* hits spread as evenly as possible across *n* steps. Classic example: `E(3,8)` = the tresillo. A small dot-grid preview shows the pattern.
+- **Rotation** — shift the pattern's starting step (0…n-1) so two rings with the same pattern can interlock.
+- **Note mode** — Sequential (walk up the scale), Random-in-scale, Arpeggio (1-3-5), or Brownian (small steps).
 
-### 2. `src/styles.css` — make stage background themable
-Promote the stage gradient to a swappable variable. Keep `--pr-bg-grad` as the default (current teal). Add `--pr-stage-bg` defaulting to `var(--pr-bg-grad)`, and change `.pr-stage` to use `--pr-stage-bg`. This lets a preset override just the stage without touching the default.
+A **global Key/Scale lock** at the top lets all rings inherit one key with one click.
 
-### 3. `src/routes/__root.tsx` (or wherever neural settings subscribe) — apply stage override
-On neural settings change, if the active preset defines `stage`, set `document.documentElement.style.setProperty('--pr-stage-bg', preset.stage)`; otherwise remove the override. Subscribe via existing `subscribeNeuralSettings`. Do this once at mount + on each change.
+## How it changes playback
 
-### 4. No changes to shader code
-`NeuralNoise` already reads `color`/`colorB` from the preset, so new palettes flow through automatically. Opacity/Flow sliders unchanged.
+Today a ring fires every time its rotation crosses a trigger line. With the composer:
 
-## Out of scope
-Dock chrome, dock readability, audio engine, scene rendering colors (rings/notes keep their phosphor palette).
+1. Each ring keeps an internal **step counter** that advances on every crossing.
+2. The Euclidean pattern decides whether that step is a **hit** or a **rest**.
+3. On a hit, the note picker (sequential/random/arp/brownian) chooses the next scale degree and converts it to a frequency for the existing synth voice.
 
-## Risk
-Low — additive CSS variable, palette data swap, one effect in root route.
+Result: rings stop sounding like atonal pings and start sounding like interlocking melodic phrases that phase against each other — exactly the appeal of polyrhythmic music (Reich, Aphex, generative ambient).
+
+## Defaults that sound good immediately
+
+- Global key: **A minor pentatonic**
+- Ring 1: `E(3,8)` sequential, octave 3-4
+- Ring 2: `E(5,8)` random-in-scale, octave 4-5, rotation 2
+- Ring 3: `E(2,5)` arpeggio, octave 2-3
+
+So a brand-new session sounds musical without touching anything.
+
+## Technical sketch (for the curious)
+
+- New `src/lib/music/scales.ts` — scale interval tables + `degreeToFreq(root, scale, degree, octave)`.
+- New `src/lib/music/euclidean.ts` — Bjorklund's algorithm returning a `boolean[]` of length *n*.
+- New `src/lib/music/composer.ts` — per-ring state `{ step, pattern, noteCursor }` with an `advance()` that returns `{ play: boolean, freq?: number }`.
+- Extend the existing ring config type with `{ scale, root, octaveLow, octaveHigh, euclid: {k,n,rotation}, noteMode }`; persisted alongside current ring settings.
+- In the trigger handler in `src/routes/index.tsx`, call `composer.advance(ringId)` instead of unconditionally firing; pass the returned freq into the existing pack voice function (packs keep working unchanged — they're just told *what pitch* now).
+- Dock: new `ComposerMenu` using the same `material-ui-dropdown-menu` drill-down pattern as `FxMenu`, plus a tiny canvas dot-grid for the Euclidean preview.
+
+No audio engine rewrite, no schema changes, no new dependencies.
+
+## Out of scope (can come next)
+
+- Saving/sharing composer presets via URL hash (pairs naturally with option 3 from earlier).
+- Chord rings (multiple notes per hit).
+- Swing / humanization.

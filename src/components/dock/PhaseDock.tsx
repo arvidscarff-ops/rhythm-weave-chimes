@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
-  Play, Pause, Layers, Sliders, Music3, Eye, MoreHorizontal,
+  Play, Pause, Layers, Sliders, Music3, Eye, MoreHorizontal, Sparkles,
   Info, Wrench, LogIn, LogOut,
 } from "lucide-react";
 import {
@@ -16,6 +16,12 @@ import {
 } from "@/lib/fx/fxState";
 import { NEURAL_PRESETS, type NeuralSettings } from "@/lib/neural/palette";
 import type { RuntimePack } from "@/lib/sound/runtimePacks";
+import {
+  SCALES, ROOT_NAMES, type ScaleId, type RootName,
+} from "@/lib/music/scales";
+import {
+  type ComposerSettings, type SlotSettings, type NoteMode, patternFor,
+} from "@/lib/music/composer";
 import { cn } from "@/lib/utils";
 
 export type SceneKind = "wheel" | "pendulum" | "bars";
@@ -43,6 +49,9 @@ type Props = {
 
   neural: NeuralSettings;
   onNeural: (s: NeuralSettings) => void;
+
+  composer: ComposerSettings;
+  onComposer: (s: ComposerSettings) => void;
 
   authed: boolean;
   email?: string | null;
@@ -81,6 +90,7 @@ export function PhaseDock(p: Props) {
 
         <SceneMenu scene={p.scene} onScene={p.onScene} multiply={p.multiply} onMultiply={p.onMultiply} />
         <FxMenu fx={p.fx} onFx={p.onFx} />
+        <ComposeMenu composer={p.composer} onComposer={p.onComposer} />
         <PacksMenu packs={p.packs} packId={p.packId} onPackId={p.onPackId} />
         <VisualsMenu neural={p.neural} onNeural={p.onNeural} />
 

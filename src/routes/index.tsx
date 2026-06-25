@@ -21,6 +21,14 @@ import {
   warmCustomPack,
   type RuntimePack,
 } from "@/lib/sound/runtimePacks";
+import { flashBus } from "@/lib/neural/flashBus";
+import {
+  NEURAL_PRESETS,
+  loadNeuralSettings,
+  saveNeuralSettings,
+  subscribeNeuralSettings,
+  type NeuralSettings,
+} from "@/lib/neural/palette";
 
 export const Route = createFileRoute("/")({
   head: () => ({

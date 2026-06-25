@@ -181,7 +181,7 @@ body::before {
 
 /* App-wide teal field. Set on the root app div via .pr-stage. */
 .pr-stage {
-  background: var(--pr-bg-grad);
+  background: var(--pr-stage-bg, var(--pr-bg-grad));
   background-attachment: fixed;
 }
 

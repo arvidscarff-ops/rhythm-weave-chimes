@@ -972,21 +972,21 @@ function PhaseApp() {
     ctx2d.globalCompositeOperation = "lighter";
     if (scene === "wheel") {
       if (playing) {
-        updateWheel(e.wheel, dt, a!, bpmRef.current, voicesRef.current, knobsRef.current, packRef.current);
+        updateWheel(e.wheel, dt, a!, bpmRef.current, voicesRef.current, knobsRef.current, packRef.current, W, H);
       } else {
         decayWheelFlashes(e.wheel, dt);
       }
       drawWheelScene(ctx2d, W, H, e.wheel, voicesRef.current, dt, hoverRingIdRef.current);
     } else if (scene === "pendulum") {
       if (playing) {
-        updatePendulum(e.pendulum, dt, a!, bpmRef.current, knobsRef.current, packRef.current);
+        updatePendulum(e.pendulum, dt, a!, bpmRef.current, knobsRef.current, packRef.current, W, H);
       } else {
         decayPendulumFlashes(e.pendulum, dt);
       }
       drawPendulumScene(ctx2d, W, H, e.pendulum, hoverRingIdRef.current);
     } else {
       if (playing) {
-        updateBars(e.bars, dt, a!, bpmRef.current, knobsRef.current, packRef.current);
+        updateBars(e.bars, dt, a!, bpmRef.current, knobsRef.current, packRef.current, W, H);
       } else {
         decayBarsFlashes(e.bars, dt);
       }

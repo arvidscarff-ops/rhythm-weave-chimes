@@ -1223,6 +1223,7 @@ function PhaseApp() {
           }}
         />
         <AboutDrawer open={aboutOpen} onClose={() => setAboutOpen(false)} />
+        <VisualsDrawer open={visualsOpen} />
       </main>
     </div>
   );

@@ -1619,10 +1619,14 @@ function updatePendulum(
     const s = Math.sin(b.phase * Math.PI * 2);
     const sign: 1 | -1 = s >= 0 ? 1 : -1;
     if (sign !== b.prevSign) {
-      const freq = pitchToFreq(b.pitchIndex + knobs.pitch);
-      triggerPackVoice(audio.ctx, audio.preFx, pack, b.slotIndex, freq, now + 0.005);
-      b.flash = 1;
+      const fallback = pitchToFreq(b.pitchIndex);
+      const sourceId = `pend:${b.id}`;
+      const { play, freq } = composerAdvance(sourceId, b.slotIndex, fallback);
       b.prevSign = sign;
+      if (!play) return;
+      const out = freq * Math.pow(2, knobs.pitch / 12);
+      triggerPackVoice(audio.ctx, audio.preFx, pack, b.slotIndex, out, now + 0.005);
+      b.flash = 1;
       if (W > 0 && H > 0) {
         const t = n <= 1 ? 0.5 : i / (n - 1);
         const len = minLen + (maxLen - minLen) * t;

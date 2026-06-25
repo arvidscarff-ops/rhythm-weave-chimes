@@ -21,6 +21,14 @@ import {
   warmCustomPack,
   type RuntimePack,
 } from "@/lib/sound/runtimePacks";
+import { flashBus } from "@/lib/neural/flashBus";
+import {
+  NEURAL_PRESETS,
+  loadNeuralSettings,
+  saveNeuralSettings,
+  subscribeNeuralSettings,
+  type NeuralSettings,
+} from "@/lib/neural/palette";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -617,6 +625,7 @@ function PhaseApp() {
   const [fxOpen, setFxOpen] = useState(false);
   const [packsOpen, setPacksOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [visualsOpen, setVisualsOpen] = useState(false);
   const [selectedPack, setSelectedPack] = useState<string>("moss");
   const [customPacks, setCustomPacks] = useState<RuntimePack[]>([]);
   // topology bump: rings/lines/notes counts so DOM overlays re-render
@@ -964,21 +973,21 @@ function PhaseApp() {
     ctx2d.globalCompositeOperation = "lighter";
     if (scene === "wheel") {
       if (playing) {
-        updateWheel(e.wheel, dt, a!, bpmRef.current, voicesRef.current, knobsRef.current, packRef.current);
+        updateWheel(e.wheel, dt, a!, bpmRef.current, voicesRef.current, knobsRef.current, packRef.current, W, H);
       } else {
         decayWheelFlashes(e.wheel, dt);
       }
       drawWheelScene(ctx2d, W, H, e.wheel, voicesRef.current, dt, hoverRingIdRef.current);
     } else if (scene === "pendulum") {
       if (playing) {
-        updatePendulum(e.pendulum, dt, a!, bpmRef.current, knobsRef.current, packRef.current);
+        updatePendulum(e.pendulum, dt, a!, bpmRef.current, knobsRef.current, packRef.current, W, H);
       } else {
         decayPendulumFlashes(e.pendulum, dt);
       }
       drawPendulumScene(ctx2d, W, H, e.pendulum, hoverRingIdRef.current);
     } else {
       if (playing) {
-        updateBars(e.bars, dt, a!, bpmRef.current, knobsRef.current, packRef.current);
+        updateBars(e.bars, dt, a!, bpmRef.current, knobsRef.current, packRef.current, W, H);
       } else {
         decayBarsFlashes(e.bars, dt);
       }
@@ -1128,12 +1137,14 @@ function PhaseApp() {
         fxOpen={fxOpen}
         packsOpen={packsOpen}
         aboutOpen={aboutOpen}
+        visualsOpen={visualsOpen}
         onOpenPanel={(p) => {
           setFxOpen(p === "fx" ? !fxOpen : false);
           setPacksOpen(p === "packs" ? !packsOpen : false);
           setAboutOpen(p === "about" ? !aboutOpen : false);
+          setVisualsOpen(p === "visuals" ? !visualsOpen : false);
         }}
-        onCloseAll={() => { setFxOpen(false); setPacksOpen(false); setAboutOpen(false); }}
+        onCloseAll={() => { setFxOpen(false); setPacksOpen(false); setAboutOpen(false); setVisualsOpen(false); }}
       />
       <PhaseReadout
         scene={scene}
@@ -1212,6 +1223,7 @@ function PhaseApp() {
           }}
         />
         <AboutDrawer open={aboutOpen} onClose={() => setAboutOpen(false)} />
+        <VisualsDrawer open={visualsOpen} />
       </main>
     </div>
   );
@@ -1259,6 +1271,7 @@ function decayWheelFlashes(wh: WheelState, dt: number) {
 
 function updateWheel(
   wh: WheelState, dt: number, audio: AudioGraph, bpm: number, voices: VoiceSel, knobs: Knobs, pack: RuntimePack,
+  W = 0, H = 0,
 ) {
   const now = audio.ctx.currentTime;
   const REFRACTORY = 0.16; // prevents frame jitter and ambient voice pileups
@@ -1311,6 +1324,12 @@ function updateWheel(
             // record spark location for visual (approx at target angle, radius of ring)
             // we don't have W/H here; store in normalized polar (target, ringId)
             line.sparks.push({ x: target, y: ring.radiusFactor, t: 0.6 });
+            if (W > 0 && H > 0) {
+              const rr = ringRadiusPx(ring, W, H);
+              const fx = (W / 2 + Math.cos(target) * rr) / W;
+              const fy = (H / 2 + Math.sin(target) * rr) / H;
+              flashBus.flash(fx, fy, 0.85);
+            }
           }
         }
       }
@@ -1523,11 +1542,14 @@ function decayPendulumFlashes(pend: PendulumState, dt: number) {
 
 function updatePendulum(
   pend: PendulumState, dt: number, audio: AudioGraph, bpm: number,
-  knobs: Knobs, pack: RuntimePack,
+  knobs: Knobs, pack: RuntimePack, W = 0, H = 0,
 ) {
   decayPendulumFlashes(pend, dt);
   const now = audio.ctx.currentTime;
-  for (const b of pend.bobs) {
+  const n = pend.bobs.length;
+  const ax = W / 2, ay = H * 0.16;
+  const maxLen = H * 0.62, minLen = H * 0.30;
+  pend.bobs.forEach((b, i) => {
     const period = pendPeriodSec(b, bpm);
     const inc = dt / Math.max(0.001, period);
     b.phase = (b.phase + inc) % 1;
@@ -1539,8 +1561,16 @@ function updatePendulum(
       triggerPackVoice(audio.ctx, audio.preFx, pack, b.slotIndex, freq, now + 0.005);
       b.flash = 1;
       b.prevSign = sign;
+      if (W > 0 && H > 0) {
+        const t = n <= 1 ? 0.5 : i / (n - 1);
+        const len = minLen + (maxLen - minLen) * t;
+        const ang = Math.sin(b.phase * Math.PI * 2) * 0.55;
+        const bx = ax + Math.sin(ang) * len;
+        const by = ay + Math.cos(ang) * len;
+        flashBus.flash(bx / W, by / H, 0.8);
+      }
     }
-  }
+  });
 }
 
 function drawPendulumScene(
@@ -1605,11 +1635,16 @@ function decayBarsFlashes(bars: BarsState, dt: number) {
 
 function updateBars(
   bars: BarsState, dt: number, audio: AudioGraph, bpm: number,
-  knobs: Knobs, pack: RuntimePack,
+  knobs: Knobs, pack: RuntimePack, W = 0, H = 0,
 ) {
   decayBarsFlashes(bars, dt);
   const now = audio.ctx.currentTime;
-  for (const l of bars.lanes) {
+  const n = bars.lanes.length;
+  const padX = W * 0.12;
+  const usable = W - padX * 2;
+  const step = n > 1 ? usable / (n - 1) : 0;
+  const bot = H * 0.84;
+  bars.lanes.forEach((l, i) => {
     const period = barPeriodSec(l, bpm);
     const prev = l.phase;
     l.phase = (l.phase + dt / Math.max(0.001, period)) % 1;
@@ -1619,8 +1654,12 @@ function updateBars(
       triggerPackVoice(audio.ctx, audio.preFx, pack, l.slotIndex, freq, now + 0.005);
       l.flash = 1;
       l.lastTriggerY = 1;
+      if (W > 0 && H > 0) {
+        const x = padX + step * i;
+        flashBus.flash(x / W, bot / H, 0.8);
+      }
     }
-  }
+  });
 }
 
 function drawBarsScene(
@@ -1946,15 +1985,16 @@ function PhaseReadout({
   );
 }
 
-type PanelId = "fx" | "packs" | "about";
+type PanelId = "fx" | "packs" | "about" | "visuals";
 function PhaseChrome({
-  scene, onScene, fxOpen, packsOpen, aboutOpen, onOpenPanel, onCloseAll,
+  scene, onScene, fxOpen, packsOpen, aboutOpen, visualsOpen, onOpenPanel, onCloseAll,
 }: {
   scene: SceneKind;
   onScene: (s: SceneKind) => void;
   fxOpen: boolean;
   packsOpen: boolean;
   aboutOpen: boolean;
+  visualsOpen: boolean;
   onOpenPanel: (p: PanelId) => void;
   onCloseAll: () => void;
 }) {
@@ -2042,6 +2082,11 @@ function PhaseChrome({
           data-active={aboutOpen ? "true" : undefined}
           onClick={() => onOpenPanel("about")}
         >About</button>
+        <button
+          className="pr-rail-link"
+          data-active={visualsOpen ? "true" : undefined}
+          onClick={() => onOpenPanel("visuals")}
+        >Visuals</button>
         {isAdmin && (
           <Link to="/dev" className="pr-rail-link">Dev</Link>
         )}
@@ -2498,6 +2543,119 @@ function AboutDrawer({ open, onClose }: { open: boolean; onClose: () => void }) 
         <div className="flex items-center justify-between pt-2 border-t border-white/[0.05]">
           <span className="text-[9px] tracking-[0.22em] uppercase text-white/35">v 0.4 · 2026</span>
           <span className="text-[9px] tracking-[0.22em] uppercase text-white/35">© phase, inc.</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+ * Visuals Drawer — neural noise background controls
+ * ============================================================ */
+
+function VisualsDrawer({ open }: { open: boolean }) {
+  const [s, setS] = useState<NeuralSettings>(() => loadNeuralSettings());
+  useEffect(() => subscribeNeuralSettings(setS), []);
+  const update = (patch: Partial<NeuralSettings>) => {
+    const next = { ...s, ...patch };
+    setS(next);
+    saveNeuralSettings(next);
+  };
+  // swatch preview color
+  const swatch = (c: [number, number, number]) =>
+    `rgb(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)})`;
+
+  return (
+    <div
+      data-state={open ? "open" : "closed"}
+      className="fx-drawer absolute left-1/2 bottom-[88px] rounded-2xl border border-white/10 backdrop-blur-xl bg-neutral-950/40 pr-mono"
+      style={{
+        width: "min(640px, calc(100vw - 48px))",
+        height: 260,
+        boxShadow:
+          "0 24px 70px rgba(0,0,0,0.65), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.03)",
+        zIndex: 4,
+      }}
+    >
+      <div className="pr-stagger h-full grid grid-cols-2 divide-x divide-white/[0.07]">
+        {/* Presets */}
+        <div className="flex flex-col px-5 py-4 gap-3">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] tracking-[0.22em] uppercase text-white/70">palette</div>
+            <div className="text-[9px] tracking-[0.18em] uppercase text-white/35">
+              {s.opacity > 0 ? "live" : "off"}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 flex-1 overflow-auto">
+            {NEURAL_PRESETS.map((p) => {
+              const active = p.id === s.presetId;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => update({ presetId: p.id })}
+                  className={
+                    "flex items-center gap-2 px-2.5 py-2 rounded-sm text-left transition-colors " +
+                    (active
+                      ? "bg-white/15 text-white"
+                      : "bg-white/[0.04] text-white/65 hover:bg-white/10 hover:text-white")
+                  }
+                >
+                  <span
+                    className="h-3.5 w-3.5 rounded-full shrink-0"
+                    style={{
+                      background: p.colorB
+                        ? `linear-gradient(135deg, ${swatch(p.color)}, ${swatch(p.colorB)})`
+                        : swatch(p.color),
+                      boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
+                    }}
+                  />
+                  <span className="text-[10px] tracking-[0.16em] uppercase">{p.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Sliders */}
+        <div className="flex flex-col px-5 py-4 gap-4">
+          <div className="text-[10px] tracking-[0.22em] uppercase text-white/70">field</div>
+
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between text-[9px] tracking-[0.18em] uppercase text-white/40">
+              <span>opacity</span>
+              <span className="tabular-nums text-white/70">{Math.round(s.opacity * 100)}</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={0.6}
+              step={0.01}
+              value={s.opacity}
+              onChange={(e) => update({ opacity: parseFloat(e.target.value) })}
+              className="pr-hairline-slider w-full"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between text-[9px] tracking-[0.18em] uppercase text-white/40">
+              <span>speed</span>
+              <span className="tabular-nums text-white/70">{s.speed.toFixed(2)}x</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={2}
+              step={0.01}
+              value={s.speed}
+              onChange={(e) => update({ speed: parseFloat(e.target.value) })}
+              className="pr-hairline-slider w-full"
+            />
+          </div>
+
+          <p className="text-[10px] leading-[1.55] text-white/40 mt-1">
+            Subtle WebGL field that breathes behind everything. Cursor brightens it locally;
+            every triggered note blooms a quiet flash at its position.
+          </p>
         </div>
       </div>
     </div>

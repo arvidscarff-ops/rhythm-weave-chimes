@@ -1,86 +1,60 @@
-# Multi-scene engine: Wheel + Pendulum + Bars
 
-Today the canvas only treats **Wheel** as a first-class "art mode" (open canvas, ArtDock, FX/Packs/About drawers, pack engine via `triggerPackVoice`). The legacy `polygon` / `sine` / `lissajous` scenes use an older scheduler and a different chrome. We'll retire the legacy scenes from the UI and promote three first-class scenes sharing the same engine: **Wheel**, **Pendulum**, **Bars**.
+## Goal
 
-## What the user gets
+Add the NeuralNoise WebGL shader as a global, subtle "breathing" background that sits behind everything in the app, reacts to cursor movement (already built into the shader), and lights up locally when notes trigger. Expose a small UI to pick the color or a gradient preset.
 
-- A **Scene selector** in the left rail (under the PHASE wordmark): `wheel · pendulum · bars`. Switching scenes never tears down audio — packs, FX, BPM, master volume, and play state persist.
-- **Pendulum scene** — pendulums hang from a top anchor; each swings at its own natural period. A note fires every time a bob crosses bottom-dead-centre (both directions). Different string lengths produce phasing polyrhythms (Galileo-pendulum classic).
-- **Bars scene** — vertical lanes across the canvas. Each lane has a falling playhead at its own rate; it fires a note when it hits the bottom, then loops to the top. A faint zigzag line connects the last trigger points across lanes.
-- Each scene has its own minimal editing surface (add/remove element, per-element slot pick) and its own `PhaseReadout` rows.
-- All three scenes route through `triggerPackVoice(activePack, slotIndex, freq, when)` so the active sound pack, FX chain, and per-slot panning apply uniformly.
+## Files
 
-## Architecture changes (technical section)
+**New: `src/components/ui/neural-noise.tsx`**
+- Port the provided component to TypeScript with proper refs/types (no module-scope `let gl`).
+- Props:
+  - `color: [number, number, number]` — base RGB (0-1).
+  - `colorB?: [number, number, number]` — optional second color for gradient blending.
+  - `opacity?: number` (default `0.35` — subtle).
+  - `speed?: number` (default `0.0003` — slow "breathing").
+  - `scale?: number` — overall noise scale.
+  - `flashRef?: React.MutableRefObject<{ x: number; y: number; intensity: number; until: number } | null>` — external trigger source for note flashes.
+- Extend the fragment shader:
+  - Add `u_color_b`, `u_mix` (animated slow sine for breathing blend).
+  - Add `u_flash_position`, `u_flash_intensity` — adds a localized bright contribution near the flash point that decays each frame.
+- Use `requestAnimationFrame` id stored in a ref; cancel on unmount. Add a `<canvas>` with `position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 0; opacity: var(--neural-opacity)`.
 
-### 1. Scene model
-- Narrow `SceneKind` to `"wheel" | "pendulum" | "bars"`. Delete `polygon` / `sine` / `lissajous` from the active set and remove their headers/dropdowns/scheduler.
-- Add `pendulum: PendulumState` and `bars: BarsState` to `EngineState` alongside `wheel`.
-- Treat the whole canvas as "art mode" regardless of scene — always render with `paintArtBackground`, always show `ArtDock` + drawers + `PhaseReadout`. Drop the legacy `!isWheel` header / footer entirely.
+**New: `src/lib/neural/palette.ts`**
+- Export gradient/color presets compatible with the current Phase aesthetic:
+  - `Aurora` (teal → cyan), `Lagoon` (deep teal mono), `Ember` (warm amber → magenta), `Violet Mist` (indigo → violet), `Phase Pink` (the demo default), `Mono` (white).
+- Each preset: `{ id, label, color: [r,g,b], colorB?: [r,g,b] }`.
 
-### 2. Pendulum scene
-```
-type Pendulum = {
-  id: string;
-  lengthFactor: number;   // 0.35..0.95 of available height
-  angle: number;          // rad, current
-  angVel: number;
-  damping: number;        // ~0.0 (visual only; we drive period analytically)
-  slotIndex: number;      // 0..5 → pack slot
-  pitchIndex: number;     // 0..11 → semitone offset for sample/synth
-  prevSign: -1 | 0 | 1;   // for zero-cross detection
-  flash: number;
-};
-type PendulumState = { pivot: { x: number; y: number }; bobs: Pendulum[] };
-```
-- Update: integrate small-angle SHM `θ̈ = -(g/L)·θ` with `g` chosen so the slowest pendulum's period at BPM=90 is musically slow (~6s). Bind period to BPM so `pendulum.period(i) = baseSec(bpm) * ratio(i)` where ratios are e.g. `1, 8/9, 8/10, 8/11, 8/12, 8/13` → constant phasing across bobs.
-- Trigger: when `sign(angle)` changes, fire `triggerPackVoice` at `audioNow + 0.005`, bump `flash`, and append a ripple particle at the bob position.
-- Draw: thin (0.5px) string from pivot to bob; bob ring with bloom proportional to `flash`; pivot dot at top. Soft star-dust unchanged.
-- Edit overlay: small chips along the top edge (one per bob) showing `slot · length`; `+` button to add; click chip to cycle slot; drag chip horizontally to retune length. `−` removes.
+**New: `src/lib/neural/flashBus.ts`**
+- A tiny singleton with `subscribe(cb)` and `flash(x, y, intensity?)`. Uses normalized viewport coords (0-1).
+- The neural-noise component subscribes and writes into its internal flash ref.
 
-### 3. Bars scene
-```
-type BarLane = {
-  id: string;
-  x: number;          // normalized 0..1
-  period: number;     // seconds for playhead to fall canvas-height
-  phase: number;      // 0..1 current position
-  slotIndex: number;  // 0..5
-  pitchIndex: number; // 0..11
-  flash: number;
-  lastTriggerY: number; // for zigzag connector
-};
-type BarsState = { lanes: BarLane[] };
-```
-- Update: advance `phase += dt / period`. When `phase >= 1`, fire `triggerPackVoice`, reset `phase -= 1`, bump `flash`. Periods derive from BPM with per-lane ratios (`4/3, 5/4, 6/5, 7/6, ...`) so lanes phase against each other.
-- Draw: faint vertical lane rectangle for each (slightly brighter at the active column), small ring at the playhead position with bloom on trigger, plus a 0.5px polyline connecting the bottom-trigger points across lanes for the "zigzag" reference look. When a lane just fired, draw a bright glowing ring at the bottom of that lane decaying over ~600ms.
-- Edit overlay: chips above each lane (`slot · ratio`), `+` button to add a lane (auto-distributes x), `−` to remove. Click chip cycles slot; right-click cycles ratio.
+**Edit: `src/routes/__root.tsx`**
+- Mount `<NeuralNoise />` once inside the body shell (above route Outlet in DOM order but `z-index: 0` with the rest of the app at `z-index: 1+`), so it appears as a global background on every route.
+- Read selected preset from `localStorage` ("phase.neural.preset", default `Aurora`) inside a `useEffect` to avoid SSR hydration mismatch; render `null` for the canvas until mounted client-side (prevents the existing hydration warning pattern).
 
-### 4. Shared scene contract (refactor)
-Introduce a tiny per-scene module pattern inside `src/routes/index.tsx` (kept in-file to minimize churn; can extract later):
-```
-type SceneAdapter = {
-  update(dt: number, audio: AudioGraph, ctx: TickCtx): void;
-  draw(c: CanvasRenderingContext2D, W: number, H: number, audioNow: number, hoverId: string | null): void;
-  readout(): { id: string; label: string; period: number }[];
-};
-```
-Wire `wheel`, `pendulum`, `bars` adapters; the RAF loop calls `adapter.update` + `adapter.draw`. The legacy `setInterval` scheduler is removed.
+**Edit: `src/styles.css`**
+- Lower the existing `.pr-stage` gradient opacity slightly so the shader reads through; ensure body background remains charcoal/teal base.
+- Make the app chrome (rails, dock, readout) sit on `z-index: 10+` and add `isolation: isolate` where needed so backdrop-blur still works over the shader.
 
-### 5. Scene switcher UI
-- Add a `SceneRail` to `PhaseChrome` (left side, under the wordmark) with three buttons. Active scene highlighted with the existing rail-link style. Switching scene closes drawers cleanly.
-- `PhaseReadout` becomes scene-aware: pulls `adapter.readout()` so each scene shows its own per-element rows (e.g. Pendulum: `L0.62 · 5.30s`, Bars: `4/5 · 3.20s`).
-- `ArtDock` action buttons become scene-contextual: Wheel keeps `+ring / +line`, Pendulum gets `+pendulum`, Bars gets `+lane`. Other dock buttons (play/pause, BPM, FX, Packs) are unchanged.
+**Edit: `src/routes/index.tsx`**
+- Import `flashBus` from `@/lib/neural/flashBus`.
+- In each scene's trigger handler (Wheel intersection, Pendulum zero-crossing, Bars playhead trigger), after firing audio, call `flashBus.flash(nx, ny, velocity)` where `nx, ny` are normalized to viewport coordinates (use the canvas's bounding rect + the trigger's local coords).
+- Add a "Visuals" section to the FX drawer (or About → Visuals) with:
+  - Preset picker (chips for the 6 presets).
+  - Opacity slider (0–60%, default 35%).
+  - Speed slider (very slow → slow).
+  - Persist to `localStorage` and broadcast via a small `useNeuralSettings` hook so `<NeuralNoise>` picks up changes live.
 
-### 6. Audio engine (no changes to graph)
-- `triggerPackVoice` already accepts `(slotIndex, freq, when)` — both new scenes call it directly. Frequency derived from `pitchIndex` via a small `pitchToFreq` helper (e.g. `220 * 2^(p/12)`).
-- Active-voice cap, limiter, FX chain, convolver — all reused as-is.
+## Behavior
 
-### 7. Files touched
-- `src/routes/index.tsx` — main work: new state types, two new scene adapters, scene switcher, readout/dock wiring, remove legacy scenes/scheduler/header/footer.
-- No new files, no schema changes, no new dependencies.
+- Default state: barely-there teal/cyan flow at ~35% opacity, breathing on a ~20s sine.
+- Cursor: subtle local brightening (already in shader's `u_pointer_position`).
+- Note trigger: short radial bloom at the note's screen position; intensity scales with note velocity; decays over ~600ms with exponential easing — never overwhelms the composition.
+- Respects `prefers-reduced-motion`: drops speed to 0 and disables flashes.
 
-## Out of scope (next phase candidates)
-- 3-layer melo/bass/atmo split (the Lucid Rhythms top-bar model) — call it out separately when you're ready.
-- `multiply` knob and split `rev-size` / `rev-mix` semantics tweak.
-- Preset save/recall with prev/next stepping.
-- Background visual layer ("Circles" drifting rings).
+## Technical Notes
+
+- TypeScript: type the WebGL handles (`WebGLRenderingContext`, `WebGLUniformLocation`), avoid module-scope mutable `gl`/`uniforms`.
+- SSR: guard all `window`/`document`/WebGL access inside `useEffect`; render the `<canvas>` only after mount to prevent hydration mismatch.
+- Performance: cap DPR at 1.5 (shader is fragment-heavy at full DPR on retina), use a single global instance, not per-route.
+- No new dependencies required.

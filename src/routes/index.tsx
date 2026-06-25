@@ -1981,15 +1981,16 @@ function PhaseReadout({
   );
 }
 
-type PanelId = "fx" | "packs" | "about";
+type PanelId = "fx" | "packs" | "about" | "visuals";
 function PhaseChrome({
-  scene, onScene, fxOpen, packsOpen, aboutOpen, onOpenPanel, onCloseAll,
+  scene, onScene, fxOpen, packsOpen, aboutOpen, visualsOpen, onOpenPanel, onCloseAll,
 }: {
   scene: SceneKind;
   onScene: (s: SceneKind) => void;
   fxOpen: boolean;
   packsOpen: boolean;
   aboutOpen: boolean;
+  visualsOpen: boolean;
   onOpenPanel: (p: PanelId) => void;
   onCloseAll: () => void;
 }) {

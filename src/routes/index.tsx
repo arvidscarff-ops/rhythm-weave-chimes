@@ -2548,3 +2548,116 @@ function AboutDrawer({ open, onClose }: { open: boolean; onClose: () => void }) 
     </div>
   );
 }
+
+/* ============================================================
+ * Visuals Drawer — neural noise background controls
+ * ============================================================ */
+
+function VisualsDrawer({ open }: { open: boolean }) {
+  const [s, setS] = useState<NeuralSettings>(() => loadNeuralSettings());
+  useEffect(() => subscribeNeuralSettings(setS), []);
+  const update = (patch: Partial<NeuralSettings>) => {
+    const next = { ...s, ...patch };
+    setS(next);
+    saveNeuralSettings(next);
+  };
+  // swatch preview color
+  const swatch = (c: [number, number, number]) =>
+    `rgb(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)})`;
+
+  return (
+    <div
+      data-state={open ? "open" : "closed"}
+      className="fx-drawer absolute left-1/2 bottom-[88px] rounded-2xl border border-white/10 backdrop-blur-xl bg-neutral-950/40 pr-mono"
+      style={{
+        width: "min(640px, calc(100vw - 48px))",
+        height: 260,
+        boxShadow:
+          "0 24px 70px rgba(0,0,0,0.65), inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(255,255,255,0.03)",
+        zIndex: 4,
+      }}
+    >
+      <div className="pr-stagger h-full grid grid-cols-2 divide-x divide-white/[0.07]">
+        {/* Presets */}
+        <div className="flex flex-col px-5 py-4 gap-3">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] tracking-[0.22em] uppercase text-white/70">palette</div>
+            <div className="text-[9px] tracking-[0.18em] uppercase text-white/35">
+              {s.opacity > 0 ? "live" : "off"}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 flex-1 overflow-auto">
+            {NEURAL_PRESETS.map((p) => {
+              const active = p.id === s.presetId;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => update({ presetId: p.id })}
+                  className={
+                    "flex items-center gap-2 px-2.5 py-2 rounded-sm text-left transition-colors " +
+                    (active
+                      ? "bg-white/15 text-white"
+                      : "bg-white/[0.04] text-white/65 hover:bg-white/10 hover:text-white")
+                  }
+                >
+                  <span
+                    className="h-3.5 w-3.5 rounded-full shrink-0"
+                    style={{
+                      background: p.colorB
+                        ? `linear-gradient(135deg, ${swatch(p.color)}, ${swatch(p.colorB)})`
+                        : swatch(p.color),
+                      boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
+                    }}
+                  />
+                  <span className="text-[10px] tracking-[0.16em] uppercase">{p.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Sliders */}
+        <div className="flex flex-col px-5 py-4 gap-4">
+          <div className="text-[10px] tracking-[0.22em] uppercase text-white/70">field</div>
+
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between text-[9px] tracking-[0.18em] uppercase text-white/40">
+              <span>opacity</span>
+              <span className="tabular-nums text-white/70">{Math.round(s.opacity * 100)}</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={0.6}
+              step={0.01}
+              value={s.opacity}
+              onChange={(e) => update({ opacity: parseFloat(e.target.value) })}
+              className="pr-hairline-slider w-full"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between text-[9px] tracking-[0.18em] uppercase text-white/40">
+              <span>speed</span>
+              <span className="tabular-nums text-white/70">{s.speed.toFixed(2)}x</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={2}
+              step={0.01}
+              value={s.speed}
+              onChange={(e) => update({ speed: parseFloat(e.target.value) })}
+              className="pr-hairline-slider w-full"
+            />
+          </div>
+
+          <p className="text-[10px] leading-[1.55] text-white/40 mt-1">
+            Subtle WebGL field that breathes behind everything. Cursor brightens it locally;
+            every triggered note blooms a quiet flash at its position.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

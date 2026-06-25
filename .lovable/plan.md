@@ -1,20 +1,28 @@
-## Plan
+## Plan — "Living orb" note dots
 
-1. **Remove dark-energy contribution from the burst sprites**
-   - Change the procedural burst sprite so RGB stays near-white / high-luminance while noise only controls alpha and shape.
-   - Avoid multiplying color channels by low noise values in a way that creates smoky/dark colored patches.
+Goal: make every note dot feel like a tiny, organic Siri-style orb of light without changing how/when they move (constant tangential speed per ring stays exactly as-is).
 
-2. **Switch burst rendering to “luminance mask + additive tint”**
-   - Treat the organic shader/noise pattern as a transparency mask, not as visible dark pigment.
-   - Keep unique seed-driven shapes, but ensure every visible pixel is light-emitting: white-hot core, pale colored edges, transparent elsewhere.
+Implementation, all inside `src/routes/index.tsx` (and a tiny helper in `src/lib/visuals/`):
 
-3. **Soften the global background shader’s darker readable patches**
-   - Adjust `NeuralNoise` so its pattern is less like a semi-transparent colored texture and more like faint additive caustics.
-   - Bias color toward a lighter tint before opacity is applied, reduce contrast, and let low-intensity areas fade out instead of showing as dark shapes.
+1. **New helper `src/lib/visuals/orbDot.ts`**
+   - Single function `drawOrb(ctx, x, y, opts)` that paints one fluid orb at canvas coords.
+   - Internally layers, all additive:
+     - **Soft halo** — wide low-alpha radial gradient in the voice color.
+     - **Chromatic-aberration core** — 3 tinted radial blobs (R/G/B) offset by 0.4–0.8 px along a slowly rotating axis, mimicking the Siri waveform's spectral fringe.
+     - **White-hot center** — small bright disc lifting the core to "light".
+     - **Wobble** — per-orb deterministic phase (`hashPhase(id)`) drives subtle eccentricity (sx/sy oscillation ±10%) and slow rotation, so each orb breathes on its own beat.
+   - All amplitudes scale with an `energy` arg (0..1) driven by `n.flash` so triggers swell the orb without changing its travel.
 
-4. **Preserve the current organic motion and reactivity**
-   - Keep the slow “thick water” movement, note-trigger flashes, and unique burst variation.
-   - Do not change the music engine, scene logic, controls, or pack/FX features.
+2. **Wheel scene (`drawWheel`)**
+   - Replace the current disc + breath halo + trigger halo block with one `drawOrb` call per note.
+   - Keep the existing trail sampling and rendering exactly as-is (constant travel preserved).
 
-5. **Verify visually**
-   - Check the preview for burst events and background behavior to confirm there are no dark colored spots, only subtle light blooms over the dark interface.
+3. **Pendulum bobs** and **Bars nodes**
+   - Swap their current dot rendering for `drawOrb` so the whole app shares one "orb" language. Physics/timing untouched.
+
+4. **Performance**
+   - 2D canvas only, ~6 notes × 3 rings + bobs/bars. No WebGL, no per-orb shaders.
+   - Uses `globalCompositeOperation = "lighter"` for the orb layers, then restores.
+
+5. **Verify**
+   - Open the preview, confirm orbs read as glowing fluid light, each one wobbling on its own phase, travel speed unchanged, triggers swell + bloom as before.

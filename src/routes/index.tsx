@@ -2078,6 +2078,11 @@ function PhaseChrome({
           data-active={aboutOpen ? "true" : undefined}
           onClick={() => onOpenPanel("about")}
         >About</button>
+        <button
+          className="pr-rail-link"
+          data-active={visualsOpen ? "true" : undefined}
+          onClick={() => onOpenPanel("visuals")}
+        >Visuals</button>
         {isAdmin && (
           <Link to="/dev" className="pr-rail-link">Dev</Link>
         )}

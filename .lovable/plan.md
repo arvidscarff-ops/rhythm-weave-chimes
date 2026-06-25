@@ -1,44 +1,64 @@
 
-# Plan: Replace particle bursts with wispy "light bloom" explosions
+# Plan: Organic, seeded bursts that share DNA with the NeuralNoise background
 
-The current bursts read as a ring of distinct spheres flying outward. Replace that look with a single coherent flash that feels like a soft pulse of light blooming and dissolving — closer in spirit to the Siri fluid-dots reference (luminous, chromatic, wispy) than to a particle starburst.
+Make every burst feel like a tiny pocket of the background shader — domain-warped, iridescent, and uniquely shaped — instead of a deterministic halo+wisp template.
 
-## What replaces the current burst
+## Core idea: seed-driven noise blooms
 
-Each note trigger spawns **one composite "bloom" event** (not 14+ separate particles), made of three layered, additive elements that all share the same lifetime and color:
+Each burst gets a **unique random seed** that drives every visual parameter, so no two ever look alike. The seed feeds a small procedural noise field rendered into an offscreen sprite, then blitted additively over the trigger point. That sprite is the visual cousin of the NeuralNoise background — same palette, same domain-warp recipe — just compressed into one flash.
 
-1. **Core flash** — a small bright disc with chromatic-aberration RGB offset (~1–2 px split). Snaps in over ~80 ms, decays over ~250 ms. This is the "ignition."
-2. **Halo bloom** — a wide soft radial gradient (3–5× the visual size of the trigger element). Eases in over ~120 ms, expands ~1.4× while fading over ~700–900 ms. Iridescent center → transparent edge, using the phosphor `cos(s+vec4(0,1,8,0))` palette.
-3. **Wisps** — 5–7 curved tapered streaks (not dots), drawn as short bezier paths with a soft additive stroke that **tapers to zero at both ends**. Each wisp starts near the center, curls outward along a noisy tangent, and dissolves. Length grows then alpha fades, so they read as drifting smoke/light filaments rather than projectiles. No visible heads.
+## What each burst looks like
 
-Together this gives the impression of light *exhaling* from the trigger point — bright at t=0, soft and dispersed by t=900 ms.
+1. **Noise-cloud sprite (new, primary layer)**
+   - Rendered once per burst into a small offscreen canvas (~96×96 px, scaled up to burst size).
+   - Each pixel: 2-octave value noise with **domain warp** — `noise(p + noise(p + seed))` — to produce the same writhing, ink-in-water filaments the shader has.
+   - Threshold + soft contour so it reads as wisps/filaments, not a flat blob.
+   - Colorized with the phosphor `cos(s+vec4(0,1,8,0))` palette, hue rotated by seed.
+   - The sprite is **animated for ~3 frames** at spawn (warp offset advances), then frozen — gives an organic "settle" without re-rendering every frame.
+   - Drawn additively, scaled and rotated by seed, expanding ~1.3× and fading over the bloom's life.
 
-## Why this reads as "light", not "particles"
+2. **Core flash** — kept, but chromatic offset and brightness are now seed-modulated (different RGB split per burst).
 
-- No more uniformly-sized round sprites flying out radially.
-- The halo always dominates the silhouette — wisps live *inside* the halo's glow, not outside it.
-- Wisps are tapered strokes, so they have no recognizable "ball" shape.
-- Everything shares one color hue per burst → reads as one event, not a swarm.
-- Drawn with `globalCompositeOperation = "lighter"` and per-layer `filter: blur(...)` on an offscreen pass for the halo, so edges are diffuse rather than crisp.
+3. **Halo** — kept, but radius, eccentricity (slight x/y stretch), and hue rotation jitter per seed so silhouettes vary.
+
+4. **Wisps removed** — the noise-cloud sprite replaces them with organically curling filaments that look hand-drawn rather than parametric.
+
+## What "seeded uniqueness" produces
+
+Per burst, the seed controls:
+- Palette phase (hue rotation 0..2π) and saturation tilt
+- Noise warp offset, scale (0.8–1.4×), and rotation
+- Halo eccentricity (1.0–1.25 stretch) and orientation
+- Lifetime jitter (±15%)
+- Filament density via noise threshold
+- Asymmetric center offset (a few px) so the brightest point isn't always the geometric center
+- Chromatic core offset direction
+
+This makes dense polyrhythms feel like a constellation of distinct embers rather than one repeating effect.
+
+## Tie-back to the NeuralNoise background
+
+- Same palette recipe (phosphor cosine) — bursts read as "light pulled from the background field."
+- Same domain-warp noise topology — bursts and background share visual grammar.
+- Burst color hue is biased by the active NeuralNoise palette preset (Aurora/Lagoon/etc.) so they always harmonize with the current background. (Read once from `getNeuralSettings()`.)
 
 ## Implementation
 
-- Rewrite `src/lib/visuals/burstField.ts`:
-  - Replace particle pool with a small **bloom pool** (cap 10 concurrent blooms). Each bloom stores center, hue, energy, age, maxAge, and a small fixed array of wisp seeds (angle, curl, length, phaseOffset).
-  - `spawnBurst(x, y, { hue, energy })` API stays the same — index.tsx wiring is unchanged.
-  - `updateBursts(dt)` advances age; `drawBursts(ctx)` renders core → halo → wisps in order, all additive.
-  - Wisps drawn via `ctx.beginPath()` + quadratic curve, with `lineWidth` interpolated along life and a tapered `globalAlpha` envelope (in-out cubic).
-  - Respect `prefers-reduced-motion`: halo only, no wisps.
-- No changes to scenes, audio, or the NeuralNoise background.
+- `src/lib/visuals/burstField.ts`:
+  - Add `mulberry32(seed)` PRNG and a small value-noise + domain-warp routine.
+  - Per bloom, allocate a tiny `OffscreenCanvas` (fallback: `document.createElement('canvas')`) sized 96×96. Render the warped noise field once at spawn, write to RGBA via `ImageData`.
+  - Store the sprite on the bloom; reuse on every draw frame (just scale/alpha-modulate).
+  - Remove wisp-stroke path; keep core flash + halo with seed-driven jitter.
+- `src/lib/visuals/burstField.ts` imports `getNeuralSettings()` from `@/lib/neural/palette` to derive a hue bias.
+- API (`spawnBurst`, `updateBursts`, `drawBursts`) unchanged → no changes in `src/routes/index.tsx`.
 
-## Tuning targets
+## Performance
 
-- Total bloom lifetime: ~0.9 s (vs current ~0.7 s of particles).
-- Peak brightness clamped so dense polyrhythms don't blow out — halo alpha cap ~0.55, core cap ~0.85.
-- Wisp count scales 4 → 7 with note energy; never more.
-- Cap 10 concurrent blooms; over-cap blooms age out faster.
+- Offscreen render: 96×96 = ~9k pixels, done once per spawn. Cap 10 blooms → at most 10 sprite renders per ~second under heavy play.
+- Per-frame draw cost is just `drawImage` + halo gradient + core gradient — cheaper than the current per-segment wisp strokes.
+- Reduced-motion: skip sprite, keep halo only.
 
 ## Out of scope
 
-- No new WebGL surface (the Siri reference uses WebGL, but we already have one heavy WebGL layer — NeuralNoise — and this effect needs pixel alignment with the 2D scene). The 2D additive approach above replicates the *look* without the GPU cost.
-- No changes to ring/bob/bar trigger geometry, audio routing, or dock.
+- No new WebGL surface; sprites stay 2D-canvas to preserve pixel alignment with the scene.
+- No change to audio, scenes, neural background, or dock.

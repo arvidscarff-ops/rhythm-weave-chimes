@@ -289,12 +289,12 @@ class SiriOrbLayer {
 
     // Cap to MAX_ORBS, keeping the highest-energy ones if we overflow.
     let cmds = this.commands;
-    if (cmds.length > MAX_ORBS_JS) {
-      cmds = [...cmds].sort((a, b) => b.energy - a.energy).slice(0, MAX_ORBS_JS);
+    if (cmds.length > MAX_ORBS) {
+      cmds = [...cmds].sort((a, b) => b.energy - a.energy).slice(0, MAX_ORBS);
     }
     const count = cmds.length;
-    const a = new Float32Array(MAX_ORBS_JS * 4);
-    const b = new Float32Array(MAX_ORBS_JS * 2);
+    const a = new Float32Array(MAX_ORBS * 4);
+    const b = new Float32Array(MAX_ORBS * 2);
     for (let i = 0; i < count; i++) {
       const o = cmds[i];
       // Radius in CSS px, half the "size" box. Convert to device pixels.

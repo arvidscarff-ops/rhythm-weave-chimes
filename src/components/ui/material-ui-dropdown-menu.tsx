@@ -110,7 +110,7 @@ function RippleLayer({
   rippleRef,
 }: {
   pressed: boolean;
-  rippleRef: React.RefObject<HTMLSpanElement>;
+  rippleRef: React.RefObject<HTMLSpanElement | null>;
 }) {
   return (
     <span

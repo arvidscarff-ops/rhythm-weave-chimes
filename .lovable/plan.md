@@ -1,36 +1,34 @@
 ## Goal
-Make the neural-noise background subtle and mesmerizing — slow, deep, "sifting through thick water" — and remove the jitter caused by note flashes warping the whole field.
+Spread the neural pattern more evenly across the viewport and stop bright clusters from blooming out to white. Same mesmerizing feel, lower contrast.
 
-## Root cause of the jitter
-In `neural-noise.tsx`, the flash intensity is added to `p` (the pointer influence), which is then fed into the noise displacement loop:
-```
-acc += sin(layer) + 2.4 * p;
-```
-Any change to `p` shifts every layer of the noise, so each note pulls the entire pattern toward the trigger point. That's what reads as a jitter / yank.
+## Why it clusters and blows out today
+In `src/components/ui/neural-noise.tsx`:
+- `noise = 1.2 * pow(noise, 3.0); noise += pow(noise, 10.0);` — the `pow(noise, 10.0)` term is a brightness booster that snowballs wherever the pattern is already dense, producing fully-white hot spots.
+- `noise = max(0.0, noise - 0.5);` — a hard threshold that kills the dim filaments and leaves only the strongest cluster visible.
+- `noise *= (1.0 - length(vUv - 0.5));` — a strong radial vignette that concentrates everything near the center.
+- Alpha = `noise * u_opacity` is then clamped to `1.0`, so peaks saturate.
 
-## Changes (visual only, no functionality changes)
+## Changes (visual only)
+File: `src/components/ui/neural-noise.tsx` — fragment shader only.
 
-1. **`src/components/ui/neural-noise.tsx` — decouple flash from distortion**
-   - Stop adding `flash` into `p`. The cursor still gently warps the field; flashes only add a soft *additive color bloom* (no geometry warp).
-   - Soften the cursor contribution too: lower the `0.5 * pow(1.0 - p, 2.0)` weight so cursor movement doesn't tug the pattern.
-   - Tame the flash bloom: tighter falloff (`exp(-fd * 9.0)`), smaller color add (~0.12 instead of 0.35), and lower alpha contribution. No more bright halo.
-   - Smooth flash envelope: ease-in over ~250ms and ease-out over ~1.4s using a target/current value (instead of instant `Math.max` jump + fast decay). This removes the "snap" feel.
-   - Lower overall motion: cut base speed roughly in half (`u_speed` multiplier 0.00009) and reduce pointer lerp from `0.12` → `0.04` so the field drifts like thick liquid.
-   - Lower the opacity ceiling (cap at ~0.55 instead of 0.9) so the effect always sits behind content.
-
-2. **`src/lib/neural/palette.ts` — gentler defaults**
-   - Default opacity `0.35` → `0.22`.
-   - Default speed `1` → `0.55`.
-   - Keep presets and storage schema unchanged so existing saved settings still load.
-
-3. **Hydration warning (quiet fix)**
-   - The runtime error is caused by a browser extension injecting a `<script>` tag; nothing to fix in our code. Not addressed.
+1. Replace the hot-spot booster with a softer curve:
+   - `noise = 1.0 * pow(noise, 1.6);` (was `1.2 * pow(noise, 3.0)`)
+   - Drop the `+= pow(noise, 10.0)` term entirely (this is the main cause of white-out).
+2. Lower the threshold so faint filaments stay visible everywhere:
+   - `noise = max(0.0, noise - 0.18);` (was `- 0.5`)
+3. Soften the vignette so the pattern fills more of the screen:
+   - `noise *= mix(0.55, 1.0, 1.0 - length(vUv - 0.5));` — even the corners get ~55% weight instead of fading to 0.
+4. Cap brightness before colorizing so nothing can saturate to white:
+   - `noise = min(noise, 0.55);`
+5. Slightly tighten the alpha contribution so the wider coverage doesn't make the whole screen feel heavier:
+   - Keep `u_opacity` ceiling at `0.55`, but compute alpha as `noise * u_opacity * 0.9` and clamp to `0.6`.
 
 ## Out of scope
-- No changes to the flash bus API, scene trigger wiring, Visuals drawer UI, or audio engine.
-- No new presets or settings fields.
+- No changes to flash behavior, cursor easing, palette, settings UI, or audio wiring.
+- No changes to `palette.ts` defaults — opacity/speed defaults stay where we just set them.
+- Hydration warning from the Leather browser extension is not a code issue; not touched.
 
 ## Acceptance
-- Notes trigger a faint, localized brightening that fades softly — the surrounding pattern does **not** lurch toward the trigger point.
-- Idle motion feels slow and viscous; cursor presence is barely perceptible.
-- Background sits clearly behind the wheel/pendulum/bars UI at default settings.
+- The pattern is visible across the full viewport (including corners), not just a single bright cluster.
+- No pure-white hot spots at default settings; everything reads as soft, tinted filaments.
+- Idle motion and flash behavior unchanged from the previous pass — still slow, viscous, no jitter.

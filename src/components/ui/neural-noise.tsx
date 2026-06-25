@@ -109,11 +109,13 @@ export function NeuralNoise({ settings, zIndex = 0, blendMode = "plus-lighter" }
 
         float t = u_speed * u_time * (u_reduce > 0.5 ? 0.0 : 1.0);
         float noise = neuro(uv, t, p);
-        noise = 1.2 * pow(noise, 3.0);
-        noise += pow(noise, 10.0);
-        noise = max(0.0, noise - 0.5);
-        // vignette
-        noise *= (1.0 - length(vUv - 0.5));
+        // softer contrast — keep faint filaments visible everywhere, no white-out
+        noise = pow(noise, 1.6);
+        noise = max(0.0, noise - 0.18);
+        // gentle vignette: corners keep ~55% weight instead of fading to 0
+        noise *= mix(0.55, 1.0, 1.0 - length(vUv - 0.5));
+        // hard cap so peaks can't saturate to pure white
+        noise = min(noise, 0.55);
 
         // gradient between A & B via breathing mix + spatial drift
         float g = clamp(u_mix * 0.6 + 0.4 * vUv.y + 0.2 * vUv.x, 0.0, 1.0);
@@ -123,8 +125,8 @@ export function NeuralNoise({ settings, zIndex = 0, blendMode = "plus-lighter" }
         vec3 bloomCol = mix(u_colorA, u_colorB, g);
         col += bloomCol * flash * 0.12;
 
-        float a = noise * u_opacity + flash * 0.18 * u_opacity;
-        gl_FragColor = vec4(col, clamp(a, 0.0, 1.0));
+        float a = noise * u_opacity * 0.9 + flash * 0.18 * u_opacity;
+        gl_FragColor = vec4(col, clamp(a, 0.0, 0.6));
       }
     `;
 

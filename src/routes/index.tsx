@@ -994,6 +994,8 @@ function PhaseApp() {
       }
       drawBarsScene(ctx2d, W, H, e.bars, hoverRingIdRef.current);
     }
+    updateBursts(dt);
+    drawBursts(ctx2d);
     ctx2d.globalCompositeOperation = "source-over";
   };
 

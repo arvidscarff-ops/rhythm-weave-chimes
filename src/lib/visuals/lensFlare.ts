@@ -158,8 +158,10 @@ function flareColor(fl: Flare): [number, number, number] {
 export function drawFlares(ctx: CanvasRenderingContext2D, W: number, H: number) {
   // Master intensity follows the Visuals → Glow slider so the user always has
   // the master knob. Kept conservative on purpose.
+  // Master intensity scales with Visuals → Glow but stays visible even at low
+  // slider values. Floor lifted so the flare always reads as present light.
   const opacity = neural ? neural.opacity : 0.22;
-  const globalMul = Math.max(0.12, Math.min(0.7, opacity * 1.6));
+  const globalMul = Math.max(0.55, Math.min(1.4, 0.55 + opacity * 2.4));
 
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
@@ -179,14 +181,14 @@ export function drawFlares(ctx: CanvasRenderingContext2D, W: number, H: number) 
     const rnd = mulberry32(fl.seed);
 
     // --- Soft elliptical halo (organic — no rectangles) ---
-    const haloR = 32 + fl.energy * 55;
+    const haloR = 60 + fl.energy * 90;
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(angle);
     ctx.scale(fl.aspect, 1);
     const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, haloR);
-    halo.addColorStop(0, rgba(col, 0.18 * e));
-    halo.addColorStop(0.45, rgba(col, 0.06 * e));
+    halo.addColorStop(0, rgba(col, 0.32 * e));
+    halo.addColorStop(0.45, rgba(col, 0.12 * e));
     halo.addColorStop(1, rgba(col, 0));
     ctx.fillStyle = halo;
     ctx.beginPath();
@@ -195,10 +197,10 @@ export function drawFlares(ctx: CanvasRenderingContext2D, W: number, H: number) 
     ctx.restore();
 
     // --- Whisper-soft core ---
-    const coreR = 5 + fl.energy * 7;
+    const coreR = 8 + fl.energy * 12;
     const core = ctx.createRadialGradient(px, py, 0, px, py, coreR);
-    core.addColorStop(0, rgba([1, 1, 1], 0.4 * e));
-    core.addColorStop(0.6, rgba(col, 0.18 * e));
+    core.addColorStop(0, rgba([1, 1, 1], 0.7 * e));
+    core.addColorStop(0.6, rgba(col, 0.3 * e));
     core.addColorStop(1, rgba(col, 0));
     ctx.fillStyle = core;
     ctx.beginPath();
@@ -207,7 +209,7 @@ export function drawFlares(ctx: CanvasRenderingContext2D, W: number, H: number) 
 
     // --- Hand-drawn bezier filaments drifting outward ---
     const drift = 1 + t * 0.35; // filaments breathe outward over life
-    const baseLen = (40 + fl.energy * 70) * drift;
+    const baseLen = (70 + fl.energy * 110) * drift;
     ctx.lineCap = "round";
     for (let f = 0; f < fl.filamentCount; f++) {
       const a = angle + (rnd() - 0.5) * Math.PI * 0.9;
@@ -219,9 +221,9 @@ export function drawFlares(ctx: CanvasRenderingContext2D, W: number, H: number) 
       const ey = py + Math.sin(a) * len;
       const mx = (px + ex) * 0.5 + perpX * curve;
       const my = (py + ey) * 0.5 + perpY * curve;
-      const alpha = (0.045 + rnd() * 0.04) * e;
+      const alpha = (0.11 + rnd() * 0.07) * e;
       ctx.strokeStyle = rgba(col, alpha);
-      ctx.lineWidth = 0.6 + rnd() * 0.8;
+      ctx.lineWidth = 0.9 + rnd() * 1.1;
       ctx.beginPath();
       ctx.moveTo(px, py);
       ctx.quadraticCurveTo(mx, my, ex, ey);

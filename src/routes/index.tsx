@@ -21,23 +21,6 @@ import {
   warmCustomPack,
   type RuntimePack,
 } from "@/lib/sound/runtimePacks";
-import {
-  LASER_COLORS,
-  type LaserColorKey,
-  type LaserPalette,
-  type Sparkle,
-  drawLaserLine,
-  drawLaserArc,
-  drawLaserPath,
-  drawBurnDot,
-  drawStarburst,
-  drawSparkles,
-  updateSparkles,
-  sparkleArc,
-  sparkleLine,
-  spawnSparkle,
-  hashSeed,
-} from "@/lib/visual/laser";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -656,7 +639,6 @@ function PhaseApp() {
     fx1: 2400,
     fx2: 8,
   });
-  const [laserColor, setLaserColor] = useState<LaserColorKey>("green");
 
   // Refs mirror state so the engine doesn't re-subscribe
   const playingRef = useRef(playing); playingRef.current = playing;
@@ -664,10 +646,6 @@ function PhaseApp() {
   const voicesRef = useRef(voices); voicesRef.current = voices;
   const knobsRef = useRef(knobs); knobsRef.current = knobs;
   const bpmRef = useRef(bpm); bpmRef.current = bpm;
-  const laserColorRef = useRef(laserColor); laserColorRef.current = laserColor;
-  const sparkleRef = useRef<Sparkle[]>([]);
-  const starburstRef = useRef<{ x: number; y: number; life: number; max: number }[]>([]);
-  const elapsedRef = useRef(0);
   // Resolve currently-selected pack into a RuntimePack (built-in or custom).
   const allPacks: RuntimePack[] = [...BUILTIN_RUNTIME_PACKS, ...customPacks];
   const activePack: RuntimePack =
@@ -983,14 +961,6 @@ function PhaseApp() {
 
     const playing = !!(a && playingRef.current);
     const scene = sceneRef.current;
-    elapsedRef.current += dt;
-    const T = elapsedRef.current;
-    const pal = LASER_COLORS[laserColorRef.current];
-    updateSparkles(sparkleRef.current, dt);
-    for (let i = starburstRef.current.length - 1; i >= 0; i--) {
-      starburstRef.current[i].life -= dt;
-      if (starburstRef.current[i].life <= 0) starburstRef.current.splice(i, 1);
-    }
     ctx2d.globalCompositeOperation = "lighter";
     if (scene === "wheel") {
       if (playing) {
@@ -998,29 +968,21 @@ function PhaseApp() {
       } else {
         decayWheelFlashes(e.wheel, dt);
       }
-      drawWheelScene(ctx2d, W, H, e.wheel, dt, T, pal, hoverRingIdRef.current,
-        sparkleRef.current, starburstRef.current);
+      drawWheelScene(ctx2d, W, H, e.wheel, voicesRef.current, dt, hoverRingIdRef.current);
     } else if (scene === "pendulum") {
       if (playing) {
         updatePendulum(e.pendulum, dt, a!, bpmRef.current, knobsRef.current, packRef.current);
       } else {
         decayPendulumFlashes(e.pendulum, dt);
       }
-      drawPendulumScene(ctx2d, W, H, e.pendulum, dt, T, pal, hoverRingIdRef.current,
-        sparkleRef.current, starburstRef.current);
+      drawPendulumScene(ctx2d, W, H, e.pendulum, hoverRingIdRef.current);
     } else {
       if (playing) {
         updateBars(e.bars, dt, a!, bpmRef.current, knobsRef.current, packRef.current);
       } else {
         decayBarsFlashes(e.bars, dt);
       }
-      drawBarsScene(ctx2d, W, H, e.bars, dt, T, pal, hoverRingIdRef.current,
-        sparkleRef.current, starburstRef.current);
-    }
-    // sparkles + starbursts ride on top of beams (still additive)
-    drawSparkles(ctx2d, sparkleRef.current, pal);
-    for (const sb of starburstRef.current) {
-      drawStarburst(ctx2d, sb.x, sb.y, pal, sb.life / sb.max, 110);
+      drawBarsScene(ctx2d, W, H, e.bars, hoverRingIdRef.current);
     }
     ctx2d.globalCompositeOperation = "source-over";
   };
@@ -1224,8 +1186,6 @@ function PhaseApp() {
             else clearLanes();
           }}
           onBpm={setBpm}
-          laserColor={laserColor}
-          onLaserColor={setLaserColor}
           fxOpen={fxOpen}
           onToggleFx={() => {
             const next = !fxOpen;
@@ -1405,90 +1365,94 @@ function wheelHandleClick(wh: WheelState, px: number, py: number, W: number, H: 
   return false;
 }
 
-const burstTracker = new WeakMap<object, number>();
-function maybeBurst(
-  key: object, intensity: number,
-  starbursts: { x: number; y: number; life: number; max: number }[],
-  x: number, y: number, sparkles: Sparkle[],
-) {
-  const prev = burstTracker.get(key) ?? 0;
-  burstTracker.set(key, intensity);
-  if (intensity > 0.85 && prev < 0.5 && starbursts.length < 12) {
-    starbursts.push({ x, y, life: 0.45, max: 0.45 });
-    // burst of sparkles for extra "glitter"
-    for (let i = 0; i < 6; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = 4 + Math.random() * 18;
-      spawnSparkle(sparkles, x + Math.cos(a) * r, y + Math.sin(a) * r, 200);
-    }
-  }
-}
-
 function drawWheelScene(
-  ctx: CanvasRenderingContext2D, W: number, H: number, wh: WheelState,
-  dt: number, T: number, pal: LaserPalette, hoverRingId: string | null,
-  sparkles: Sparkle[], starbursts: { x: number; y: number; life: number; max: number }[],
+  ctx: CanvasRenderingContext2D, W: number, H: number, wh: WheelState, voices: VoiceSel,
+  _dt: number = 0, hoverRingId: string | null = null,
 ) {
   const cx = W / 2, cy = H / 2;
   const maxR = Math.min(W, H) / 2;
 
-  // central emitter glow — the laser "source"
-  drawBurnDot(ctx, cx, cy, pal, 0.55, 4);
-
-  // 1) rings as laser arcs
+  // 1) rings — restrained 1px hairlines, brighten on flash or hover
   for (const ring of wh.rings) {
     const R = ringRadiusPx(ring, W, H);
     const hovered = ring.id === hoverRingId;
-    const seed = hashSeed(ring.id);
-    const intensity = (hovered ? 0.85 : 0.55) + ring.flash * 0.6;
-    drawLaserArc(ctx, cx, cy, R, pal, { intensity, seed, t: T });
-    // ambient shimmer along the ring
-    sparkleArc(sparkles, cx, cy, R, hovered ? 6 : 2.5, dt, 140);
+    const base = hovered ? 0.20 : 0.06;
+    ctx.strokeStyle = `rgba(255,255,255,${(base + ring.flash * 0.35).toFixed(3)})`;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, TAU);
+    ctx.stroke();
   }
 
-  // 2) trigger lines as laser beams
+  // 2) trigger lines — quiet hairline chords with rim ticks
   for (const line of wh.lines) {
-    const x1 = cx + Math.cos(line.angle) * maxR * 0.98;
-    const y1 = cy + Math.sin(line.angle) * maxR * 0.98;
-    const x2 = cx - Math.cos(line.angle) * maxR * 0.98;
-    const y2 = cy - Math.sin(line.angle) * maxR * 0.98;
-    const seed = hashSeed(line.id);
-    const intensity = 0.65 + line.flash * 0.65;
-    drawLaserLine(ctx, x1, y1, x2, y2, pal, { intensity, seed, t: T });
-    // beam endpoint burns
-    drawBurnDot(ctx, x1, y1, pal, 0.45 + line.flash * 0.6, 4);
-    drawBurnDot(ctx, x2, y2, pal, 0.45 + line.flash * 0.6, 4);
-    // glittering scatter along the beam
-    sparkleLine(sparkles, x1, y1, x2, y2, 4 + line.flash * 18, dt, 140);
-
-    // promote crossing sparks into starbursts
+    const x1 = cx + Math.cos(line.angle) * maxR * 0.96;
+    const y1 = cy + Math.sin(line.angle) * maxR * 0.96;
+    const x2 = cx - Math.cos(line.angle) * maxR * 0.96;
+    const y2 = cy - Math.sin(line.angle) * maxR * 0.96;
+    ctx.strokeStyle = `rgba(255,255,255,${(0.10 + line.flash * 0.30).toFixed(3)})`;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.stroke();
+    // ink-bleed ripple at each crossing (Fluid Inversion)
     for (const s of line.sparks) {
       const sx = cx + Math.cos(s.x) * s.y * (Math.min(W, H) / 2);
       const sy = cy + Math.sin(s.x) * s.y * (Math.min(W, H) / 2);
-      // s.t starts at 0.6 — fire burst only on first frame
-      if (s.t > 0.58 && starbursts.length < 12) {
-        starbursts.push({ x: sx, y: sy, life: 0.5, max: 0.5 });
-      }
+      // s.t starts at 0.6 (life). Convert to elapsed k in [0..1] (life 0.5s scaled).
+      const elapsed = 0.6 - s.t;
+      const k = Math.max(0, Math.min(1, elapsed / 0.5));
+      const radius = 40 * (1 - Math.pow(1 - k, 3)); // exp ease-out
+      const alpha = Math.pow(1 - k, 2.2) * 0.55;
+      if (alpha < 0.01) continue;
+      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, Math.max(2, radius));
+      g.addColorStop(0, `rgba(255,255,255,0)`);
+      g.addColorStop(0.55, `rgba(255,255,255,${(alpha * 0.9).toFixed(3)})`);
+      g.addColorStop(1, `rgba(255,255,255,0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(sx, sy, Math.max(2, radius), 0, TAU);
+      ctx.fill();
     }
   }
 
-  // 3) notes — bright laser-tipped beads with kinetic glitter trails
+  // 3) notes — soft discs + kinetic trails
   for (const ring of wh.rings) {
     const R = ringRadiusPx(ring, W, H);
+    const color = voiceSlotColor(ring.voiceSlot, true);
     for (const n of ring.notes) {
       const w = norm2pi(n.angle + ring.phase);
       const nx = cx + Math.cos(w) * R;
       const ny = cy + Math.sin(w) * R;
+      const inten = n.flash;
+
+      // kinetic trail (6 samples behind the note)
       const trail = getTrail(n);
+      // draw oldest → newest
       for (let i = 0; i < trail.length; i++) {
         const p = trail[i];
         const tk = (i + 1) / (trail.length + 1);
-        drawBurnDot(ctx, p.x, p.y, pal, 0.18 * tk, 2);
+        const tr = 1.4 + tk * 2.2;
+        const ta = 0.04 + tk * 0.08;
+        ctx.fillStyle = color.replace("a", ta.toFixed(3));
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, tr, 0, TAU);
+        ctx.fill();
       }
+      // sample current position into trail (cap length)
       trail.push({ x: nx, y: ny });
       if (trail.length > 6) trail.shift();
-      drawBurnDot(ctx, nx, ny, pal, 0.7 + n.flash * 0.4, 5);
-      maybeBurst(n, n.flash, starbursts, nx, ny, sparkles);
+
+      // soft note disc
+      const baseR = 3.5 + inten * 5;
+      const g = ctx.createRadialGradient(nx, ny, 0, nx, ny, baseR + 10);
+      g.addColorStop(0, color.replace("a", (0.85).toFixed(3)));
+      g.addColorStop(0.45, color.replace("a", (0.3 + inten * 0.4).toFixed(3)));
+      g.addColorStop(1, color.replace("a", "0"));
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(nx, ny, baseR + 10, 0, TAU);
+      ctx.fill();
     }
   }
 }
@@ -1526,12 +1490,20 @@ function paintArtBackground(
   ctx: CanvasRenderingContext2D, W: number, H: number,
   patternRef: { current: CanvasPattern | null },
 ) {
+  // Canvas is transparent — the teal page field shows through the glass card.
   ctx.clearRect(0, 0, W, H);
-  // Subtle atmospheric grain (dark page bg shows through)
+  // Soft inner bloom for depth inside the card
+  const vg = ctx.createRadialGradient(W * 0.62, H * 0.42, Math.min(W, H) * 0.05,
+                                       W * 0.62, H * 0.42, Math.max(W, H) * 0.7);
+  vg.addColorStop(0, "rgba(255,255,255,0.07)");
+  vg.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+  // Subtle grain
   if (!patternRef.current) patternRef.current = buildGrainPattern(ctx);
   if (patternRef.current) {
     ctx.save();
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = 0.5;
     ctx.fillStyle = patternRef.current;
     ctx.fillRect(0, 0, W, H);
     ctx.restore();
@@ -1573,9 +1545,7 @@ function updatePendulum(
 
 function drawPendulumScene(
   ctx: CanvasRenderingContext2D, W: number, H: number,
-  pend: PendulumState, dt: number, T: number, pal: LaserPalette,
-  hoverId: string | null,
-  sparkles: Sparkle[], starbursts: { x: number; y: number; life: number; max: number }[],
+  pend: PendulumState, hoverId: string | null,
 ) {
   const ax = W / 2;
   const ay = H * 0.16;
@@ -1583,28 +1553,44 @@ function drawPendulumScene(
   const minLen = H * 0.30;
   const n = pend.bobs.length;
 
-  // anchor bar as a thin laser
-  drawLaserLine(ctx, ax - 240, ay, ax + 240, ay, pal,
-    { intensity: 0.55, seed: 0.13, t: T });
-  drawBurnDot(ctx, ax - 240, ay, pal, 0.45, 3);
-  drawBurnDot(ctx, ax + 240, ay, pal, 0.45, 3);
+  // anchor bar
+  ctx.strokeStyle = "rgba(255,255,255,0.22)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(ax - 220, ay); ctx.lineTo(ax + 220, ay);
+  ctx.stroke();
 
   pend.bobs.forEach((b, i) => {
     const t = n === 1 ? 0.5 : i / (n - 1);
     const len = minLen + (maxLen - minLen) * t;
+    // swing amplitude in radians (small angle illusion, looks meditative)
     const amp = 0.55;
     const ang = Math.sin(b.phase * Math.PI * 2) * amp;
     const bx = ax + Math.sin(ang) * len;
     const by = ay + Math.cos(ang) * len;
     const hot = hoverId === b.id;
-    const seed = hashSeed(b.id);
-    const intensity = (hot ? 0.85 : 0.6) + b.flash * 0.55;
 
-    drawLaserLine(ctx, ax, ay, bx, by, pal, { intensity, seed, t: T });
-    sparkleLine(sparkles, ax, ay, bx, by, hot ? 5 : 2, dt, 140);
+    // string
+    ctx.strokeStyle = hot ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.22)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+    ctx.stroke();
 
-    drawBurnDot(ctx, bx, by, pal, 0.8 + b.flash * 0.6, 6 + b.flash * 4);
-    maybeBurst(b, b.flash, starbursts, bx, by, sparkles);
+    // bob glow
+    const baseR = 6 + b.flash * 10;
+    const g = ctx.createRadialGradient(bx, by, 0, bx, by, 60);
+    const a = 0.35 + b.flash * 0.55;
+    g.addColorStop(0, `rgba(180, 220, 255, ${a})`);
+    g.addColorStop(0.4, `rgba(120, 180, 230, ${a * 0.4})`);
+    g.addColorStop(1, "rgba(120,180,230,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(bx, by, 60, 0, Math.PI * 2); ctx.fill();
+
+    // crisp ring
+    ctx.strokeStyle = `rgba(220,235,255,${0.55 + b.flash * 0.4})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(bx, by, baseR, 0, Math.PI * 2); ctx.stroke();
   });
 }
 
@@ -1639,9 +1625,7 @@ function updateBars(
 
 function drawBarsScene(
   ctx: CanvasRenderingContext2D, W: number, H: number,
-  bars: BarsState, dt: number, T: number, pal: LaserPalette,
-  hoverId: string | null,
-  sparkles: Sparkle[], starbursts: { x: number; y: number; life: number; max: number }[],
+  bars: BarsState, hoverId: string | null,
 ) {
   const n = bars.lanes.length;
   if (n === 0) return;
@@ -1651,36 +1635,60 @@ function drawBarsScene(
   const usable = W - padX * 2;
   const step = usable / (n - 1 || 1);
 
-  // baseline + ceiling laser rails
-  drawLaserLine(ctx, padX - 30, bot, W - padX + 30, bot, pal,
-    { intensity: 0.55, seed: 0.71, t: T });
-  drawLaserLine(ctx, padX - 30, top, W - padX + 30, top, pal,
-    { intensity: 0.45, seed: 0.27, t: T });
+  // baseline + ceiling hairlines
+  ctx.strokeStyle = "rgba(255,255,255,0.18)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(padX - 30, bot); ctx.lineTo(W - padX + 30, bot); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(padX - 30, top); ctx.lineTo(W - padX + 30, top); ctx.stroke();
 
   const pts: { x: number; y: number; flash: number; hot: boolean; id: string }[] = [];
 
   bars.lanes.forEach((l, i) => {
     const x = n === 1 ? W / 2 : padX + step * i;
-    const seed = hashSeed(l.id);
-    const hot = hoverId === l.id;
-    const intensity = (hot ? 0.8 : 0.55) + l.flash * 0.45;
-    drawLaserLine(ctx, x, top, x, bot, pal, { intensity, seed, t: T });
-    sparkleLine(sparkles, x, top, x, bot, hot ? 5 : 2.5, dt, 140);
+    // lane track
+    ctx.strokeStyle = "rgba(255,255,255,0.10)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bot); ctx.stroke();
 
     const y = top + (bot - top) * l.phase;
+    const hot = hoverId === l.id;
     pts.push({ x, y: bot, flash: l.flash, hot, id: l.id });
 
-    // travelling burn dot (playhead)
-    drawBurnDot(ctx, x, y, pal, 0.7, 4);
-    // strike node at the bottom
-    drawBurnDot(ctx, x, bot, pal, 0.6 + l.flash * 0.7, 6 + l.flash * 6);
-    maybeBurst(l, l.flash, starbursts, x, bot, sparkles);
+    // playhead glow
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 40);
+    g.addColorStop(0, "rgba(200,225,255,0.55)");
+    g.addColorStop(1, "rgba(200,225,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, 40, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = hot ? "rgba(255,255,255,0.85)" : "rgba(220,235,255,0.6)";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.stroke();
+
+    // bottom strike node
+    const sR = 4 + l.flash * 12;
+    const sa = 0.35 + l.flash * 0.55;
+    const sg = ctx.createRadialGradient(x, bot, 0, x, bot, 70);
+    sg.addColorStop(0, `rgba(180,220,255,${sa})`);
+    sg.addColorStop(1, "rgba(120,180,230,0)");
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.arc(x, bot, 70, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `rgba(220,235,255,${0.5 + l.flash * 0.5})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(x, bot, sR, 0, Math.PI * 2); ctx.stroke();
   });
 
   // zigzag connector along bottom nodes
   if (pts.length > 1) {
-    const path = pts.map((p, i) => ({ x: p.x, y: p.y + (i % 2 === 0 ? -8 : 8) }));
-    drawLaserPath(ctx, path, pal, { intensity: 0.5, seed: 0.91, t: T });
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      const offY = i % 2 === 0 ? -8 : 8;
+      if (i === 0) ctx.moveTo(p.x, p.y + offY);
+      else ctx.lineTo(p.x, p.y + offY);
+    }
+    ctx.stroke();
   }
 }
 
@@ -2066,8 +2074,7 @@ function PhaseChrome({
 }
 
 function ArtDock({
-  scene, playing, bpm, onTogglePlay, onAddNode, onAddLine, onClearLines, onBpm,
-  laserColor, onLaserColor, fxOpen, onToggleFx,
+  scene, playing, bpm, onTogglePlay, onAddNode, onAddLine, onClearLines, onBpm, fxOpen, onToggleFx,
   packsOpen, onTogglePacks,
 }: {
   scene: SceneKind;
@@ -2078,8 +2085,6 @@ function ArtDock({
   onAddLine: () => void;
   onClearLines: () => void;
   onBpm: (v: number) => void;
-  laserColor: LaserColorKey;
-  onLaserColor: (c: LaserColorKey) => void;
   fxOpen: boolean;
   onToggleFx: () => void;
   packsOpen: boolean;
@@ -2115,8 +2120,6 @@ function ArtDock({
       <DockBtn label={clearLabel} onClick={onClearLines}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M6 6l12 12M6 18L18 6" /></svg>
       </DockBtn>
-      <span className="h-4 w-px bg-white/10" />
-      <LaserSwatches value={laserColor} onChange={onLaserColor} />
       <span className="h-4 w-px bg-white/10" />
       <DockBtn label="fx" onClick={onToggleFx} active={fxOpen}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -2174,43 +2177,6 @@ function DockBtn({
     >
       {children}
     </button>
-  );
-}
-
-function LaserSwatches({
-  value, onChange,
-}: { value: LaserColorKey; onChange: (c: LaserColorKey) => void }) {
-  const swatches: { key: LaserColorKey; hex: string }[] = [
-    { key: "green",   hex: "#6effa0" },
-    { key: "red",     hex: "#ff5a6a" },
-    { key: "cyan",    hex: "#6ee6ff" },
-    { key: "magenta", hex: "#ff6edc" },
-    { key: "amber",   hex: "#ffb84a" },
-    { key: "blue",    hex: "#8aa6ff" },
-  ];
-  return (
-    <div className="flex items-center gap-1.5" title="Laser color">
-      {swatches.map((s) => {
-        const active = s.key === value;
-        return (
-          <button
-            key={s.key}
-            onClick={() => onChange(s.key)}
-            aria-label={`laser ${s.key}`}
-            title={s.key}
-            className="h-3 w-3 rounded-full transition-transform"
-            style={{
-              background: s.hex,
-              boxShadow: active
-                ? `0 0 0 1.5px rgba(255,255,255,0.85), 0 0 12px ${s.hex}`
-                : `0 0 6px ${s.hex}88`,
-              transform: active ? "scale(1.15)" : "scale(1)",
-              opacity: active ? 1 : 0.7,
-            }}
-          />
-        );
-      })}
-    </div>
   );
 }
 

@@ -1,38 +1,44 @@
 
-# Plan: Phosphor-inspired note burst effects
+# Plan: Replace particle bursts with wispy "light bloom" explosions
 
-Take visual inspiration from the phosphor-30 shader (iridescent cyan/magenta/amber gradients, soft additive bloom, organic flowing energy) and translate it into short-lived particle "bursts" that erupt from the exact pixel where a note is triggered — across all three scenes (Wheel, Pendulum, Bars).
+The current bursts read as a ring of distinct spheres flying outward. Replace that look with a single coherent flash that feels like a soft pulse of light blooming and dissolving — closer in spirit to the Siri fluid-dots reference (luminous, chromatic, wispy) than to a particle starburst.
 
-## Approach
+## What replaces the current burst
 
-Render bursts on the **existing scene canvas** (not a new WebGL layer), using additive 2D canvas drawing. This keeps the bursts pixel-aligned with the rings/bobs/bars that triggered them, costs almost nothing, and stays inside the existing RAF loop. The NeuralNoise WebGL background stays exactly as it is.
+Each note trigger spawns **one composite "bloom" event** (not 14+ separate particles), made of three layered, additive elements that all share the same lifetime and color:
 
-## What a "burst" looks like
+1. **Core flash** — a small bright disc with chromatic-aberration RGB offset (~1–2 px split). Snaps in over ~80 ms, decays over ~250 ms. This is the "ignition."
+2. **Halo bloom** — a wide soft radial gradient (3–5× the visual size of the trigger element). Eases in over ~120 ms, expands ~1.4× while fading over ~700–900 ms. Iridescent center → transparent edge, using the phosphor `cos(s+vec4(0,1,8,0))` palette.
+3. **Wisps** — 5–7 curved tapered streaks (not dots), drawn as short bezier paths with a soft additive stroke that **tapers to zero at both ends**. Each wisp starts near the center, curls outward along a noisy tangent, and dissolves. Length grows then alpha fades, so they read as drifting smoke/light filaments rather than projectiles. No visible heads.
 
-Each trigger spawns one burst (~14–22 particles + a central flash) with phosphor-shader aesthetics:
+Together this gives the impression of light *exhaling* from the trigger point — bright at t=0, soft and dispersed by t=900 ms.
 
-- **Palette**: shimmering cyan → magenta → amber gradient sampled per-particle from a `cos(s + vec4(0,1,8,0))`-style lookup (the same color recipe the shader uses). Color is biased by the ring/bob/lane's pack voice so each layer reads as its own instrument.
-- **Motion**: particles fly outward on a `normalize(cos(...))` jittered direction, decelerating fast (ease-out cubic), with a tiny tangential curl so the burst "twists" instead of being a flat starburst.
-- **Render**: each particle is a small additive radial-gradient sprite (`globalCompositeOperation = "lighter"`), `shadowBlur` ~10–16, drawn at half-alpha and shrinking over its ~600–900ms life. A brighter sub-flash core fades in ~180ms.
-- **Velocity coupling**: burst size + particle count scale with the note's gain so loud hits feel bigger; quiet hits stay restrained.
+## Why this reads as "light", not "particles"
 
-## Integration points
+- No more uniformly-sized round sprites flying out radially.
+- The halo always dominates the silhouette — wisps live *inside* the halo's glow, not outside it.
+- Wisps are tapered strokes, so they have no recognizable "ball" shape.
+- Everything shares one color hue per burst → reads as one event, not a swarm.
+- Drawn with `globalCompositeOperation = "lighter"` and per-layer `filter: blur(...)` on an offscreen pass for the halo, so edges are diffuse rather than crisp.
 
-- **`src/lib/visuals/burstField.ts`** (new): a tiny burst manager — `spawn(x, y, { hue, energy })`, `update(dt)`, `draw(ctx)`. Holds a pooled particle array (cap ~400) so trigger storms can't leak memory.
-- **`src/routes/index.tsx`**:
-  - In `updateWheel` / `updatePendulum` / `updateBars`, at the same spot we already call `flashBus.flash(...)`, also call `burstField.spawn(px, py, { hue: ringHue, energy: gain })`.
-  - In the scene paint pass, after rings/bobs/bars are drawn, call `burstField.draw(ctx)` so bursts sit on top of the geometry but under the HUD text.
-- **No changes** to audio, NeuralNoise, dock, or readouts.
+## Implementation
 
-## Tuning to match the "alive / zen" feel
+- Rewrite `src/lib/visuals/burstField.ts`:
+  - Replace particle pool with a small **bloom pool** (cap 10 concurrent blooms). Each bloom stores center, hue, energy, age, maxAge, and a small fixed array of wisp seeds (angle, curl, length, phaseOffset).
+  - `spawnBurst(x, y, { hue, energy })` API stays the same — index.tsx wiring is unchanged.
+  - `updateBursts(dt)` advances age; `drawBursts(ctx)` renders core → halo → wisps in order, all additive.
+  - Wisps drawn via `ctx.beginPath()` + quadratic curve, with `lineWidth` interpolated along life and a tapered `globalAlpha` envelope (in-out cubic).
+  - Respect `prefers-reduced-motion`: halo only, no wisps.
+- No changes to scenes, audio, or the NeuralNoise background.
 
-- Bursts decay smoothly (no hard cut) and never exceed the existing trigger-bloom brightness — they enhance the existing pulse, not replace it.
-- Hard cap: max 12 concurrent bursts; older ones fade out faster when the cap is hit, so dense polyrhythms stay readable instead of flashbanging.
-- Respect `prefers-reduced-motion`: fall back to a single soft halo with no flying particles.
+## Tuning targets
+
+- Total bloom lifetime: ~0.9 s (vs current ~0.7 s of particles).
+- Peak brightness clamped so dense polyrhythms don't blow out — halo alpha cap ~0.55, core cap ~0.85.
+- Wisp count scales 4 → 7 with note energy; never more.
+- Cap 10 concurrent blooms; over-cap blooms age out faster.
 
 ## Out of scope
 
-- No new WebGL canvas, no porting the full phosphor shader into the app (it's heavy and would compete with NeuralNoise).
-- No changes to existing ring/line/bloom rendering — the bursts layer on top.
-
-If this looks right I'll switch to build mode and implement it.
+- No new WebGL surface (the Siri reference uses WebGL, but we already have one heavy WebGL layer — NeuralNoise — and this effect needs pixel alignment with the 2D scene). The 2D additive approach above replicates the *look* without the GPU cost.
+- No changes to ring/bob/bar trigger geometry, audio routing, or dock.

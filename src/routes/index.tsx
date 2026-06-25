@@ -22,6 +22,7 @@ import {
   type RuntimePack,
 } from "@/lib/sound/runtimePacks";
 import { flashBus } from "@/lib/neural/flashBus";
+import { spawnBurst, updateBursts, drawBursts } from "@/lib/visuals/burstField";
 import {
   NEURAL_PRESETS,
   loadNeuralSettings,

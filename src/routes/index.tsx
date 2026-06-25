@@ -23,6 +23,7 @@ import {
 } from "@/lib/sound/runtimePacks";
 import { flashBus } from "@/lib/neural/flashBus";
 import { spawnBurst, updateBursts, drawBursts } from "@/lib/visuals/burstField";
+import { drawOrb, hueToOrbTpl } from "@/lib/visuals/orbDot";
 import {
   NEURAL_PRESETS,
   loadNeuralSettings,
@@ -1520,42 +1521,14 @@ function drawWheelScene(
       trail.push({ x: nx, y: ny });
       if (trail.length > 6) trail.shift();
 
-      // soft note disc (with gentle breath)
-      const baseR = (3.5 + inten * 5) * breathR;
-      const g = ctx.createRadialGradient(nx, ny, 0, nx, ny, baseR + 10);
-      g.addColorStop(0, color.replace("a", (breathA).toFixed(3)));
-      g.addColorStop(0.45, color.replace("a", (0.3 + inten * 0.4).toFixed(3)));
-      g.addColorStop(1, color.replace("a", "0"));
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(nx, ny, baseR + 10, 0, TAU);
-      ctx.fill();
-
-      // Slow breath halo — quiet glow that swells with each note's own phase.
-      {
-        const haloR = baseR * 2.2 + 8;
-        const ha = (0.06 + 0.06 * breath);
-        const bg = ctx.createRadialGradient(nx, ny, 0, nx, ny, haloR);
-        bg.addColorStop(0, color.replace("a", ha.toFixed(3)));
-        bg.addColorStop(1, color.replace("a", "0"));
-        ctx.fillStyle = bg;
-        ctx.beginPath();
-        ctx.arc(nx, ny, haloR, 0, TAU);
-        ctx.fill();
-      }
-
-      // trigger halo — wide additive bloom decaying with n.flash
-      if (inten > 0.02) {
-        const haloR = baseR * 3.2 + 14;
-        const hg2 = ctx.createRadialGradient(nx, ny, 0, nx, ny, haloR);
-        hg2.addColorStop(0, color.replace("a", (0.5 * inten).toFixed(3)));
-        hg2.addColorStop(0.5, color.replace("a", (0.18 * inten).toFixed(3)));
-        hg2.addColorStop(1, color.replace("a", "0"));
-        ctx.fillStyle = hg2;
-        ctx.beginPath();
-        ctx.arc(nx, ny, haloR, 0, TAU);
-        ctx.fill();
-      }
+      // Living orb — chromatic-aberration core + white-hot center + voice halo
+      drawOrb(ctx, nx, ny, {
+        colorTpl: color,
+        radius: 3.5 + inten * 5,
+        energy: inten,
+        time: t,
+        phase: nPhase,
+      });
     }
   }
 }

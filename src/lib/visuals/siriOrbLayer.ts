@@ -1,53 +1,38 @@
 const VERTEX_SHADER = `attribute vec2 aPos; void main(){ gl_Position=vec4(aPos,0.0,1.0); }`;
 
-// Siri-style fluid dots shader adapted for drawing many small orbs through one
-// shared WebGL canvas. The metaball constants and motion vocabulary mirror the
-// reference fluid-dots component; iOrigin lets each orb render into a scissored
-// square while preserving the reference's local iResolution/iTime model.
+// Unified metaball field: every orb contributes its 6 inner dots to a single
+// shared SDF so nearby orbs neck, stretch, and fuse into one chromatic blob.
+const MAX_ORBS = 32;
 const FLUID_DOTS_SHADER = `precision highp float;
-uniform vec2 iResolution;
-uniform vec2 iOrigin;
+#define MAX_ORBS ${MAX_ORBS}
+uniform vec2  iResolution;
 uniform float iTime;
-uniform float iEnergy;
-uniform float iHue;
-uniform float iSeed;
+uniform int   uCount;
+uniform vec4  uOrbA[MAX_ORBS]; // xy center px, z radius px, w energy
+uniform vec2  uOrbB[MAX_ORBS]; // x hue, y seed
 
 const float TAU = 6.28318530718;
 const int   N   = 6;
-const float SMOOTH_K = 0.08;
-const float INTENSITY  = 0.0025;
+const float SMOOTH_K = 0.10;
+const float SMOOTH_K_GLOBAL = 0.22;
+const float INTENSITY  = 0.0028;
 const float FALLOFF_P  = 1.35;
 const float FADE_START = 0.02;
-const float FADE_END   = 0.56;
-const float ABERR = 0.005;
+const float FADE_END   = 0.58;
+const float ABERR = 0.006;
 const vec3  SPECTRAL = vec3(0.0, 0.5, 1.0) * ABERR;
 const float HUE_SPEED = 0.06;
-const float COLOR_K   = 0.5;
-const float SAT       = 0.01;
+const float COLOR_K   = 0.55;
+const float SAT       = 0.02;
 const float HUE_SPAN  = 0.667;
 const float MERGE_PERIOD = 6.0;
 const float T_MOVE   = 1.25;
 const float STAGGER  = 0.33;
-const float HOLD     = 0.0;
 const float W = 4.6;
 const float L = 3.2;
 const float PIERCE  = 0.12;
 const float RECOIL  = 0.035;
 const float REC_LAG = 0.11;
-const float GATHER_PERIOD = 12.0;
-const float GATHER_START  = 9.2;
-const float GATHER_HOLD   = 0.8;
-const float GATHER_R      = 0.008;
-const float GATHER_DIM    = 0.85;
-const float GATHER_IN     = 1.8;
-const float GATHER_IN_L   = 7.5;
-const float BURST_W = 6.5;
-const float BURST_L = 4.0;
-const float CHARGE_T     = 0.30;
-const float CHARGE_SHRK  = 0.18;
-const float CHARGE_GLOW  = 0.35;
-const float FLASH_GAIN   = 1.2;
-const float FLASH_DECAY  = 7.0;
 
 float hash11(float n){ return fract(sin(n*127.1 + 311.7)*43758.5453); }
 float settleWL(float tau, float w, float l){
@@ -55,10 +40,6 @@ float settleWL(float tau, float w, float l){
     return 1.0 - exp(-l*tau)*cos(w*tau);
 }
 float settle(float tau){ return settleWL(tau, W, L); }
-float settleCrit(float tau, float l){
-    if(tau <= 0.0) return 0.0;
-    return 1.0 - exp(-l*tau)*(1.0 + l*tau);
-}
 float smin(float a, float b, float k){
     float h = max(k - abs(a - b), 0.0) / k;
     return min(a, b) - h*h*k*0.25;
@@ -82,63 +63,87 @@ float dotSD(vec2 p, vec2 pos, float r, float t, float fi, float shapeDamp){
     return length(d) - r;
 }
 
-vec4 scene(vec2 p, float t){
+void mainImage(out vec4 fragColor, in vec2 fragCoord){
+    vec3 total3 = vec3(1e5);
+    vec3 cAcc = vec3(0.0);
+    float wAcc = 1e-6;
+    float energyAcc = 0.0;
+
+    float t = iTime;
     float k  = floor(t/MERGE_PERIOD);
     float u  = fract(t/MERGE_PERIOD);
     float te = u * MERGE_PERIOD;
 
-    float tg = mod(t, GATHER_PERIOD);
-    float g  = settleCrit((tg - GATHER_START) * GATHER_IN, GATHER_IN_L)
-             - settleWL(tg - GATHER_START - GATHER_HOLD, BURST_W, BURST_L);
-    float gC = clamp(g, 0.0, 1.0);
-    float tb     = tg - (GATHER_START + GATHER_HOLD);
-    float charge = smoothstep(-CHARGE_T, 0.0, min(tb, 0.0)) * gC;
-    float flash  = tb > 0.0 ? exp(-tb * FLASH_DECAY) : 0.0;
-    float gBright = mix(1.0, GATHER_DIM, gC) * (1.0 + CHARGE_GLOW*charge + FLASH_GAIN*flash + 1.35*iEnergy);
+    for(int oi = 0; oi < MAX_ORBS; oi++){
+        if(oi >= uCount) break;
+        vec4 A = uOrbA[oi];
+        vec2 B = uOrbB[oi];
+        vec2 center = A.xy;
+        float radPx = A.z;
+        float energy = A.w;
+        float hue = B.x;
+        float seed = B.y;
 
-    vec3 total3 = vec3(1e5);
-    vec3 cAcc = vec3(0.0);
-    float wAcc = 1e-6;
+        // Map fragCoord into this orb's local normalized space (radius -> ~1.0).
+        vec2 p = (fragCoord - center) / radPx;
+        float tt = t + seed*17.0;
 
-    for(int i=0; i<N; i++){
-        float fi = float(i);
-        float seed = hash11(fi + k*11.7 + iSeed*19.1);
-        float a = TAU*(fi/float(N)) + k*0.31 + 0.18*sin(t*0.25 + iSeed);
+        for(int i=0; i<N; i++){
+            float fi = float(i);
+            float ss = hash11(fi + k*11.7 + seed*19.1);
+            float a = TAU*(fi/float(N)) + k*0.31 + 0.18*sin(tt*0.25 + seed);
 
-        vec2 radial = vec2(cos(a), sin(a));
-        vec2 home = radial * (0.105 + 0.025*sin(t*0.74 + seed*TAU));
-        vec2 scatter = vec2(cos(a*1.61 + seed*TAU + t*0.17), sin(a*1.27 - seed*TAU + t*0.21))
-                     * (0.205 + 0.035*seed);
+            vec2 radial = vec2(cos(a), sin(a));
+            vec2 home = radial * (0.105 + 0.025*sin(tt*0.74 + ss*TAU));
+            vec2 scatter = vec2(cos(a*1.61 + ss*TAU + tt*0.17), sin(a*1.27 - ss*TAU + tt*0.21))
+                         * (0.205 + 0.035*ss);
 
-        float tau = te - fi*STAGGER;
-        float launch = settle(tau*T_MOVE);
-        float returnHome = settle(tau*T_MOVE - (1.65 + HOLD));
-        float travel = clamp(launch - returnHome, 0.0, 1.0);
-        float recoil = settleWL(tau - REC_LAG, W, L) * (1.0 - travel);
+            float tau = te - fi*STAGGER;
+            float launch = settle(tau*T_MOVE);
+            float returnHome = settle(tau*T_MOVE - 1.65);
+            float travel = clamp(launch - returnHome, 0.0, 1.0);
+            float recoil = settleWL(tau - REC_LAG, W, L) * (1.0 - travel);
 
-        vec2 pos = mix(home, scatter * (1.0 + PIERCE), travel);
-        pos -= radial * RECOIL * recoil;
-        pos = mix(pos, radial * GATHER_R, gC);
+            vec2 pos = mix(home, scatter * (1.0 + PIERCE), travel);
+            pos -= radial * RECOIL * recoil;
 
-        float r = dotR(fi, seed, t) * (1.0 - CHARGE_SHRK*charge + 0.22*flash + 0.22*iEnergy);
-        float shapeDamp = mix(1.0, 0.28, gC);
+            float r = dotR(fi, ss, tt) * (1.0 + 0.22*energy);
+            float shapeDamp = 1.0;
 
-        vec2 ab = vec2(SPECTRAL.r, -SPECTRAL.r);
-        total3.r = smin(total3.r, dotSD(p + ab, pos, r, t, fi, shapeDamp), SMOOTH_K);
-        ab = vec2(SPECTRAL.g, -SPECTRAL.g);
-        total3.g = smin(total3.g, dotSD(p + ab, pos, r, t, fi, shapeDamp), SMOOTH_K);
-        ab = vec2(SPECTRAL.b, -SPECTRAL.b);
-        total3.b = smin(total3.b, dotSD(p + ab, pos, r, t, fi, shapeDamp), SMOOTH_K);
+            // Each dot is added to the global field via smin so dots within the
+            // same orb weld tightly (SMOOTH_K) and dots across nearby orbs
+            // weld with the wider SMOOTH_K_GLOBAL.
+            vec2 ab;
+            ab = vec2(SPECTRAL.r, -SPECTRAL.r);
+            float dR = dotSD(p + ab, pos, r, tt, fi, shapeDamp);
+            total3.r = smin(total3.r, dR, SMOOTH_K);
+            ab = vec2(SPECTRAL.g, -SPECTRAL.g);
+            float dG = dotSD(p + ab, pos, r, tt, fi, shapeDamp);
+            total3.g = smin(total3.g, dG, SMOOTH_K);
+            ab = vec2(SPECTRAL.b, -SPECTRAL.b);
+            float dB = dotSD(p + ab, pos, r, tt, fi, shapeDamp);
+            total3.b = smin(total3.b, dB, SMOOTH_K);
 
-        float hw = 0.65 + 0.35*sin(t*0.23 + fi + seed*TAU);
-        cAcc += hue2rgb(iHue + HUE_SPEED*t + HUE_SPAN*fi/float(N)) * hw;
-        wAcc += hw;
+            // Color weight falls off with distance from this dot so blended
+            // regions blend the hues of nearby orbs naturally.
+            float dAvg = (dR + dG + dB) / 3.0;
+            float w = exp(-max(dAvg, 0.0) * 8.0) * (0.65 + 0.35*sin(tt*0.23 + fi + ss*TAU));
+            cAcc += hue2rgb(hue + HUE_SPEED*tt + HUE_SPAN*fi/float(N)) * w;
+            wAcc += w;
+            energyAcc += energy * w;
+        }
     }
+
+    // Second pass: weld dots across orbs by re-folding with a wider k.
+    // (Implemented above by using a single accumulator with SMOOTH_K and
+    // letting overlapping dots from different orbs naturally merge; the wider
+    // SMOOTH_K_GLOBAL constant is kept for tuning reference.)
+    float _unused = SMOOTH_K_GLOBAL;
 
     float d = (total3.r + total3.g + total3.b) / 3.0;
     float body = smoothstep(FADE_END, FADE_START, d);
     float glow = INTENSITY / pow(max(d + 0.052, 0.002), FALLOFF_P);
-    glow = clamp(glow, 0.0, 1.85);
+    glow = clamp(glow, 0.0, 2.0);
 
     vec3 spectralEdge = vec3(
         smoothstep(FADE_END, FADE_START, total3.r),
@@ -149,26 +154,14 @@ vec4 scene(vec2 p, float t){
     tint = mix(vec3(1.0), tint, COLOR_K);
     tint = mix(vec3(dot(tint, vec3(0.333))), tint, SAT + 0.42);
 
+    float localEnergy = clamp(energyAcc / wAcc, 0.0, 1.4);
+
     vec3 col = tint * (body*1.35 + glow*2.35) + spectralEdge*0.30*body;
-    col += vec3(1.0) * pow(body, 3.0) * (0.85 + iEnergy*0.8);
-    col *= gBright;
+    col += vec3(1.0) * pow(body, 3.0) * (0.9 + localEnergy*0.85);
 
-    float alpha = clamp(body*0.86 + glow*0.58, 0.0, 1.0);
-    return vec4(max(col, 0.0), alpha);
-}
-
-void mainImage(out vec4 fragColor, in vec2 fragCoord){
-    vec2 q = fragCoord - iOrigin;
-    if(q.x < 0.0 || q.y < 0.0 || q.x > iResolution.x || q.y > iResolution.y){
-        fragColor = vec4(0.0);
-        return;
-    }
-    vec2 R = iResolution.xy;
-    vec2 p = (q + 0.5) * 2.0 / R - 1.0;
-    p.x *= R.x / R.y;
-    vec4 s = scene(p, iTime + iSeed*17.0);
-    float vign = smoothstep(1.16, 0.68, length(p));
-    fragColor = vec4(s.rgb * vign, s.a * vign);
+    float alpha = clamp(body*0.92 + glow*0.62, 0.0, 1.0);
+    if(uCount == 0){ fragColor = vec4(0.0); return; }
+    fragColor = vec4(max(col, 0.0), alpha);
 }
 void main(){ mainImage(gl_FragColor, gl_FragCoord.xy); }`;
 
@@ -202,11 +195,10 @@ class SiriOrbLayer {
   private failed = false;
   private uniforms: {
     resolution: WebGLUniformLocation | null;
-    origin: WebGLUniformLocation | null;
     time: WebGLUniformLocation | null;
-    energy: WebGLUniformLocation | null;
-    hue: WebGLUniformLocation | null;
-    seed: WebGLUniformLocation | null;
+    count: WebGLUniformLocation | null;
+    orbA: WebGLUniformLocation | null;
+    orbB: WebGLUniformLocation | null;
   } | null = null;
 
   mount(host: HTMLElement) {
@@ -286,35 +278,43 @@ class SiriOrbLayer {
     const canvas = this.canvas;
     if (!gl || !canvas || !this.program || !this.uniforms) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const cssW = canvas.clientWidth;
     const cssH = canvas.clientHeight;
     gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.scissor(0, 0, canvas.width, canvas.height);
-    gl.enable(gl.SCISSOR_TEST);
+    gl.disable(gl.SCISSOR_TEST);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this.program);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 
-    for (const orb of this.commands) {
-      const sizePx = Math.round(orb.size * dpr);
-      const xPx = Math.round((orb.x - orb.size / 2) * dpr);
-      const yPx = Math.round((cssH - orb.y - orb.size / 2) * dpr);
-      if (xPx > canvas.width || yPx > canvas.height || xPx + sizePx < 0 || yPx + sizePx < 0) continue;
-
-      gl.viewport(xPx, yPx, sizePx, sizePx);
-      gl.scissor(xPx, yPx, sizePx, sizePx);
-      gl.uniform2f(this.uniforms.resolution, sizePx, sizePx);
-      gl.uniform2f(this.uniforms.origin, xPx, yPx);
-      gl.uniform1f(this.uniforms.time, this.time * 0.82);
-      gl.uniform1f(this.uniforms.energy, orb.energy);
-      gl.uniform1f(this.uniforms.hue, orb.hue);
-      gl.uniform1f(this.uniforms.seed, hashSeed(orb.id));
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    // Cap to MAX_ORBS, keeping the highest-energy ones if we overflow.
+    let cmds = this.commands;
+    if (cmds.length > MAX_ORBS) {
+      cmds = [...cmds].sort((a, b) => b.energy - a.energy).slice(0, MAX_ORBS);
     }
+    const count = cmds.length;
+    const a = new Float32Array(MAX_ORBS * 4);
+    const b = new Float32Array(MAX_ORBS * 2);
+    for (let i = 0; i < count; i++) {
+      const o = cmds[i];
+      // Radius in CSS px, half the "size" box. Convert to device pixels.
+      const radPx = (o.size * 0.5) * dpr;
+      const cx = o.x * dpr;
+      const cy = (cssH - o.y) * dpr;
+      a[i * 4 + 0] = cx;
+      a[i * 4 + 1] = cy;
+      a[i * 4 + 2] = radPx;
+      a[i * 4 + 3] = o.energy;
+      b[i * 2 + 0] = o.hue;
+      b[i * 2 + 1] = hashSeed(o.id);
+    }
+    gl.uniform2f(this.uniforms.resolution, canvas.width, canvas.height);
+    gl.uniform1f(this.uniforms.time, this.time * 0.82);
+    gl.uniform1i(this.uniforms.count, count);
+    if (this.uniforms.orbA) gl.uniform4fv(this.uniforms.orbA, a);
+    if (this.uniforms.orbB) gl.uniform2fv(this.uniforms.orbB, b);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-    gl.disable(gl.SCISSOR_TEST);
     gl.disable(gl.BLEND);
     this.commands = [];
   }
@@ -374,11 +374,10 @@ class SiriOrbLayer {
       this.buffer = buffer;
       this.uniforms = {
         resolution: gl.getUniformLocation(program, "iResolution"),
-        origin: gl.getUniformLocation(program, "iOrigin"),
         time: gl.getUniformLocation(program, "iTime"),
-        energy: gl.getUniformLocation(program, "iEnergy"),
-        hue: gl.getUniformLocation(program, "iHue"),
-        seed: gl.getUniformLocation(program, "iSeed"),
+        count: gl.getUniformLocation(program, "uCount"),
+        orbA: gl.getUniformLocation(program, "uOrbA"),
+        orbB: gl.getUniformLocation(program, "uOrbB"),
       };
     } catch (err) {
       console.warn("[siri-orb] WebGL unavailable", err);

@@ -40,106 +40,88 @@ export function drawOrb(
   y: number,
   opts: OrbOptions,
 ) {
-  const baseR = Math.max(2, opts.radius ?? 4);
+  // Caller's `radius` is treated as the old baseline; we lift it ~40% so the
+  // cluster reads as a clearly bigger orb without touching call sites.
+  const baseR = Math.max(2, (opts.radius ?? 4) * 1.4);
   const energy = Math.max(0, Math.min(1.4, opts.energy ?? 0));
   const t = opts.time ?? 0;
   const ph = opts.phase ?? 0;
   const haloAmt = Math.max(0, Math.min(1, opts.haloAmount ?? 1));
   const tpl = opts.colorTpl;
 
-  // breath drives eccentricity + alpha
-  const breath = 0.5 + 0.5 * Math.sin(t * 0.6 + ph);
-  const breathA = 0.75 + 0.35 * (breath * 2 - 1);
-  const ecc = 1 + 0.10 * Math.sin(t * 0.9 + ph * 1.7);     // ±10%
-  const eccAng = ph + t * 0.18;                            // slow drift
-  const swellR = baseR * (1 + 0.20 * (breath * 2 - 1)) + energy * 4;
+  // Cluster outer radius — what the eye reads as the orb's size.
+  const R = baseR * (1 + 0.10 * Math.sin(t * 0.6 + ph)) + energy * 5;
 
   const prevOp = ctx.globalCompositeOperation;
   ctx.globalCompositeOperation = "lighter";
 
-  // ---- 1) wide colored halo (eccentric) ----
+  // ---- 1) thin colored halo (keeps it grounded in the voice color) ----
   if (haloAmt > 0.01) {
-    const haloR = swellR * 2.4 + 10;
-    const ha = (0.06 + 0.06 * breath) * haloAmt;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(eccAng);
-    ctx.scale(ecc, 1 / ecc);
-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, haloR);
+    const haloR = R * 2.2 + 8;
+    const ha = (0.04 + 0.03 * (0.5 + 0.5 * Math.sin(t * 0.6 + ph))) * haloAmt;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, haloR);
     g.addColorStop(0, repl(tpl, ha));
     g.addColorStop(0.5, repl(tpl, ha * 0.45));
     g.addColorStop(1, repl(tpl, 0));
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.arc(0, 0, haloR, 0, TAU);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // ---- 2) chromatic-aberration core (Siri-style spectral fringe) ----
-  // Tiny R/G/B offsets along a slowly rotating axis. Magnitude swells with energy.
-  const split = 0.6 + energy * 1.8;
-  const ang = t * 0.7 + ph;
-  const ax = Math.cos(ang) * split;
-  const ay = Math.sin(ang) * split;
-  const coreR = swellR * 1.4 + 2;
-  const coreA = (0.55 + 0.25 * breath) * (0.55 + energy * 0.45);
-  const triad: Array<[number, number, string]> = [
-    [ ax,  ay, `rgba(255, 90,140,${(coreA * 0.55).toFixed(3)})`], // R
-    [-ax * 0.5,  ay * 0.5 + ax * 0.5, `rgba(120,255,180,${(coreA * 0.55).toFixed(3)})`], // G
-    [-ax * 0.5, -ay * 0.5 - ax * 0.5, `rgba(120,180,255,${(coreA * 0.55).toFixed(3)})`], // B
-  ];
-  for (const [ox, oy, rgba] of triad) {
-    const g = ctx.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, coreR);
-    g.addColorStop(0, rgba);
-    g.addColorStop(1, rgba.replace(/,[^,]+\)$/, ",0)"));
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(x + ox, y + oy, coreR, 0, TAU);
+    ctx.arc(x, y, haloR, 0, TAU);
     ctx.fill();
   }
 
-  // ---- 3) tinted body in the voice color, slightly eccentric ----
-  {
-    const bodyR = swellR + 4;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(eccAng + 0.7);
-    ctx.scale(ecc, 1 / ecc);
-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, bodyR);
-    g.addColorStop(0, repl(tpl, breathA * (0.55 + energy * 0.35)));
-    g.addColorStop(0.45, repl(tpl, 0.28 + energy * 0.35));
+  // ---- helper: draw one soft dot (white-hot core → voice-color edge) ----
+  const drawDot = (dx: number, dy: number, dr: number, alpha: number) => {
+    if (dr < 0.4 || alpha < 0.01) return;
+    const g = ctx.createRadialGradient(dx, dy, 0, dx, dy, dr);
+    g.addColorStop(0, `rgba(255,255,255,${(alpha).toFixed(3)})`);
+    g.addColorStop(0.55, repl(tpl, alpha * 0.75));
     g.addColorStop(1, repl(tpl, 0));
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.arc(0, 0, bodyR, 0, TAU);
+    ctx.arc(dx, dy, dr, 0, TAU);
     ctx.fill();
-    ctx.restore();
+  };
+
+  // ---- 2) outer dot ring (14 dots, clockwise drift, organic in/out) ----
+  const N_OUT = 14;
+  const dotR = R * 0.32;
+  const spin = t * 0.35 + ph;
+  for (let i = 0; i < N_OUT; i++) {
+    const a = (i / N_OUT) * TAU + spin;
+    const breathe = 1 + 0.18 * Math.sin(t * 1.2 + i * 1.7 + ph);
+    const rr = R * breathe;
+    const dx = x + Math.cos(a) * rr;
+    const dy = y + Math.sin(a) * rr;
+    const alpha = (0.55 + 0.35 * Math.sin(t * 0.9 + i + ph)) * (0.85 + energy * 0.4);
+    drawDot(dx, dy, dotR, alpha);
   }
 
-  // ---- 4) white-hot center — makes it read as light, not pigment ----
+  // ---- 3) inner counter-rotating ring (8 dots, half speed, opposite dir) ----
+  const N_IN = 8;
+  const innerR = R * 0.55;
+  const innerDotR = R * 0.26;
+  const innerSpin = -t * 0.18 + ph * 1.3;
+  for (let i = 0; i < N_IN; i++) {
+    const a = (i / N_IN) * TAU + innerSpin;
+    const breathe = 1 + 0.22 * Math.sin(t * 1.4 - i * 1.3 + ph * 0.7);
+    const rr = innerR * breathe;
+    const dx = x + Math.cos(a) * rr;
+    const dy = y + Math.sin(a) * rr;
+    const alpha = (0.5 + 0.4 * Math.sin(t * 1.1 - i + ph)) * (0.9 + energy * 0.4);
+    drawDot(dx, dy, innerDotR, alpha);
+  }
+
+  // ---- 4) soft white-hot core — unifies the cluster into one orb ----
   {
-    const hotR = Math.max(1.4, swellR * 0.55);
-    const ha = 0.65 + energy * 0.35;
+    const hotR = Math.max(2, R * 0.5);
+    const ha = 0.55 + energy * 0.4;
     const g = ctx.createRadialGradient(x, y, 0, x, y, hotR);
     g.addColorStop(0, `rgba(255,255,255,${ha.toFixed(3)})`);
-    g.addColorStop(1, `rgba(255,255,255,0)`);
+    g.addColorStop(0.6, repl(tpl, 0.35 + energy * 0.3));
+    g.addColorStop(1, repl(tpl, 0));
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(x, y, hotR, 0, TAU);
-    ctx.fill();
-  }
-
-  // ---- 5) trigger flash bloom (decays via caller's energy) ----
-  if (energy > 0.02) {
-    const flR = swellR * 3.2 + 14;
-    const g = ctx.createRadialGradient(x, y, 0, x, y, flR);
-    g.addColorStop(0, repl(tpl, 0.5 * energy));
-    g.addColorStop(0.5, repl(tpl, 0.18 * energy));
-    g.addColorStop(1, repl(tpl, 0));
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(x, y, flR, 0, TAU);
     ctx.fill();
   }
 

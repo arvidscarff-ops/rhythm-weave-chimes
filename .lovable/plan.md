@@ -1,28 +1,42 @@
-## Plan — "Living orb" note dots
+## Goal
 
-Goal: make every note dot feel like a tiny, organic Siri-style orb of light without changing how/when they move (constant tangential speed per ring stays exactly as-is).
+Replace the current radial-gradient orb with a faithful port of the SiriWave **fluid-dots** look so every note dot reads as a small cluster of breathing light particles rather than a soft blob. Bump base radius ~40% so they're visibly bigger.
 
-Implementation, all inside `src/routes/index.tsx` (and a tiny helper in `src/lib/visuals/`):
+## What changes
 
-1. **New helper `src/lib/visuals/orbDot.ts`**
-   - Single function `drawOrb(ctx, x, y, opts)` that paints one fluid orb at canvas coords.
-   - Internally layers, all additive:
-     - **Soft halo** — wide low-alpha radial gradient in the voice color.
-     - **Chromatic-aberration core** — 3 tinted radial blobs (R/G/B) offset by 0.4–0.8 px along a slowly rotating axis, mimicking the Siri waveform's spectral fringe.
-     - **White-hot center** — small bright disc lifting the core to "light".
-     - **Wobble** — per-orb deterministic phase (`hashPhase(id)`) drives subtle eccentricity (sx/sy oscillation ±10%) and slow rotation, so each orb breathes on its own beat.
-   - All amplitudes scale with an `energy` arg (0..1) driven by `n.flash` so triggers swell the orb without changing its travel.
+Only `src/lib/visuals/orbDot.ts`. All call sites in `src/routes/index.tsx` keep the same `drawOrb(ctx, x, y, opts)` signature — nothing else moves.
 
-2. **Wheel scene (`drawWheel`)**
-   - Replace the current disc + breath halo + trigger halo block with one `drawOrb` call per note.
-   - Keep the existing trail sampling and rendering exactly as-is (constant travel preserved).
+### New rendering model (fluid-dots)
 
-3. **Pendulum bobs** and **Bars nodes**
-   - Swap their current dot rendering for `drawOrb` so the whole app shares one "orb" language. Physics/timing untouched.
+For each orb:
 
-4. **Performance**
-   - 2D canvas only, ~6 notes × 3 rings + bobs/bars. No WebGL, no per-orb shaders.
-   - Uses `globalCompositeOperation = "lighter"` for the orb layers, then restores.
+1. **Dot cluster (the signature look)** — render N ≈ 14 small soft dots arranged on a ring of radius `R`, each offset by a per-dot sinusoidal wobble so the ring breathes asymmetrically:
+   - `angle_i = i * TAU/N + phase + t * 0.35`
+   - `r_i = R * (1 + 0.18 * sin(t * 1.2 + i * 1.7 + phase))` (organic in/out)
+   - dot radius `≈ R * 0.32`, drawn as a white-hot radial gradient tinted with the voice color at the edge
+   - additive blending; opacity per-dot modulated by `0.55 + 0.35 * sin(t*0.9 + i)`
+2. **Inner counter-rotating ring** — a second smaller ring (N ≈ 8, radius `R*0.55`) rotating the opposite direction at half speed, for the classic Siri "liquid" interference.
+3. **Soft core glow** — a single white-hot radial gradient at the center (`R*0.45`) so the cluster reads as one luminous orb when zoomed out.
+4. **Halo** — keep the existing wide colored halo, but thinner (alpha ~0.05) so the dots remain the dominant feature.
+5. **Trigger flash** — on `energy > 0`, expand `R` by `energy * 5`, brighten core, and pulse dot opacity. No new bloom layer needed; the cluster itself swells.
 
-5. **Verify**
-   - Open the preview, confirm orbs read as glowing fluid light, each one wobbling on its own phase, travel speed unchanged, triggers swell + bloom as before.
+### Sizing
+
+- Default `radius` constant inside `drawOrb` lifted from current `~4` baseline to `~5.5` (≈ +40%).
+- Cluster outer extent ≈ `radius * 1.6`, so visual footprint grows noticeably without callers changing their `radius` arg.
+
+### Color
+
+- Keep `colorTpl` / `hueToOrbTpl` API unchanged.
+- Dots: white core → voice-color edge (so they still feel "of the ring").
+- Remove the chromatic R/G/B aberration triad — Siri fluid-dots is monochromatic per orb; chromatic split fights the cluster read.
+
+## Out of scope
+
+- No changes to scenes, triggers, audio, burst field, or shader background.
+- No new files, no new deps.
+
+## Validation
+
+- Visual check on all three scenes (Wheel, Pendulum, Bars) via preview.
+- Confirm orbs are visibly larger and clearly cluster-shaped when paused, still readable as single points of light when many are active.

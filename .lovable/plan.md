@@ -1,42 +1,62 @@
 ## Goal
 
-Replace the current radial-gradient orb with a faithful port of the SiriWave **fluid-dots** look so every note dot reads as a small cluster of breathing light particles rather than a soft blob. Bump base radius ~40% so they're visibly bigger.
+Make every note dot an actual SiriWave **fluid-dots** orb — the exact WebGL shader from the reference — not a 2D-canvas imitation. They should be noticeably larger than the current dots.
 
-## What changes
+## Approach
 
-Only `src/lib/visuals/orbDot.ts`. All call sites in `src/routes/index.tsx` keep the same `drawOrb(ctx, x, y, opts)` signature — nothing else moves.
+The reference component spins up one WebGL canvas per orb. That doesn't scale (browsers cap ~16 WebGL contexts and we can have many orbs across Wheel/Pendulum/Bars). Instead, render all orbs through **one shared WebGL overlay canvas** that runs the same fluid-dots fragment shader per orb via `gl.scissor` + `gl.viewport`, so the pixels on screen are byte-for-byte the shader's output.
 
-### New rendering model (fluid-dots)
+## Files
 
-For each orb:
+### New: `src/lib/visuals/siriOrbLayer.ts`
 
-1. **Dot cluster (the signature look)** — render N ≈ 14 small soft dots arranged on a ring of radius `R`, each offset by a per-dot sinusoidal wobble so the ring breathes asymmetrically:
-   - `angle_i = i * TAU/N + phase + t * 0.35`
-   - `r_i = R * (1 + 0.18 * sin(t * 1.2 + i * 1.7 + phase))` (organic in/out)
-   - dot radius `≈ R * 0.32`, drawn as a white-hot radial gradient tinted with the voice color at the edge
-   - additive blending; opacity per-dot modulated by `0.55 + 0.35 * sin(t*0.9 + i)`
-2. **Inner counter-rotating ring** — a second smaller ring (N ≈ 8, radius `R*0.55`) rotating the opposite direction at half speed, for the classic Siri "liquid" interference.
-3. **Soft core glow** — a single white-hot radial gradient at the center (`R*0.45`) so the cluster reads as one luminous orb when zoomed out.
-4. **Halo** — keep the existing wide colored halo, but thinner (alpha ~0.05) so the dots remain the dominant feature.
-5. **Trigger flash** — on `energy > 0`, expand `R` by `energy * 5`, brighten core, and pulse dot opacity. No new bloom layer needed; the cluster itself swells.
+A singleton overlay manager.
 
-### Sizing
+- Creates a full-viewport `<canvas>` (absolute, `pointer-events:none`, `mix-blend-mode: screen`, behind the HUD but above the background shader) and a WebGL1 context.
+- Compiles the **verbatim** `FLUID_DOTS_SHADER` from the reference (vertex = fullscreen triangle). Uniforms: `iResolution` (orb pixel dim), `iTime`, plus new `iEnergy` (0..1) and `iHue` (rotates the shader's internal hue base) so each orb can have a voice-color tint and trigger flash without changing the algorithm.
+- API:
+  - `mount(parentEl)` — attach overlay matching the scene canvas's bounding rect (ResizeObserver on the scene canvas keeps it synced).
+  - `begin(timeSec)` — clear, store time.
+  - `place(id, cssX, cssY, sizeCss, energy, hue)` — schedule one orb at that center.
+  - `end()` — one pass: for each scheduled orb, set `viewport`+`scissor` to its square box, upload uniforms, draw the triangle. Reset state.
+- Pool entries keyed by `id` (string) so each orb keeps a stable `seedT` (time offset) for unique phase — without that, every orb runs the same shader frame and they look identical.
 
-- Default `radius` constant inside `drawOrb` lifted from current `~4` baseline to `~5.5` (≈ +40%).
-- Cluster outer extent ≈ `radius * 1.6`, so visual footprint grows noticeably without callers changing their `radius` arg.
+### Modify: `src/routes/index.tsx`
 
-### Color
+- Mount the overlay once in the scene effect, sized to the scene canvas.
+- Replace every `drawOrb(ctx, x, y, {...})` call (Wheel notes, Pendulum bobs, Bars playheads) with `siriOrbLayer.place(id, x, y, size, energy, hue)`. The `drawOrb` helper stays in the file for now but is unused by the live scenes.
+- `size` ≈ `48px` for Wheel notes (vs. ~10px today), `56px` for Pendulum bobs, `44px` for Bars heads — tunable constants.
+- Per-orb `id`: `"wheel:<ringIdx>"`, `"pend:<idx>"`, `"bars:<idx>"`.
+- Per-orb `energy`: reuse the existing trigger-decay value already passed to `drawOrb`.
+- Per-orb `hue`: existing `hueToOrbTpl` source hue.
+- Wrap each scene draw with `siriOrbLayer.begin(t)` / `siriOrbLayer.end()`.
 
-- Keep `colorTpl` / `hueToOrbTpl` API unchanged.
-- Dots: white core → voice-color edge (so they still feel "of the ring").
-- Remove the chromatic R/G/B aberration triad — Siri fluid-dots is monochromatic per orb; chromatic split fights the cluster read.
+### Modify: `src/lib/visuals/orbDot.ts`
+
+Leave the file in place (no other callers to break), but mark `drawOrb` as legacy in a one-line comment. No behavior change.
+
+## Shader integration details
+
+- Use the **exact** `FLUID_DOTS_SHADER` source you pasted — no edits to the metaball math.
+- Two tiny additions only:
+  - `uniform float iEnergy;` — multiplies `gBright` and adds a brief `flash` so triggers visibly bloom inside the orb.
+  - `uniform float iHue;` — added to the shader's internal `hue` so each orb leans into its voice color while keeping the spectral aberration.
+- `iTime = sharedTime + perOrbSeed` so every orb is at a different point in the merge/scatter/gather cycle.
+
+## Layering
+
+- Background NeuralNoise shader stays the bottom layer.
+- Scene 2D canvas (rings, trigger lines, halos) sits above it.
+- SiriOrb overlay sits above the scene canvas, with `mix-blend-mode: screen` so the orbs read as additive light on top of the rings.
+- HUD/dock/readouts stay on top via existing z-index.
 
 ## Out of scope
 
-- No changes to scenes, triggers, audio, burst field, or shader background.
-- No new files, no new deps.
+- Burst field, NeuralNoise background, audio, scheduler, sound packs — untouched.
+- No changes to physics, ring spacing, or trigger logic.
 
 ## Validation
 
-- Visual check on all three scenes (Wheel, Pendulum, Bars) via preview.
-- Confirm orbs are visibly larger and clearly cluster-shaped when paused, still readable as single points of light when many are active.
+- Visual check in all three scenes: orbs should look like a Siri pill of six dancing metaballs, not a glowing dot.
+- Performance check: one WebGL context, one program, ≤ ~30 small viewport draws per frame — should stay smooth.
+- Confirm trigger flash visibly pulses each orb on note hit.

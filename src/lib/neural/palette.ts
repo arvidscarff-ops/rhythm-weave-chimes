@@ -24,8 +24,8 @@ export type NeuralSettings = {
 
 export const DEFAULT_NEURAL_SETTINGS: NeuralSettings = {
   presetId: DEFAULT_PRESET_ID,
-  opacity: 0.35,
-  speed: 1,
+  opacity: 0.22,
+  speed: 0.55,
 };
 
 const STORAGE_KEY = "phase.neural.settings";

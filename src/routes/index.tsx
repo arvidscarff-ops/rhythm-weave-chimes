@@ -22,6 +22,9 @@ import {
   type RuntimePack,
 } from "@/lib/sound/runtimePacks";
 import { flashBus } from "@/lib/neural/flashBus";
+import { shockwaveBus } from "@/lib/visuals/shockwaveBus";
+import { DotAtmosphere } from "@/components/visuals/DotAtmosphere";
+import { ShockwaveLayer } from "@/components/visuals/ShockwaveLayer";
 import {
   NEURAL_PRESETS,
   loadNeuralSettings,
@@ -1157,14 +1160,16 @@ function PhaseApp() {
       />
       {/* CANVAS */}
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
+        <DotAtmosphere bpm={bpm} playing={playing} />
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full block"
-          style={{ background: "transparent", cursor: isWheel ? "crosshair" : "default" }}
+          style={{ background: "transparent", cursor: isWheel ? "crosshair" : "default", zIndex: 1 }}
           onPointerDown={onCanvasPointerDown}
           onPointerMove={onCanvasPointerMove}
           onPointerLeave={onCanvasPointerLeave}
         />
+        <ShockwaveLayer />
         {isWheel && (
           <WheelOverlays
             wheel={engineRef.current.wheel}
@@ -1329,6 +1334,10 @@ function updateWheel(
               const fx = (W / 2 + Math.cos(target) * rr) / W;
               const fy = (H / 2 + Math.sin(target) * rr) / H;
               flashBus.flash(fx, fy, 0.85);
+              shockwaveBus.emit(fx, fy, {
+                hue: wh.rings.length > 1 ? ri / (wh.rings.length - 1) : 0,
+                intensity: 0.85,
+              });
             }
           }
         }
@@ -1658,6 +1667,7 @@ function updatePendulum(
         const bx = ax + Math.sin(ang) * len;
         const by = ay + Math.cos(ang) * len;
         flashBus.flash(bx / W, by / H, 0.8);
+        shockwaveBus.emit(bx / W, by / H, { hue: t, intensity: 0.8 });
       }
     }
   });
@@ -1747,6 +1757,10 @@ function updateBars(
       if (W > 0 && H > 0) {
         const x = padX + step * i;
         flashBus.flash(x / W, bot / H, 0.8);
+        shockwaveBus.emit(x / W, bot / H, {
+          hue: n > 1 ? i / (n - 1) : 0,
+          intensity: 0.8,
+        });
       }
     }
   });

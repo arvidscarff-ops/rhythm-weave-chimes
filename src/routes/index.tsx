@@ -25,6 +25,7 @@ import {
 } from "@/lib/sound/runtimePacks";
 import { flashBus } from "@/lib/neural/flashBus";
 import { spawnBurst, updateBursts, drawBursts } from "@/lib/visuals/burstField";
+import { updateFlares, drawFlares } from "@/lib/visuals/lensFlare";
 import {
   composerAdvance, resetComposerSources, loadComposerSettings,
   saveComposerSettings, type ComposerSettings,
@@ -1001,6 +1002,8 @@ function PhaseApp() {
     }
     updateBursts(dt);
     drawBursts(ctx2d);
+    updateFlares(dt);
+    drawFlares(ctx2d, W, H);
     ctx2d.globalCompositeOperation = "source-over";
   };
 

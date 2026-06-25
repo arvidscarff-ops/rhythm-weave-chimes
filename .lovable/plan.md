@@ -1,52 +1,35 @@
-# Generative Composer
+# Reactive Lens Flare Overlay
 
-Turn each ring from "random pulse on intersection" into a musical voice that plays **in-key notes** following a **Euclidean rhythm pattern**. The polyrhythmic phasing stays exactly as it is — we just decide *which* trigger crossings actually fire, and *which note* they play.
+Yes — doable cleanly within the budget. The flash bus already broadcasts every note trigger (`src/lib/neural/flashBus.ts`) and `burstField.ts` consumes those events for blooms. We add a third subscriber: a canvas overlay that renders an artistic, abstract anamorphic-style lens flare driven by the same energy.
 
-## What you'll get in the UI
+## What you'll see
 
-A new **Composer** entry in the dock (or nested under Scene → ring config) with, per ring:
+- A soft, painterly flare layer sitting above the neural background and below the dock.
+- Each note bloom emits an answering flare: a horizontal anamorphic streak, a chromatic core, 2–3 ghost orbs along the optical axis, and a faint iris halo.
+- Flares inherit the active neural palette hue (so OBSIDIAN stays moody, ACID gets toxic green, etc.) plus a per-burst hue jitter so it never looks mechanical.
+- Energy from many simultaneous notes accumulates into a global "bloom pressure" that gently brightens and lengthens streaks during dense passages, then decays.
+- Honors `prefers-reduced-motion` and the existing Visuals → Glow / Flow sliders for intensity.
 
-- **Scale** dropdown — Major, Minor, Dorian, Mixolydian, Pentatonic Maj/Min, Blues, Hirajoshi (Japanese), Phrygian Dominant, Whole Tone, Chromatic.
-- **Root note** — C through B.
-- **Octave range** — low/high bounds (e.g. C3–C5) the ring picks from.
-- **Pattern (Euclidean)** — two numbers `E(k, n)`: *k* hits spread as evenly as possible across *n* steps. Classic example: `E(3,8)` = the tresillo. A small dot-grid preview shows the pattern.
-- **Rotation** — shift the pattern's starting step (0…n-1) so two rings with the same pattern can interlock.
-- **Note mode** — Sequential (walk up the scale), Random-in-scale, Arpeggio (1-3-5), or Brownian (small steps).
+Purely additive blending, no DOM, no new dependencies.
 
-A **global Key/Scale lock** at the top lets all rings inherit one key with one click.
+## Files
 
-## How it changes playback
+New:
+- `src/lib/visuals/lensFlare.ts` — flare state, `spawnFlare(x,y,opts)`, `updateFlares(dt)`, `drawFlares(ctx, w, h)`. Subscribes to `flashBus` and to neural settings for palette + intensity.
 
-Today a ring fires every time its rotation crosses a trigger line. With the composer:
+Edited:
+- `src/routes/index.tsx` — in the existing rAF render loop, after `drawBursts(ctx)` call `updateFlares(dt)` + `drawFlares(ctx, w, h)` on the same canvas. No new canvas element.
 
-1. Each ring keeps an internal **step counter** that advances on every crossing.
-2. The Euclidean pattern decides whether that step is a **hit** or a **rest**.
-3. On a hit, the note picker (sequential/random/arp/brownian) chooses the next scale degree and converts it to a frequency for the existing synth voice.
+No changes to audio, composer, dock, or routes.
 
-Result: rings stop sounding like atonal pings and start sounding like interlocking melodic phrases that phase against each other — exactly the appeal of polyrhythmic music (Reich, Aphex, generative ambient).
+## Technical notes
 
-## Defaults that sound good immediately
+- Flare primitives drawn with radial + linear gradients and `globalCompositeOperation = "lighter"`, matching `burstField`'s additive approach.
+- Anamorphic streak = thin tall-aspect radial gradient stretched on the x-axis, with a subtle RGB split (3 offset draws in R/G/B-tinted alpha) for chromatic aberration.
+- Ghosts placed along the line from burst position to canvas center, sized/colored by a seeded PRNG so each note's flare feels unique but stable.
+- Envelope: ~80ms attack, ~900ms eased release; cap at ~24 concurrent flares with slot recycling (same pattern as `burstField`).
+- Reads `neuralHueBias()` style helper to stay palette-coherent; multiplies output alpha by Visuals "Glow" setting so users can tone it down or off.
 
-- Global key: **A minor pentatonic**
-- Ring 1: `E(3,8)` sequential, octave 3-4
-- Ring 2: `E(5,8)` random-in-scale, octave 4-5, rotation 2
-- Ring 3: `E(2,5)` arpeggio, octave 2-3
+## Out of scope
 
-So a brand-new session sounds musical without touching anything.
-
-## Technical sketch (for the curious)
-
-- New `src/lib/music/scales.ts` — scale interval tables + `degreeToFreq(root, scale, degree, octave)`.
-- New `src/lib/music/euclidean.ts` — Bjorklund's algorithm returning a `boolean[]` of length *n*.
-- New `src/lib/music/composer.ts` — per-ring state `{ step, pattern, noteCursor }` with an `advance()` that returns `{ play: boolean, freq?: number }`.
-- Extend the existing ring config type with `{ scale, root, octaveLow, octaveHigh, euclid: {k,n,rotation}, noteMode }`; persisted alongside current ring settings.
-- In the trigger handler in `src/routes/index.tsx`, call `composer.advance(ringId)` instead of unconditionally firing; pass the returned freq into the existing pack voice function (packs keep working unchanged — they're just told *what pitch* now).
-- Dock: new `ComposerMenu` using the same `material-ui-dropdown-menu` drill-down pattern as `FxMenu`, plus a tiny canvas dot-grid for the Euclidean preview.
-
-No audio engine rewrite, no schema changes, no new dependencies.
-
-## Out of scope (can come next)
-
-- Saving/sharing composer presets via URL hash (pairs naturally with option 3 from earlier).
-- Chord rings (multiple notes per hit).
-- Swing / humanization.
+No new UI controls this pass (uses existing Glow/Flow). No shader work — 2D canvas keeps it inside budget.

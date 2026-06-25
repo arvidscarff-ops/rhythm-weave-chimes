@@ -1390,8 +1390,9 @@ function drawWheelScene(
 ) {
   const cx = W / 2, cy = H / 2;
   const maxR = Math.min(W, H) / 2;
+  const t = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
 
-  // 1) rings — restrained 1px hairlines, brighten on flash or hover
+  // 1) rings — restrained hairlines + slow rotating sheen ("barely breathing")
   for (const ring of wh.rings) {
     const R = ringRadiusPx(ring, W, H);
     const hovered = ring.id === hoverRingId;
@@ -1401,9 +1402,40 @@ function drawWheelScene(
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, TAU);
     ctx.stroke();
+
+    // Slow conic sheen — N short arcs whose alpha sweeps around the ring.
+    // Deterministic per-ring phase so rings don't shimmer in lockstep.
+    const ringPhase = hashPhase(ring.id);
+    const SEG = 64;
+    const sweep = TAU / SEG;
+    const sheenPeak = hovered ? 0.16 : 0.10;
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < SEG; i++) {
+      const a0 = i * sweep;
+      const s = 0.5 + 0.5 * Math.sin(a0 - t * 0.26 + ringPhase);
+      const alpha = sheenPeak * Math.pow(s, 3);
+      if (alpha < 0.005) continue;
+      ctx.strokeStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, a0, a0 + sweep + 0.002);
+      ctx.stroke();
+    }
+
+    // Trigger bloom — full ring glow that decays with ring.flash
+    if (ring.flash > 0.02) {
+      ctx.save();
+      ctx.shadowColor = "rgba(255,255,255,0.9)";
+      ctx.shadowBlur = 18;
+      ctx.strokeStyle = `rgba(255,255,255,${(0.35 * ring.flash).toFixed(3)})`;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
-  // 2) trigger lines — quiet hairline chords with rim ticks
+  // 2) trigger lines — hairline chord + traveling highlight + flash bloom
   for (const line of wh.lines) {
     const x1 = cx + Math.cos(line.angle) * maxR * 0.96;
     const y1 = cy + Math.sin(line.angle) * maxR * 0.96;
@@ -1414,6 +1446,33 @@ function drawWheelScene(
     ctx.beginPath();
     ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
     ctx.stroke();
+
+    // Traveling highlight — a short bright segment slides center→rim every ~8s.
+    const linePhase = hashPhase(String(line.angle.toFixed(4)));
+    const u = ((t * 0.125 + linePhase) % 1); // 0..1 along the half-line, period 8s
+    const segLen = 0.12; // 12% of half-line length
+    const hx = cx + Math.cos(line.angle) * maxR * 0.96 * (u * 2 - 1);
+    const hy = cy + Math.sin(line.angle) * maxR * 0.96 * (u * 2 - 1);
+    const hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, maxR * segLen);
+    hg.addColorStop(0, "rgba(255,255,255,0.18)");
+    hg.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = hg;
+    ctx.beginPath();
+    ctx.arc(hx, hy, maxR * segLen, 0, TAU);
+    ctx.fill();
+
+    // Trigger flash — whole-line bloom while line.flash decays
+    if (line.flash > 0.02) {
+      ctx.save();
+      ctx.shadowColor = "rgba(255,255,255,0.9)";
+      ctx.shadowBlur = 14;
+      ctx.strokeStyle = `rgba(255,255,255,${(0.55 * line.flash).toFixed(3)})`;
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.restore();
+    }
     // ink-bleed ripple at each crossing (Fluid Inversion)
     for (const s of line.sparks) {
       const sx = cx + Math.cos(s.x) * s.y * (Math.min(W, H) / 2);
@@ -1444,6 +1503,11 @@ function drawWheelScene(
       const nx = cx + Math.cos(w) * R;
       const ny = cy + Math.sin(w) * R;
       const inten = n.flash;
+      // Resting breath — each note pulses with its own phase so they're never in lockstep.
+      const nPhase = hashPhase(n.id);
+      const breath = 0.5 + 0.5 * Math.sin(t * 0.6 + nPhase);
+      const breathR = 1 + 0.06 * (breath * 2 - 1);
+      const breathA = 0.85 + 0.15 * (breath * 2 - 1);
 
       // kinetic trail (6 samples behind the note)
       const trail = getTrail(n);
@@ -1462,18 +1526,41 @@ function drawWheelScene(
       trail.push({ x: nx, y: ny });
       if (trail.length > 6) trail.shift();
 
-      // soft note disc
-      const baseR = 3.5 + inten * 5;
+      // soft note disc (with gentle breath)
+      const baseR = (3.5 + inten * 5) * breathR;
       const g = ctx.createRadialGradient(nx, ny, 0, nx, ny, baseR + 10);
-      g.addColorStop(0, color.replace("a", (0.85).toFixed(3)));
+      g.addColorStop(0, color.replace("a", (breathA).toFixed(3)));
       g.addColorStop(0.45, color.replace("a", (0.3 + inten * 0.4).toFixed(3)));
       g.addColorStop(1, color.replace("a", "0"));
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(nx, ny, baseR + 10, 0, TAU);
       ctx.fill();
+
+      // trigger halo — wide additive bloom decaying with n.flash
+      if (inten > 0.02) {
+        const haloR = baseR * 3.2 + 14;
+        const hg2 = ctx.createRadialGradient(nx, ny, 0, nx, ny, haloR);
+        hg2.addColorStop(0, color.replace("a", (0.5 * inten).toFixed(3)));
+        hg2.addColorStop(0.5, color.replace("a", (0.18 * inten).toFixed(3)));
+        hg2.addColorStop(1, color.replace("a", "0"));
+        ctx.fillStyle = hg2;
+        ctx.beginPath();
+        ctx.arc(nx, ny, haloR, 0, TAU);
+        ctx.fill();
+      }
     }
   }
+}
+
+// Deterministic phase in [0, TAU) from an arbitrary id string.
+function hashPhase(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return ((h >>> 0) % 10000) / 10000 * TAU;
 }
 
 /* ============================================================

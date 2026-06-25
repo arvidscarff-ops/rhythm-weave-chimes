@@ -6,6 +6,8 @@ export type NeuralFlash = {
   y: number;
   intensity: number; // 0..1
   t: number;         // performance.now() at emission
+  /** Optional 0..1 note hue so subscribers can match the played note's color. */
+  hue?: number;
 };
 
 type Listener = (f: NeuralFlash) => void;
@@ -17,13 +19,14 @@ export const flashBus = {
     listeners.add(cb);
     return () => listeners.delete(cb);
   },
-  flash(x: number, y: number, intensity = 0.7) {
+  flash(x: number, y: number, intensity = 0.7, hue?: number) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     const f: NeuralFlash = {
       x: Math.max(0, Math.min(1, x)),
       y: Math.max(0, Math.min(1, y)),
       intensity: Math.max(0, Math.min(1, intensity)),
       t: typeof performance !== "undefined" ? performance.now() : 0,
+      hue: typeof hue === "number" && Number.isFinite(hue) ? ((hue % 1) + 1) % 1 : undefined,
     };
     listeners.forEach((cb) => cb(f));
   },

@@ -23,7 +23,6 @@ import {
 } from "@/lib/sound/runtimePacks";
 import { flashBus } from "@/lib/neural/flashBus";
 import { spawnBurst, updateBursts, drawBursts } from "@/lib/visuals/burstField";
-import { hueToOrbTpl } from "@/lib/visuals/orbDot";
 import { siriOrbLayer } from "@/lib/visuals/siriOrbLayer";
 import {
   NEURAL_PRESETS,
@@ -1680,7 +1679,6 @@ function drawPendulumScene(
     ctx.stroke();
 
     void tNow;
-    void hueToOrbTpl;
     siriOrbLayer.place(`pend:${b.id}`, bx, by, 58 + b.flash * 14 + (hot ? 8 : 0), b.flash, i * 0.13 + 0.55);
   });
 }

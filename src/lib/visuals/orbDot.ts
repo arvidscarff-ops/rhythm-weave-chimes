@@ -1,4 +1,4 @@
-// Living "orb of light" — used everywhere we used to draw a note dot.
+// Legacy 2D fallback orb — live scene notes now use the shared Siri WebGL layer.
 // Pure 2D canvas, additive blend, organic per-orb wobble + chromatic fringe.
 //
 // Travel speed is unchanged: the caller still positions the orb. This helper

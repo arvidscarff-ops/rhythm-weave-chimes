@@ -1,54 +1,34 @@
 
-# Applying the Circle Animations Style to Phase
+## What's wrong
 
-The reference component is a 3×3 gallery of canvas dot-ring animations. Dropping that grid into Phase verbatim would clash with the open, zen composition you've built. Instead, we adopt its **visual vocabulary** — concentric rings of small dots, soft opacity/size pulses, slow rotation, scan/shockwave halos — and weave it into the scenes and chrome you already have.
+The shimmer code I shipped is technically running, but two things broke the effect in practice:
 
-## Where it fits
+1. **Ring sheen is too faint to see.** Each ring gets a 64-segment sweep with peak alpha `0.10` modulated by `sin³` — at rest most segments are below 1% alpha, so on a teal glass background it visually reads as a flat hairline. No "alive" feel.
+2. **Trigger-line "traveling highlight" reads as a weird floating disc.** The code drops a soft radial gradient that slides from one end of every trigger chord to the other every 8s. With one chord visible, this looks exactly like what you described: "a low-opacity gradient white circle moving down the main divider line every few seconds." It's not zen, it's a UFO.
+3. **Note breathing is invisible.** ±6% radius and ±15% alpha on a 3.5px disc is below perceptual threshold against the bloom halo.
 
-### 1. Ambient "dot atmosphere" behind the wheel (primary use)
-A new low-opacity canvas layer (above NeuralNoise, below scene canvas) renders slowly drifting concentric dot rings centered on the composition. Inspired by `interwovenRingPulses` + `spiralRadiatingPulse`:
-- 4–6 rings of 2px dots, max opacity ~0.12, slow counter-rotation
-- Breathes with the project BPM (one pulse cycle per bar) so it feels musical, not decorative
-- Sits *outside* the wheel's outermost ring as a quiet halo — never competes with notes
+## Plan
 
-### 2. Note-trigger shockwave (replaces/augments current bloom)
-When a note fires, emit a `pulseWaveShockwave`-style expanding ring of dots from the trigger point:
-- 1 ring, ~18 dots, expands ~60px over 700ms, fades out
-- Per-scene: from the wheel intersection, the pendulum bob's zero-crossing, the bars node hit
-- Coexists with the existing additive bloom; this adds *granularity* (dots) instead of just glow
-- Also pings `flashBus` as today, so NeuralNoise still reacts
+All changes in `src/routes/index.tsx`, canvas-only. No new deps, no audio touched.
 
-### 3. Idle "breathing grid" in empty dock space
-Tiny `pulseWaveBreathingGrid` dot field (~80×40px, opacity ≤0.15) inside the FX / Packs / About drawer headers, behind the title. Adds the "alive" feel to chrome without adding chrome.
+### 1. Remove the traveling-highlight disc on trigger lines
+Delete the `hg` radial-gradient block (the moving circle). Replace it with a chord-aligned shimmer: a single soft alpha-pulse along the *whole* chord that breathes in/out on a 6–9 s sine, per-line phase-offset via `hashPhase`. No moving point, no disc — the line itself gently brightens and dims.
 
-### 4. Scene-picker thumbnails (optional, smallest lift)
-Each scene rail link (WHEEL / PENDULUM / BARS) gets a 28×28 dot animation as its icon — picked to evoke the scene (Wheel→`pulseWaveSpiral`, Pendulum→`pulseWaveStretched`, Bars→`flowingEnergyBands`). Only the active one animates; others are static dots.
+### 2. Make the ring sheen readable but still slow
+- Drop segment count from 64 → 24 (less stippling, smoother sweep).
+- Raise `sheenPeak` to ~`0.22` (hovered `0.32`) and switch from `sin³` to `sin²` so the bright arc is wider and the dark side never fully disappears.
+- Slow the sweep slightly (`t * 0.18` instead of `0.26`) so it feels like a tide, not a rotation.
+- Add a faint constant base over the hairline (alpha ~`0.10`) so the ring reads as "lit" even between sheen peaks.
 
-## What we do NOT do
-- No 3×3 gallery page, no card grid, no "Circle Animations Collection N°3" header
-- No bright white fills — every dot uses the existing palette tokens at low alpha
-- No new full-screen WebGL layer (we already have NeuralNoise; this is 2D canvas only)
+### 3. Make notes actually breathe
+- Increase resting radius pulse to ±18% and resting alpha pulse to ±35%.
+- Add a slow secondary halo (radial gradient, alpha ~`0.06–0.10`, radius ~`baseR * 2`) that pulses on the same per-note phase. This gives each note a soft "glow halo" that swells and recedes — the zen part.
+- Keep `n.flash` trigger halo untouched (already working).
 
-## Technical approach
+### 4. Sanity check the runtime error
+The `Failed to fetch dynamically imported module: virtual:tanstack-start-client-entry` in the snapshot is the standard symptom of an HMR reload after a dev-server hiccup, not a code bug. I'll verify with a fresh build after the changes; if it persists I'll restart the dev server.
 
-**New files**
-- `src/lib/visuals/dotFields.ts` — port the relevant `animationLogic` entries (`interwovenRingPulses`, `pulseWaveShockwave`, `pulseWaveSpiral`, `pulseWaveBreathingGrid`, `flowingEnergyBands`, `pulseWaveStretched`) as pure draw functions: `(ctx, w, h, t, opts) => void`. No React, no per-component RAF. Replace hard-coded `rgba(255,255,255,a)` with a `color` opt sourced from CSS var (`--pr-fg` / palette).
-- `src/components/visuals/DotAtmosphere.tsx` — fixed canvas behind the scene, draws `interwovenRingPulses` driven by Phase's existing RAF clock + BPM. DPR-aware, `pointer-events-none`.
-- `src/components/visuals/ShockwaveLayer.tsx` — subscribes to a new lightweight bus (`shockwaveBus`) or piggybacks on `flashBus`. Maintains an active-shockwaves array, expires entries, draws one frame per RAF.
-- `src/lib/visuals/shockwaveBus.ts` — `{ emit(x, y, opts), subscribe(fn) }` mirroring `flashBus`.
+## Out of scope
 
-**Edits in `src/routes/index.tsx`**
-- Mount `<DotAtmosphere />` and `<ShockwaveLayer />` once in the scene container.
-- In `updateWheel` / `updatePendulum` / `updateBars`, after the existing `flashBus.flash(...)` call, also `shockwaveBus.emit(x, y, { hue: ringIndex })`.
-- Drawer headers (FX/Packs/About): drop in a small `<DotField variant="breathingGrid" />` absolutely-positioned behind the title.
-
-**Performance**
-- Single RAF per layer, shared with main scene where possible.
-- Cap shockwaves at 12 concurrent; oldest dropped.
-- All dot fields clamp max alpha to ≤0.15 (atmosphere) / ≤0.5 (shockwave) so we stay in the "thick water" feel established earlier.
-
-## Open questions before I build
-
-1. **Scope** — do all four use-cases ship together, or just **Atmosphere + Shockwave** first (the two with the biggest "alive" payoff), and we add drawer/icon variants later?
-2. **Coupling to BPM** — should the atmosphere ring pulse sync to the global BPM (musical), or drift on its own slow clock (purely ambient)?
-3. **Color** — keep dots monochrome white-on-teal like the rest of the HUD, or let them inherit the active **Visuals palette** (Aurora/Lagoon/etc.) so all reactive visuals share a color identity?
+- No changes to scenes other than Wheel (Pendulum/Bars use their own decay paths; once Wheel reads right we can port the same idiom).
+- No changes to the neural-noise background, audio engine, layout, or dock.

@@ -1267,6 +1267,7 @@ function decayWheelFlashes(wh: WheelState, dt: number) {
 
 function updateWheel(
   wh: WheelState, dt: number, audio: AudioGraph, bpm: number, voices: VoiceSel, knobs: Knobs, pack: RuntimePack,
+  W = 0, H = 0,
 ) {
   const now = audio.ctx.currentTime;
   const REFRACTORY = 0.16; // prevents frame jitter and ambient voice pileups
@@ -1319,6 +1320,12 @@ function updateWheel(
             // record spark location for visual (approx at target angle, radius of ring)
             // we don't have W/H here; store in normalized polar (target, ringId)
             line.sparks.push({ x: target, y: ring.radiusFactor, t: 0.6 });
+            if (W > 0 && H > 0) {
+              const rr = ringRadiusPx(ring, W, H);
+              const fx = (W / 2 + Math.cos(target) * rr) / W;
+              const fy = (H / 2 + Math.sin(target) * rr) / H;
+              flashBus.flash(fx, fy, 0.85);
+            }
           }
         }
       }

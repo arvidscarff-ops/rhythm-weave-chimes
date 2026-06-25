@@ -898,7 +898,7 @@ function PhaseApp() {
     load();
     // Re-fetch when packs drawer opens so newly-published packs appear without reload.
     return () => { cancelled = true; };
-  }, [packsOpen]);
+  }, []);
 
   // Pre-decode samples for the active custom pack as soon as it's selected.
   useEffect(() => {

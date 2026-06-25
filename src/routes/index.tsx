@@ -1631,11 +1631,16 @@ function decayBarsFlashes(bars: BarsState, dt: number) {
 
 function updateBars(
   bars: BarsState, dt: number, audio: AudioGraph, bpm: number,
-  knobs: Knobs, pack: RuntimePack,
+  knobs: Knobs, pack: RuntimePack, W = 0, H = 0,
 ) {
   decayBarsFlashes(bars, dt);
   const now = audio.ctx.currentTime;
-  for (const l of bars.lanes) {
+  const n = bars.lanes.length;
+  const padX = W * 0.12;
+  const usable = W - padX * 2;
+  const step = n > 1 ? usable / (n - 1) : 0;
+  const bot = H * 0.84;
+  bars.lanes.forEach((l, i) => {
     const period = barPeriodSec(l, bpm);
     const prev = l.phase;
     l.phase = (l.phase + dt / Math.max(0.001, period)) % 1;
@@ -1645,8 +1650,12 @@ function updateBars(
       triggerPackVoice(audio.ctx, audio.preFx, pack, l.slotIndex, freq, now + 0.005);
       l.flash = 1;
       l.lastTriggerY = 1;
+      if (W > 0 && H > 0) {
+        const x = padX + step * i;
+        flashBus.flash(x / W, bot / H, 0.8);
+      }
     }
-  }
+  });
 }
 
 function drawBarsScene(

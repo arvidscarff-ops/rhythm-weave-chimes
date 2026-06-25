@@ -1282,8 +1282,16 @@ function updateWheel(
             wh.lastFire.set(key, now);
 
             if (voiceLegacy !== "none") {
-              const freq = vertexFreq(note.pitchIndex, knobs.pitch);
-              triggerPackVoice(audio.ctx, audio.preFx, pack, ri, freq, now);
+              const fallback = vertexFreq(note.pitchIndex, knobs.pitch);
+              const sourceId = `wheel:${ring.id}:${note.id}`;
+              const { play, freq } = composerAdvance(sourceId, ri, fallback);
+              if (play) {
+                const semi = freq * Math.pow(2, knobs.pitch / 12);
+                triggerPackVoice(audio.ctx, audio.preFx, pack, ri, semi, now);
+              } else {
+                // pattern rested — skip audio + visual flash
+                continue;
+              }
             }
             note.flash = 1;
             ring.flash = Math.max(ring.flash, 0.7);

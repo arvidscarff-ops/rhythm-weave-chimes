@@ -1717,8 +1717,12 @@ function updateBars(
     l.phase = (l.phase + dt / Math.max(0.001, period)) % 1;
     if (l.phase < prev) {
       // wrapped → trigger
-      const freq = pitchToFreq(l.pitchIndex + knobs.pitch);
-      triggerPackVoice(audio.ctx, audio.preFx, pack, l.slotIndex, freq, now + 0.005);
+      const fallback = pitchToFreq(l.pitchIndex);
+      const sourceId = `bars:${l.id}`;
+      const { play, freq } = composerAdvance(sourceId, l.slotIndex, fallback);
+      if (!play) return;
+      const out = freq * Math.pow(2, knobs.pitch / 12);
+      triggerPackVoice(audio.ctx, audio.preFx, pack, l.slotIndex, out, now + 0.005);
       l.flash = 1;
       l.lastTriggerY = 1;
       if (W > 0 && H > 0) {

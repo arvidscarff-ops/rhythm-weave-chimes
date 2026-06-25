@@ -22,6 +22,9 @@ import {
   type RuntimePack,
 } from "@/lib/sound/runtimePacks";
 import { flashBus } from "@/lib/neural/flashBus";
+import { shockwaveBus } from "@/lib/visuals/shockwaveBus";
+import { DotAtmosphere } from "@/components/visuals/DotAtmosphere";
+import { ShockwaveLayer } from "@/components/visuals/ShockwaveLayer";
 import {
   NEURAL_PRESETS,
   loadNeuralSettings,

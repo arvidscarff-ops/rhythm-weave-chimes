@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { PhaseDock } from "@/components/dock/PhaseDock";
 import {
   DEFAULT_FX_STATE,
   applyFxState,
@@ -623,12 +625,10 @@ function PhaseApp() {
   const [scene, setScene] = useState<SceneKind>("wheel");
   const [bpm, setBpm] = useState(90);
   const [fxState, setFxState] = useState<FxState>(DEFAULT_FX_STATE);
-  const [fxOpen, setFxOpen] = useState(false);
-  const [packsOpen, setPacksOpen] = useState(false);
-  const [aboutOpen, setAboutOpen] = useState(false);
-  const [visualsOpen, setVisualsOpen] = useState(false);
   const [selectedPack, setSelectedPack] = useState<string>("moss");
   const [customPacks, setCustomPacks] = useState<RuntimePack[]>([]);
+  const [neural, setNeural] = useState<NeuralSettings>(() => loadNeuralSettings());
+  const auth = useAuth();
   // topology bump: rings/lines/notes counts so DOM overlays re-render
   const [topo, setTopo] = useState(0);
   const bumpTopo = useCallback(() => setTopo((x) => x + 1), []);

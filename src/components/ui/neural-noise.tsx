@@ -98,14 +98,14 @@ export function NeuralNoise({ settings, zIndex = 0, blendMode = "plus-lighter" }
         vec2 ptr = vUv - u_pointer;
         ptr.x *= u_ratio;
         float p = clamp(length(ptr), 0.0, 1.0);
-        p = 0.5 * pow(1.0 - p, 2.0);
+        // very gentle cursor warp — barely perceptible drift
+        p = 0.18 * pow(1.0 - p, 2.0);
 
-        // flash influence (local bloom)
+        // flash is decoupled from distortion: it only adds a soft additive bloom
         vec2 fp = vUv - u_flash_pos;
         fp.x *= u_ratio;
         float fd = length(fp);
-        float flash = u_flash_int * exp(-fd * 6.5);
-        p += flash * 0.8;
+        float flash = u_flash_int * exp(-fd * 9.0);
 
         float t = u_speed * u_time * (u_reduce > 0.5 ? 0.0 : 1.0);
         float noise = neuro(uv, t, p);
@@ -119,10 +119,11 @@ export function NeuralNoise({ settings, zIndex = 0, blendMode = "plus-lighter" }
         float g = clamp(u_mix * 0.6 + 0.4 * vUv.y + 0.2 * vUv.x, 0.0, 1.0);
         vec3 col = mix(u_colorA, u_colorB, g) * noise;
 
-        // extra flash highlight
-        col += vec3(flash) * 0.35;
+        // gentle additive bloom in the palette color (no geometry warp)
+        vec3 bloomCol = mix(u_colorA, u_colorB, g);
+        col += bloomCol * flash * 0.12;
 
-        float a = noise * u_opacity + flash * 0.25 * u_opacity * 4.0;
+        float a = noise * u_opacity + flash * 0.18 * u_opacity;
         gl_FragColor = vec4(col, clamp(a, 0.0, 1.0));
       }
     `;
@@ -183,7 +184,7 @@ export function NeuralNoise({ settings, zIndex = 0, blendMode = "plus-lighter" }
 
     const state = {
       ptr: { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5 },
-      flash: { x: 0.5, y: 0.5, level: 0 },
+      flash: { x: 0.5, y: 0.5, level: 0, target: 0 },
       live: live!,
     };
 
@@ -219,7 +220,8 @@ export function NeuralNoise({ settings, zIndex = 0, blendMode = "plus-lighter" }
       if (reduceMotion) return;
       state.flash.x = f.x;
       state.flash.y = 1 - f.y; // shader uses gl-style y-up
-      state.flash.level = Math.max(state.flash.level, 0.35 + f.intensity * 0.95);
+      // raise the *target* — actual level eases toward it (no snap)
+      state.flash.target = Math.min(1, state.flash.target + 0.25 + f.intensity * 0.35);
     });
 
     let raf = 0;
@@ -236,11 +238,13 @@ export function NeuralNoise({ settings, zIndex = 0, blendMode = "plus-lighter" }
       const colorB = preset.colorB ?? preset.color;
 
       // ease pointer
-      state.ptr.x += (state.ptr.tx - state.ptr.x) * 0.12;
-      state.ptr.y += (state.ptr.ty - state.ptr.y) * 0.12;
-      // decay flash
-      const k = 1 - Math.exp(-dt * 2.6);
-      state.flash.level = Math.max(0, state.flash.level - k * (0.4 + state.flash.level));
+      state.ptr.x += (state.ptr.tx - state.ptr.x) * 0.04;
+      state.ptr.y += (state.ptr.ty - state.ptr.y) * 0.04;
+      // flash envelope: soft attack (~250ms), long release (~1.4s)
+      const attack = 1 - Math.exp(-dt / 0.25);
+      const release = 1 - Math.exp(-dt / 1.4);
+      state.flash.level += (state.flash.target - state.flash.level) * attack;
+      state.flash.target += (0 - state.flash.target) * release;
 
       const elapsed = (now - startedAt) / 1000;
       const breath = 0.5 + 0.5 * Math.sin(elapsed * (Math.PI * 2) / 18);
@@ -250,8 +254,8 @@ export function NeuralNoise({ settings, zIndex = 0, blendMode = "plus-lighter" }
       gl.uniform3f(u.colorA, colorA[0], colorA[1], colorA[2]);
       gl.uniform3f(u.colorB, colorB[0], colorB[1], colorB[2]);
       gl.uniform1f(u.mix, breath);
-      gl.uniform1f(u.speed, 0.00018 * Math.max(0, s.speed));
-      gl.uniform1f(u.opacity, Math.max(0, Math.min(0.9, s.opacity * 2.4)));
+      gl.uniform1f(u.speed, 0.00009 * Math.max(0, s.speed));
+      gl.uniform1f(u.opacity, Math.max(0, Math.min(0.55, s.opacity * 1.6)));
       gl.uniform2f(u.flashPos, state.flash.x, state.flash.y);
       gl.uniform1f(u.flashInt, state.flash.level);
       gl.uniform1f(u.reduce, reduceMotion ? 1 : 0);

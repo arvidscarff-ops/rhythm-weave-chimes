@@ -1538,11 +1538,14 @@ function decayPendulumFlashes(pend: PendulumState, dt: number) {
 
 function updatePendulum(
   pend: PendulumState, dt: number, audio: AudioGraph, bpm: number,
-  knobs: Knobs, pack: RuntimePack,
+  knobs: Knobs, pack: RuntimePack, W = 0, H = 0,
 ) {
   decayPendulumFlashes(pend, dt);
   const now = audio.ctx.currentTime;
-  for (const b of pend.bobs) {
+  const n = pend.bobs.length;
+  const ax = W / 2, ay = H * 0.16;
+  const maxLen = H * 0.62, minLen = H * 0.30;
+  pend.bobs.forEach((b, i) => {
     const period = pendPeriodSec(b, bpm);
     const inc = dt / Math.max(0.001, period);
     b.phase = (b.phase + inc) % 1;
@@ -1554,8 +1557,16 @@ function updatePendulum(
       triggerPackVoice(audio.ctx, audio.preFx, pack, b.slotIndex, freq, now + 0.005);
       b.flash = 1;
       b.prevSign = sign;
+      if (W > 0 && H > 0) {
+        const t = n <= 1 ? 0.5 : i / (n - 1);
+        const len = minLen + (maxLen - minLen) * t;
+        const ang = Math.sin(b.phase * Math.PI * 2) * 0.55;
+        const bx = ax + Math.sin(ang) * len;
+        const by = ay + Math.cos(ang) * len;
+        flashBus.flash(bx / W, by / H, 0.8);
+      }
     }
-  }
+  });
 }
 
 function drawPendulumScene(

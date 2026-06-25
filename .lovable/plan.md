@@ -1,34 +1,38 @@
 
-## What's wrong
+# Plan: Phosphor-inspired note burst effects
 
-The shimmer code I shipped is technically running, but two things broke the effect in practice:
+Take visual inspiration from the phosphor-30 shader (iridescent cyan/magenta/amber gradients, soft additive bloom, organic flowing energy) and translate it into short-lived particle "bursts" that erupt from the exact pixel where a note is triggered — across all three scenes (Wheel, Pendulum, Bars).
 
-1. **Ring sheen is too faint to see.** Each ring gets a 64-segment sweep with peak alpha `0.10` modulated by `sin³` — at rest most segments are below 1% alpha, so on a teal glass background it visually reads as a flat hairline. No "alive" feel.
-2. **Trigger-line "traveling highlight" reads as a weird floating disc.** The code drops a soft radial gradient that slides from one end of every trigger chord to the other every 8s. With one chord visible, this looks exactly like what you described: "a low-opacity gradient white circle moving down the main divider line every few seconds." It's not zen, it's a UFO.
-3. **Note breathing is invisible.** ±6% radius and ±15% alpha on a 3.5px disc is below perceptual threshold against the bloom halo.
+## Approach
 
-## Plan
+Render bursts on the **existing scene canvas** (not a new WebGL layer), using additive 2D canvas drawing. This keeps the bursts pixel-aligned with the rings/bobs/bars that triggered them, costs almost nothing, and stays inside the existing RAF loop. The NeuralNoise WebGL background stays exactly as it is.
 
-All changes in `src/routes/index.tsx`, canvas-only. No new deps, no audio touched.
+## What a "burst" looks like
 
-### 1. Remove the traveling-highlight disc on trigger lines
-Delete the `hg` radial-gradient block (the moving circle). Replace it with a chord-aligned shimmer: a single soft alpha-pulse along the *whole* chord that breathes in/out on a 6–9 s sine, per-line phase-offset via `hashPhase`. No moving point, no disc — the line itself gently brightens and dims.
+Each trigger spawns one burst (~14–22 particles + a central flash) with phosphor-shader aesthetics:
 
-### 2. Make the ring sheen readable but still slow
-- Drop segment count from 64 → 24 (less stippling, smoother sweep).
-- Raise `sheenPeak` to ~`0.22` (hovered `0.32`) and switch from `sin³` to `sin²` so the bright arc is wider and the dark side never fully disappears.
-- Slow the sweep slightly (`t * 0.18` instead of `0.26`) so it feels like a tide, not a rotation.
-- Add a faint constant base over the hairline (alpha ~`0.10`) so the ring reads as "lit" even between sheen peaks.
+- **Palette**: shimmering cyan → magenta → amber gradient sampled per-particle from a `cos(s + vec4(0,1,8,0))`-style lookup (the same color recipe the shader uses). Color is biased by the ring/bob/lane's pack voice so each layer reads as its own instrument.
+- **Motion**: particles fly outward on a `normalize(cos(...))` jittered direction, decelerating fast (ease-out cubic), with a tiny tangential curl so the burst "twists" instead of being a flat starburst.
+- **Render**: each particle is a small additive radial-gradient sprite (`globalCompositeOperation = "lighter"`), `shadowBlur` ~10–16, drawn at half-alpha and shrinking over its ~600–900ms life. A brighter sub-flash core fades in ~180ms.
+- **Velocity coupling**: burst size + particle count scale with the note's gain so loud hits feel bigger; quiet hits stay restrained.
 
-### 3. Make notes actually breathe
-- Increase resting radius pulse to ±18% and resting alpha pulse to ±35%.
-- Add a slow secondary halo (radial gradient, alpha ~`0.06–0.10`, radius ~`baseR * 2`) that pulses on the same per-note phase. This gives each note a soft "glow halo" that swells and recedes — the zen part.
-- Keep `n.flash` trigger halo untouched (already working).
+## Integration points
 
-### 4. Sanity check the runtime error
-The `Failed to fetch dynamically imported module: virtual:tanstack-start-client-entry` in the snapshot is the standard symptom of an HMR reload after a dev-server hiccup, not a code bug. I'll verify with a fresh build after the changes; if it persists I'll restart the dev server.
+- **`src/lib/visuals/burstField.ts`** (new): a tiny burst manager — `spawn(x, y, { hue, energy })`, `update(dt)`, `draw(ctx)`. Holds a pooled particle array (cap ~400) so trigger storms can't leak memory.
+- **`src/routes/index.tsx`**:
+  - In `updateWheel` / `updatePendulum` / `updateBars`, at the same spot we already call `flashBus.flash(...)`, also call `burstField.spawn(px, py, { hue: ringHue, energy: gain })`.
+  - In the scene paint pass, after rings/bobs/bars are drawn, call `burstField.draw(ctx)` so bursts sit on top of the geometry but under the HUD text.
+- **No changes** to audio, NeuralNoise, dock, or readouts.
+
+## Tuning to match the "alive / zen" feel
+
+- Bursts decay smoothly (no hard cut) and never exceed the existing trigger-bloom brightness — they enhance the existing pulse, not replace it.
+- Hard cap: max 12 concurrent bursts; older ones fade out faster when the cap is hit, so dense polyrhythms stay readable instead of flashbanging.
+- Respect `prefers-reduced-motion`: fall back to a single soft halo with no flying particles.
 
 ## Out of scope
 
-- No changes to scenes other than Wheel (Pendulum/Bars use their own decay paths; once Wheel reads right we can port the same idiom).
-- No changes to the neural-noise background, audio engine, layout, or dock.
+- No new WebGL canvas, no porting the full phosphor shader into the app (it's heavy and would compete with NeuralNoise).
+- No changes to existing ring/line/bloom rendering — the bursts layer on top.
+
+If this looks right I'll switch to build mode and implement it.

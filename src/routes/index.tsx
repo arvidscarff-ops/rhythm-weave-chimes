@@ -25,7 +25,10 @@ import {
 } from "@/lib/sound/runtimePacks";
 import { flashBus } from "@/lib/neural/flashBus";
 import { spawnBurst, updateBursts, drawBursts } from "@/lib/visuals/burstField";
-import { composerAdvance, resetComposerSources } from "@/lib/music/composer";
+import {
+  composerAdvance, resetComposerSources, loadComposerSettings,
+  saveComposerSettings, type ComposerSettings,
+} from "@/lib/music/composer";
 import {
   NEURAL_PRESETS,
   loadNeuralSettings,
@@ -629,6 +632,7 @@ function PhaseApp() {
   const [selectedPack, setSelectedPack] = useState<string>("moss");
   const [customPacks, setCustomPacks] = useState<RuntimePack[]>([]);
   const [neural, setNeural] = useState<NeuralSettings>(() => loadNeuralSettings());
+  const [composer, setComposer] = useState<ComposerSettings>(() => loadComposerSettings());
   const auth = useAuth();
   // topology bump: rings/lines/notes counts so DOM overlays re-render
   const [topo, setTopo] = useState(0);
@@ -1189,6 +1193,8 @@ function PhaseApp() {
         onPackId={setSelectedPack}
         neural={neural}
         onNeural={(s) => { setNeural(s); saveNeuralSettings(s); }}
+        composer={composer}
+        onComposer={(s) => { setComposer(s); saveComposerSettings(s); }}
         authed={!!auth.user}
         email={auth.user?.email ?? null}
         onSignOut={() => { supabase.auth.signOut(); }}

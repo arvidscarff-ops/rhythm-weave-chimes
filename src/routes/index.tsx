@@ -955,6 +955,7 @@ function PhaseApp() {
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
+    welcomeOnce();
 
     return () => {
       cancelAnimationFrame(raf);

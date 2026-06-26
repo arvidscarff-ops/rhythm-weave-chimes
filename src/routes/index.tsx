@@ -1005,6 +1005,8 @@ function PhaseApp() {
     drawBursts(ctx2d);
     updateFlares(dt);
     drawFlares(ctx2d, W, H);
+    updateJuice(dt);
+    drawJuice(ctx2d, W, H);
     ctx2d.globalCompositeOperation = "source-over";
   };
 

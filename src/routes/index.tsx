@@ -26,6 +26,7 @@ import {
 import { flashBus } from "@/lib/neural/flashBus";
 import { spawnBurst, updateBursts, drawBursts } from "@/lib/visuals/burstField";
 import { updateFlares, drawFlares } from "@/lib/visuals/lensFlare";
+import { updateJuice, drawJuice, welcomeOnce } from "@/lib/visuals/juice";
 import {
   composerAdvance, resetComposerSources, loadComposerSettings,
   saveComposerSettings, type ComposerSettings,

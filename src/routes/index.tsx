@@ -33,6 +33,7 @@ import { pendulumFanScene, type PendulumFanState } from "@/lib/scenes/pendulumFa
 import { spiralArpScene, type SpiralArpState } from "@/lib/scenes/spiralArp";
 import { radialSweepScene, type RadialSweepState } from "@/lib/scenes/radialSweep";
 import { engineClock } from "@/lib/engine/clock";
+import { engineScheduler } from "@/lib/engine/scheduler";
 import { dispatchTriggers } from "@/lib/engine/triggerBus";
 import {
   composerAdvance,
@@ -888,6 +889,54 @@ function PhaseApp() {
   const lastHoverRef = useRef<string | null>(null);
   const [hoverRing, setHoverRing] = useState<string | null>(null);
 
+  /* ---- Phase-Zero scheduler binding ---------------------------------
+   * The scheduler ticks on its own (25 ms setInterval) and pulls events
+   * via `activeScene.eventsIn(t0, t1)`. We re-bind whenever the active
+   * scene changes; legacy scenes (no `eventsIn`) leave the scheduler
+   * dormant so the imperative `dispatchTriggers` path keeps owning audio.
+   * --------------------------------------------------------------- */
+  useEffect(() => {
+    engineScheduler.start();
+    return () => engineScheduler.stop();
+  }, []);
+  useEffect(() => {
+    const a = audioRef.current;
+    const e = engineRef.current;
+    if (!a) {
+      engineScheduler.setActive(null);
+      return;
+    }
+    const bind = <S,>(impl: import("@/lib/engine/sceneTypes").Scene<S>, getter: () => S | null) => {
+      if (!impl.eventsIn) {
+        engineScheduler.setActive(null);
+        return;
+      }
+      engineScheduler.setActive({
+        scene: impl as unknown as import("@/lib/engine/sceneTypes").Scene<unknown>,
+        state: () => getter(),
+        globals: () => {
+          const k = knobsRef.current;
+          const c = canvasRef.current;
+          return {
+            W: c?.clientWidth ?? 0,
+            H: c?.clientHeight ?? 0,
+            bpm: bpmRef.current,
+            speed: k.speed,
+            density: k.multiply,
+            pitchSemis: k.pitch,
+            audioNow: a.ctx.currentTime,
+            globalTime: engineClock.t(),
+          };
+        },
+        audioCtx: a.ctx,
+        audioDest: a.preFx,
+        pack: () => packRef.current,
+      });
+    };
+    if (scene === "stringNet") bind(stringNetworkScene, () => e.stringNet);
+    else engineScheduler.setActive(null);
+  }, [scene, playing, topo]);
+
   /* ---- Session URL: share + restore ---- */
   const buildSessionState = useCallback(
     (): SessionState => ({
@@ -903,9 +952,9 @@ function PhaseApp() {
       pendulum: pendulumToSession(engineRef.current.pendulum),
       bars: barsToSession(engineRef.current.bars),
       engine: {
-        stringNet: engineRef.current.stringNet
-          ? { clock: engineRef.current.stringNet.clock }
-          : undefined,
+        // stringNet is now Phase-Zero (pure function of globalTime);
+        // its position is reconstructed from `engineClock.t()` and
+        // doesn't need per-share state. Field omitted on purpose.
         pendulumFan: engineRef.current.pendulumFan
           ? { clock: engineRef.current.pendulumFan.clock }
           : undefined,
@@ -949,7 +998,8 @@ function PhaseApp() {
       // Defer until after first runScene init populates the state.
       requestAnimationFrame(() => {
         const ref = engineRef.current;
-        if (eng.stringNet && ref.stringNet) ref.stringNet.clock = eng.stringNet.clock;
+        // stringNet: legacy `clock` field ignored (Phase-Zero scenes
+        // derive position from engineClock).
         if (eng.pendulumFan && ref.pendulumFan) ref.pendulumFan.clock = eng.pendulumFan.clock;
         if (eng.spiralArp && ref.spiralArp) ref.spiralArp.clock = eng.spiralArp.clock;
         if (eng.radialSweep && ref.radialSweep) {
@@ -1387,6 +1437,14 @@ function PhaseApp() {
           st = impl.init(globals);
           setState(st);
         }
+        // Phase-Zero path: scene exposes pure `sample`. Visuals derive
+        // from globalTime; audio is owned by the scheduler (bound below
+        // when `eventsIn` is also present).
+        if (impl.sample) {
+          impl.sample(st, gT, globals);
+          impl.draw(st, ctx2d, globals);
+          return;
+        }
         if (playing && a) {
           const events = impl.update(st, dt, globals);
           dispatchTriggers(events, {
@@ -1431,6 +1489,7 @@ function PhaseApp() {
     if (playingRef.current) resetComposerSources();
     if (playingRef.current) engineClock.pause();
     else engineClock.resume();
+    engineScheduler.resync();
     setPlaying((p) => !p);
   };
 

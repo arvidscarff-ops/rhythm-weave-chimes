@@ -25,7 +25,8 @@ const HORIZON_S = 0.12;
 
 type ActiveBinding = {
   scene: Scene<unknown>;
-  state: unknown;
+  /** Late-bound state getter — returns `null` while the scene is lazy-initing. */
+  state: () => unknown | null;
   globals: () => SceneGlobals;
   audioCtx: AudioContext;
   audioDest: AudioNode;
@@ -43,6 +44,8 @@ function schedulerTick(): void {
 
   const { scene, state, globals, audioCtx, audioDest, pack } = active;
   if (!scene.eventsIn) return; // scene not migrated — legacy path owns it
+  const st = state();
+  if (st == null) return; // not yet initialized
 
   const now = engineClock.t();
   const horizon = now + HORIZON_S;
@@ -52,7 +55,7 @@ function schedulerTick(): void {
   if (lastScheduledT < now) lastScheduledT = now;
   if (lastScheduledT >= horizon) return;
 
-  const events = scene.eventsIn(state, lastScheduledT, horizon, globals());
+  const events = scene.eventsIn(st, lastScheduledT, horizon, globals());
   for (const ev of events) {
     // Events carry their scene-time implicitly via the [t0, t1) window;
     // we schedule them at the appropriate AudioContext target.

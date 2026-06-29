@@ -32,23 +32,21 @@ type Anchor = {
   /** Phase offsets. */
   px: number;
   py: number;
-  /** Cached resolved px-space position (computed each frame). */
-  x: number;
-  y: number;
 };
 
 type Particle = {
   stringIdx: number;
-  /** Position along string, 0..1. */
-  t: number;
+  /**
+   * Phase-Zero initial position along string at scene-time t = 0.
+   * Live position is derived as `(t0 + rate * sceneT) mod 1`.
+   */
+  t0: number;
   /** Cycles per second along string (sign = direction). */
   rate: number;
   /** Voice slot to fire when particle wraps. */
   slot: VoiceSlotIndex;
   /** Pitch in semis relative to root A3. */
   pitchSemis: number;
-  /** Short trail of recent (x,y) for additive fade lines. */
-  trail: { x: number; y: number }[];
   /** Hue 0..1. */
   hue: number;
 };
@@ -56,18 +54,27 @@ type Particle = {
 type StringEdge = {
   a: number;
   b: number;
-  /** Last computed nearest-distance to each other string (for nexus). */
-  nexusCool: number; // seconds remaining before another nexus trigger
 };
 
 export type StringNetState = {
   anchors: Anchor[];
   strings: StringEdge[];
   particles: Particle[];
-  /** Seconds since scene started, for orbit phase. */
-  clock: number;
   /** Cached density to detect dock changes. */
   density: number;
+  /**
+   * Last scene-time at which each string-pair fired a nexus event.
+   * Mutated only by `eventsIn` in strict t-order; replayed deterministically
+   * for a given (state, t-history) trace. Not serialized — on hydrate the
+   * map is empty and the next collision fires immediately, which matches
+   * the "Big Bang" semantics on Phase-Zero reset.
+   */
+  lastNexusFireT: Map<string, number>;
+  /** Per-particle ephemeral render scratch — populated by `sample`. */
+  scratch: {
+    anchors: { x: number; y: number }[];
+    particles: { x: number; y: number; trail: { x: number; y: number }[] }[];
+  };
 };
 
 const ROOT_HZ = 220; // A3
@@ -89,8 +96,6 @@ function makeAnchors(n: number): Anchor[] {
       wy: 0.19 + (i % 4) * 0.04,
       px: i * 1.1,
       py: i * 0.7 + 0.4,
-      x: 0,
-      y: 0,
     });
   }
   return out;
@@ -105,7 +110,7 @@ function makeStrings(n: number): StringEdge[] {
   const out: StringEdge[] = [];
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      out.push({ a: i, b: j, nexusCool: 0 });
+      out.push({ a: i, b: j });
     }
   }
   return out;
@@ -113,42 +118,43 @@ function makeStrings(n: number): StringEdge[] {
 
 function makeParticles(strings: StringEdge[]): Particle[] {
   // Two particles per string, opposing directions, harmonic rates.
+  // Phase-Zero: every particle starts at t0 = 0 so they all hit the
+  // "B" anchor as the universal Big Bang.
   const ratios = [0.18, 0.27, 0.36, 0.45]; // cycles/sec (slow)
   const slots: VoiceSlotIndex[] = [0, 1, 2, 3, 4, 5];
   const out: Particle[] = [];
   strings.forEach((_, idx) => {
     out.push({
       stringIdx: idx,
-      t: Math.random(),
+      t0: 0,
       rate: ratios[idx % ratios.length],
       slot: slots[(idx * 2) % slots.length],
       pitchSemis: [0, 5, 7, 10, 12, 17][idx % 6],
-      trail: [],
       hue: 0.52 + idx * 0.07,
     });
     out.push({
       stringIdx: idx,
-      t: Math.random(),
+      t0: 0,
       rate: -ratios[(idx + 1) % ratios.length],
       slot: slots[(idx * 2 + 1) % slots.length],
       pitchSemis: [-5, -3, 0, 3, 7, 12][idx % 6],
-      trail: [],
       hue: 0.86 - idx * 0.05,
     });
   });
   return out;
 }
 
-/** Project normalized anchor coords into pixel space for the current frame. */
-function projectAnchors(state: StringNetState, g: SceneGlobals) {
-  const { W, H } = g;
-  const t = state.clock;
-  for (const a of state.anchors) {
-    const nx = a.cx + a.ax * Math.sin(a.wx * t + a.px);
-    const ny = a.cy + a.ay * Math.cos(a.wy * t + a.py);
-    a.x = nx * W;
-    a.y = ny * H;
-  }
+/** Pure: anchor pixel position at scene-time t. */
+function anchorAt(a: Anchor, t: number, W: number, H: number) {
+  const nx = a.cx + a.ax * Math.sin(a.wx * t + a.px);
+  const ny = a.cy + a.ay * Math.cos(a.wy * t + a.py);
+  return { x: nx * W, y: ny * H };
+}
+
+/** Pure: particle parameter position at scene-time t (in [0, 1)). */
+function particleT(p: Particle, t: number) {
+  const u = p.t0 + p.rate * t;
+  return u - Math.floor(u);
 }
 
 function lerp(a: number, b: number, t: number) {
@@ -174,16 +180,26 @@ export const stringNetworkScene: Scene<StringNetState> = {
     const density = _g.density ?? 5;
     const anchors = makeAnchors(anchorCount(density));
     const strings = makeStrings(anchors.length);
+    const particles = makeParticles(strings);
     return {
       anchors,
       strings,
-      particles: makeParticles(strings),
-      clock: 0,
+      particles,
       density,
+      lastNexusFireT: new Map(),
+      scratch: {
+        anchors: anchors.map(() => ({ x: 0, y: 0 })),
+        particles: particles.map(() => ({ x: 0, y: 0, trail: [] })),
+      },
     };
   },
 
-  update(state, dt, g) {
+  /** Legacy shim — pure-time scenes don't use this. */
+  update(_state, _dt, _g) {
+    return [];
+  },
+
+  sample(state, t, g) {
     // Hot-reseed when dock density changes.
     const targetN = anchorCount(g.density);
     if (targetN !== state.anchors.length) {
@@ -191,67 +207,107 @@ export const stringNetworkScene: Scene<StringNetState> = {
       state.strings = makeStrings(targetN);
       state.particles = makeParticles(state.strings);
       state.density = g.density;
+      state.scratch.anchors = state.anchors.map(() => ({ x: 0, y: 0 }));
+      state.scratch.particles = state.particles.map(() => ({ x: 0, y: 0, trail: [] }));
+      state.lastNexusFireT.clear();
     }
-    state.clock += dt;
-    projectAnchors(state, g);
-
-    const events: TriggerEvent[] = [];
-    const speed = g.speed;
-
-    // Particle travel + endpoint-wrap triggers.
-    for (const p of state.particles) {
-      const prevT = p.t;
-      p.t += p.rate * dt * speed;
-      const wrapped =
-        (prevT < 1 && p.t >= 1) ||
-        (prevT > 0 && p.t <= 0) ||
-        (prevT < 0 && p.t >= 0) ||
-        (prevT > 1 && p.t <= 1);
-      if (p.t > 1) p.t -= 1;
-      if (p.t < 0) p.t += 1;
-
-      // Project particle position for trail + event xy.
+    const { W, H } = g;
+    // Anchors at time t.
+    for (let i = 0; i < state.anchors.length; i++) {
+      const p = anchorAt(state.anchors[i], t, W, H);
+      state.scratch.anchors[i].x = p.x;
+      state.scratch.anchors[i].y = p.y;
+    }
+    // Particles + derived trails (sample backward in time).
+    const TRAIL_DUR = 0.6;
+    const TRAIL_STEPS = 14;
+    for (let i = 0; i < state.particles.length; i++) {
+      const p = state.particles[i];
       const s = state.strings[p.stringIdx];
-      const A = state.anchors[s.a];
-      const B = state.anchors[s.b];
-      const px = lerp(A.x, B.x, p.t);
-      const py = lerp(A.y, B.y, p.t);
-      p.trail.push({ x: px, y: py });
-      if (p.trail.length > 14) p.trail.shift();
+      const A = state.scratch.anchors[s.a];
+      const B = state.scratch.anchors[s.b];
+      const u = particleT(p, t);
+      const sc = state.scratch.particles[i];
+      sc.x = lerp(A.x, B.x, u);
+      sc.y = lerp(A.y, B.y, u);
+      // Trail derived from the same pure function — no per-frame mutation.
+      const trail = sc.trail;
+      trail.length = 0;
+      for (let k = TRAIL_STEPS - 1; k >= 0; k--) {
+        const tk = t - (k / (TRAIL_STEPS - 1)) * TRAIL_DUR;
+        const Ak = anchorAt(state.anchors[s.a], tk, W, H);
+        const Bk = anchorAt(state.anchors[s.b], tk, W, H);
+        const uk = particleT(p, tk);
+        trail.push({ x: lerp(Ak.x, Bk.x, uk), y: lerp(Ak.y, Bk.y, uk) });
+      }
+    }
+  },
 
-      if (wrapped) {
+  eventsIn(state, t0, t1, g) {
+    const events: TriggerEvent[] = [];
+    if (t1 <= t0) return events;
+
+    // Particle endpoint-wrap triggers — analytical solve.
+    // u(t) = t0p + rate * t  ; wraps each time u crosses an integer.
+    // Count integers strictly inside (u(t0), u(t1)] for rate > 0, mirrored
+    // for rate < 0.
+    for (const p of state.particles) {
+      const u0 = p.t0 + p.rate * t0;
+      const u1 = p.t0 + p.rate * t1;
+      if (p.rate === 0) continue;
+      const lo = Math.min(u0, u1);
+      const hi = Math.max(u0, u1);
+      // Integers k with lo < k <= hi
+      const firstK = Math.floor(lo) + 1;
+      const lastK = Math.floor(hi);
+      for (let k = firstK; k <= lastK; k++) {
+        // Solve k = p.t0 + p.rate * tEv → tEv (kept for future per-event
+        // scheduling; right now the scheduler schedules at horizon).
+        // const tEv = (k - p.t0) / p.rate;
+        const s = state.strings[p.stringIdx];
+        const A = anchorAt(state.anchors[s.a], (k - p.t0) / p.rate, g.W, g.H);
+        const B = anchorAt(state.anchors[s.b], (k - p.t0) / p.rate, g.W, g.H);
+        // Wrap point is at u = integer → param 0 or 1 alternating.
+        const u = k - Math.floor(k);
+        const x = lerp(A.x, B.x, u);
+        const y = lerp(A.y, B.y, u);
         events.push({
           slot: p.slot,
           freq: freqOf(p.pitchSemis + g.pitchSemis),
-          x: px,
-          y: py,
+          x,
+          y,
           hue: p.hue,
           velocity: 0.7,
         });
       }
     }
 
-    // Nexus detection: any two strings whose nearest-approach < threshold
-    // and not currently cooling down → fire a soft atmo event at the
-    // midpoint of their closest approach.
+    // Nexus events — sampled predicate at window midpoint with a 0.8 s
+    // per-pair cooldown. Deterministic because the scheduler advances
+    // [t0, t1) windows strictly in scene-time order.
     const NEXUS_PX = 18;
+    const NEXUS_COOL = 0.8;
+    const tm = (t0 + t1) * 0.5;
+    // Resolve anchors at midpoint once.
+    const anc: { x: number; y: number }[] = state.anchors.map((a) =>
+      anchorAt(a, tm, g.W, g.H),
+    );
     for (let i = 0; i < state.strings.length; i++) {
       const si = state.strings[i];
-      si.nexusCool = Math.max(0, si.nexusCool - dt);
-      if (si.nexusCool > 0) continue;
-      const Ai = state.anchors[si.a];
-      const Bi = state.anchors[si.b];
+      const Ai = anc[si.a];
+      const Bi = anc[si.b];
       for (let j = i + 1; j < state.strings.length; j++) {
         const sj = state.strings[j];
-        const Aj = state.anchors[sj.a];
-        const Bj = state.anchors[sj.b];
-        // Cheap proxy: distance from each endpoint of sj to segment si.
+        const key = `${i}_${j}`;
+        const last = state.lastNexusFireT.get(key) ?? -Infinity;
+        if (tm - last < NEXUS_COOL) continue;
+        const Aj = anc[sj.a];
+        const Bj = anc[sj.b];
         const d1 = segDistSq(Ai.x, Ai.y, Bi.x, Bi.y, Aj.x, Aj.y);
         const d2 = segDistSq(Ai.x, Ai.y, Bi.x, Bi.y, Bj.x, Bj.y);
         const dmin = Math.sqrt(Math.min(d1, d2));
         if (dmin < NEXUS_PX) {
-          si.nexusCool = 0.8;
-          sj.nexusCool = 0.8;
+          state.lastNexusFireT.set(key, tm);
           const mx = (Ai.x + Bi.x + Aj.x + Bj.x) * 0.25;
           const my = (Ai.y + Bi.y + Aj.y + Bj.y) * 0.25;
           events.push({
@@ -276,8 +332,8 @@ export const stringNetworkScene: Scene<StringNetState> = {
     // Strings — 0.5px additive lines (compounding glow where they cross).
     ctx.lineWidth = 0.5;
     for (const s of state.strings) {
-      const A = state.anchors[s.a];
-      const B = state.anchors[s.b];
+      const A = state.scratch.anchors[s.a];
+      const B = state.scratch.anchors[s.b];
       // Three faintly offset passes so additive blend builds a halo.
       const passes = [
         { w: 0.5, a: 0.6, hue: 200 },
@@ -295,7 +351,7 @@ export const stringNetworkScene: Scene<StringNetState> = {
     }
 
     // Anchor dots (soft).
-    for (const a of state.anchors) {
+    for (const a of state.scratch.anchors) {
       const grad = ctx.createRadialGradient(a.x, a.y, 0, a.x, a.y, 22);
       grad.addColorStop(0, "oklch(0.95 0.12 195 / 0.65)");
       grad.addColorStop(1, "oklch(0.6 0.15 240 / 0)");
@@ -306,8 +362,10 @@ export const stringNetworkScene: Scene<StringNetState> = {
     }
 
     // Particles + trails.
-    for (const p of state.particles) {
-      const trail = p.trail;
+    for (let i = 0; i < state.particles.length; i++) {
+      const p = state.particles[i];
+      const sc = state.scratch.particles[i];
+      const trail = sc.trail;
       if (trail.length < 2) continue;
       const hueDeg = (p.hue * 360) % 360;
       // Trail: fading polyline.

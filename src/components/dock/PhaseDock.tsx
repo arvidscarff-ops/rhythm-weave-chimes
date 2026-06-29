@@ -64,14 +64,14 @@ const DOCK_BTN =
 export function PhaseDock(p: Props) {
   return (
     <div
-      className="pointer-events-none fixed bottom-4 left-1/2 z-40 -translate-x-1/2"
+      className="pointer-events-none fixed bottom-4 left-1/2 z-40 -translate-x-1/2 max-w-[calc(100vw-1rem)]"
       style={{ fontFamily: "var(--font-mono, 'JetBrains Mono', ui-monospace, monospace)" }}
     >
       <div
         className={cn(
           "pointer-events-auto flex items-center gap-1 rounded-full border border-white/10",
           "bg-[hsl(220_22%_7%/0.72)] backdrop-blur-2xl shadow-[0_24px_60px_-20px_rgba(0,0,0,0.65)]",
-          "px-2 py-1.5",
+          "px-2 py-1.5 overflow-x-auto max-w-[calc(100vw-1rem)] no-scrollbar [&>*]:shrink-0",
         )}
       >
         {/* Transport */}

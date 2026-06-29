@@ -158,13 +158,11 @@ export const pendulumFanScene: Scene<PendulumFanState> = {
       const thetas: number[] = [];
       collect(RISING_PHASE, thetas);
       collect(FALLING_PHASE, thetas);
-      // Big Bang anchor: every strand fires from its ring at t=0 even
-      // when a small phase offset moved its analytic crossing to t≠0.
-      if (t0 <= 0 && 0 < t1) thetas.push(s.phase0 + 0 / T);
       thetas.sort((p, q) => p - q);
 
       for (const theta of thetas) {
         const tEv = (theta - s.phase0) * T;
+        if (tEv <= 0) continue; // Big Bang owns t=0
         if (tEv - s.lastFireT < COOLDOWN) continue;
         s.lastFireT = tEv;
         const tx = ax + Math.sin(s.angle) * stringLen * TARGET_DIST_NORM;
@@ -180,6 +178,25 @@ export const pendulumFanScene: Scene<PendulumFanState> = {
       }
     }
     return events;
+  },
+
+  bigBang(state, g) {
+    const ax = g.W / 2;
+    const ay = g.H * 0.14;
+    const stringLen = g.H * 0.68;
+    return state.strands.map((s) => {
+      const tx = ax + Math.sin(s.angle) * stringLen * TARGET_DIST_NORM;
+      const ty = ay + Math.cos(s.angle) * stringLen * TARGET_DIST_NORM;
+      s.lastFireT = 0;
+      return {
+        slot: s.slot,
+        freq: freqOf(s.pitchSemis + g.pitchSemis),
+        x: tx,
+        y: ty,
+        hue: s.hue,
+        velocity: s.velocityBase,
+      };
+    });
   },
 
   draw(state, ctx, g) {

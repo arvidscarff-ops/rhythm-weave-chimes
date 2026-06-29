@@ -93,12 +93,13 @@ function buildNotes(density: number, bpm: number): Note[] {
 
 /**
  * u(t) with a prime/φ phase offset folded into the cosine argument.
- * At t ≤ 0 we clamp u = 0 for every note so the universal Big Bang
- * chord still ignites from the absolute center, regardless of offset.
+ * At t ≤ 0 we clamp u = 1 for every note so every note visually rests
+ * on its outer vertex — its own trigger point — at the moment of play.
+ * The scheduler dispatches the Big Bang chord from those vertices.
  */
 function spokeU(period: number, phaseOffset: number, t: number) {
-  if (t <= 0) return 0;
-  return 0.5 - 0.5 * Math.cos(2 * Math.PI * (t / period + phaseOffset));
+  if (t <= 0) return 1;
+  return 0.5 + 0.5 * Math.cos(2 * Math.PI * (t / period + phaseOffset));
 }
 
 export const mandalaMatrixScene: Scene<MandalaMatrixState> = {
@@ -134,12 +135,10 @@ export const mandalaMatrixScene: Scene<MandalaMatrixState> = {
     for (const n of state.notes) {
       const T = n.period;
       if (T <= 0) continue;
-      // u(t) = 0.5 - 0.5·cos(2π·(t/T + φ))
-      //   center  (u=0) → t/T + φ = k        ⇒ t = (k - φ)·T
-      //   vertex  (u=1) → t/T + φ = k + 0.5  ⇒ t = (k + 0.5 - φ)·T
-      // Enumerate both anchor families inside [t0, t1). The t=0 Big Bang
-      // is preserved by always injecting tEv = 0 when it falls in the
-      // window — `spokeU` clamps to 0 there irrespective of φ.
+      // u(t) = 0.5 + 0.5·cos(2π·(t/T + φ))
+      //   vertex  (u=1) → t/T + φ = k        ⇒ t = (k - φ)·T
+      //   center  (u=0) → t/T + φ = k + 0.5  ⇒ t = (k + 0.5 - φ)·T
+      // Big Bang owns t=0 — the scheduler dispatches the vertex chord.
       const hits: { tEv: number; outer: boolean }[] = [];
       const collect = (offset: number, outer: boolean) => {
         // Solve k·T + (offset - φ)·T ∈ [t0, t1).
@@ -151,13 +150,12 @@ export const mandalaMatrixScene: Scene<MandalaMatrixState> = {
           if (tEv >= t0 && tEv < t1) hits.push({ tEv, outer });
         }
       };
-      collect(0, false); // center crossings
-      collect(0.5, true); // outer-vertex crossings
-      // Big Bang anchor: every note fires from the center at t=0.
-      if (t0 <= 0 && 0 < t1) hits.push({ tEv: 0, outer: false });
+      collect(0, true);   // outer-vertex crossings
+      collect(0.5, false); // center crossings
       hits.sort((a, b) => a.tEv - b.tEv);
 
       for (const { tEv, outer } of hits) {
+        if (tEv <= 0) continue; // Big Bang owns t=0
         if (tEv - n.lastFireT < COOLDOWN) continue;
         n.lastFireT = tEv;
         const angle = (n.spoke / NUM_SPOKES) * Math.PI * 2 - Math.PI / 2;
@@ -177,6 +175,26 @@ export const mandalaMatrixScene: Scene<MandalaMatrixState> = {
       }
     }
     return events;
+  },
+
+  bigBang(state, g) {
+    const cx = g.W / 2;
+    const cy = g.H / 2;
+    const R = Math.min(g.W, g.H) * 0.36;
+    return state.notes.map((n) => {
+      const angle = (n.spoke / NUM_SPOKES) * Math.PI * 2 - Math.PI / 2;
+      const x = cx + Math.cos(angle) * R;
+      const y = cy + Math.sin(angle) * R;
+      n.lastFireT = 0;
+      return {
+        slot: n.slot,
+        freq: freqOf(n.pitchSemis + 12 + g.pitchSemis),
+        x,
+        y,
+        hue: n.hue,
+        velocity: n.velocityBase,
+      };
+    });
   },
 
   draw(state, ctx, g) {

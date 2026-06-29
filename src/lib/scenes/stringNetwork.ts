@@ -311,6 +311,7 @@ export const stringNetworkScene: Scene<StringNetState> = {
       const lastK = Math.floor(hi);
       for (let k = firstK; k <= lastK; k++) {
         const tEv = (k - p.t0) / p.rate;
+        if (tEv <= 0) continue; // Big Bang owns t=0
         if (tEv - p.lastFireT < PARTICLE_COOLDOWN) continue;
         p.lastFireT = tEv;
         const s = state.strings[p.stringIdx];
@@ -373,6 +374,22 @@ export const stringNetworkScene: Scene<StringNetState> = {
     }
 
     return events;
+  },
+
+  bigBang(state, g) {
+    return state.particles.map((p) => {
+      const s = state.strings[p.stringIdx];
+      const A = anchorAt(state.anchors[s.a], 0, g.W, g.H);
+      p.lastFireT = 0;
+      return {
+        slot: p.slot,
+        freq: freqOf(p.pitchSemis + g.pitchSemis),
+        x: A.x,
+        y: A.y,
+        hue: p.hue,
+        velocity: 0.45 + p.speedNorm * 0.5,
+      };
+    });
   },
 
   draw(state, ctx, g) {

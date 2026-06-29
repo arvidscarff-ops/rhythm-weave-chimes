@@ -138,11 +138,6 @@ export const spiralArpScene: Scene<SpiralArpState> = {
     return state;
   },
 
-  /** Legacy shim — Phase-Zero scene. */
-  update(_state, _dt, _g) {
-    return [];
-  },
-
   sample(state, _t, g) {
     if (spiralTurns(g.density) !== state.turns) {
       reseedGeometry(state, g);

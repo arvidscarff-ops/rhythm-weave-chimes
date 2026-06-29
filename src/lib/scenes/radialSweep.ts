@@ -79,11 +79,6 @@ export const radialSweepScene: Scene<RadialSweepState> = {
     };
   },
 
-  /** Legacy shim — Phase-Zero scene. */
-  update(_state, _dt, _g) {
-    return [];
-  },
-
   sample(state, _t, g) {
     const want = targetCount(g.density);
     if (want !== state.targets.length) {

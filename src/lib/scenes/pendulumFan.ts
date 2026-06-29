@@ -94,11 +94,6 @@ export const pendulumFanScene: Scene<PendulumFanState> = {
     return { strands: makeStrands(g.density ?? 5), density: g.density ?? 5 };
   },
 
-  /** Legacy shim — Phase-Zero scene. */
-  update(_state, _dt, _g) {
-    return [];
-  },
-
   sample(state, _t, g) {
     const want = strandCount(g.density);
     if (want !== state.strands.length) {

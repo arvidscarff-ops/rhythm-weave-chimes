@@ -13,7 +13,8 @@ export type SceneId =
   | "stringNet"
   | "pendulumFan"
   | "spiralArp"
-  | "radialSweep";
+  | "radialSweep"
+  | "mandalaMatrix";
 
 export type VoiceSlotIndex = 0 | 1 | 2 | 3 | 4 | 5;
 

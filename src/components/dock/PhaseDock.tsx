@@ -887,7 +887,11 @@ function PacksMenu({
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
-            <Link to="/dev" className="flex w-full items-center gap-2">
+            <Link
+              to="/studio"
+              search={{ tab: "packs" }}
+              className="flex w-full items-center gap-2"
+            >
               <Wrench className="h-4 w-4" /> Manage custom packs
             </Link>
           </DropdownMenuItem>

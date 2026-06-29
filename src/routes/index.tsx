@@ -934,6 +934,7 @@ function PhaseApp() {
       });
     };
     if (scene === "stringNet") bind(stringNetworkScene, () => e.stringNet);
+    else if (scene === "pendulumFan") bind(pendulumFanScene, () => e.pendulumFan);
     else engineScheduler.setActive(null);
   }, [scene, playing, topo]);
 

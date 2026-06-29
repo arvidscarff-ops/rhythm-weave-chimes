@@ -87,11 +87,11 @@ function spawn(f: NeuralFlash) {
   r.alive = true;
   r.x = f.x; r.y = f.y;
   r.age = 0;
-  r.maxAge = 0.85 + energy * 0.45;
+  r.maxAge = 1.6 + energy * 1.2;          // slower, longer life
   r.energy = energy;
   r.hue = typeof f.hue === "number" ? f.hue : null;
   r.echo = false;
-  r.wobble = 0.04 + (energy - 0.55) * 0.06;
+  r.wobble = 0.02 + (energy - 0.55) * 0.03; // gentler wobble
   r.seed = seed;
 
   // Echo ring for big hits

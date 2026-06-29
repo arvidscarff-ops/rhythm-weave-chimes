@@ -16,6 +16,18 @@ import { ChevronLeft, Copy, Download, Pencil, Play, Plus, Trash2, Upload } from 
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { auditionSample } from "@/lib/dev/samplePlayer";
+import {
+  listMyScenes,
+  createScene,
+  updateScene,
+  renameScene,
+  deleteScene,
+  duplicateScene,
+  defaultSceneDefinition,
+  type SceneRow,
+  type SceneDefinition,
+} from "@/lib/studio/scenes.functions";
+import { Slider } from "@/components/ui/slider";
 
 const tabSchema = z.object({
   tab: z.enum(["presets", "packs", "scenes"]).optional(),
@@ -67,7 +79,7 @@ function StudioPage() {
       <main className="mx-auto max-w-6xl px-6 py-8">
         {tab === "presets" && <PresetsTab />}
         {tab === "packs" && <PacksTab />}
-        {tab === "scenes" && <ComingSoon kind="Scene Studio" />}
+        {tab === "scenes" && <ScenesTab />}
       </main>
     </div>
   );

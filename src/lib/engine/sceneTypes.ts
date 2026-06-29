@@ -9,12 +9,15 @@
  * directly. That keeps audio↔visual sync owned by one file.
  */
 
+import type { PackId } from "@/lib/sound/packs";
+
 export type SceneId =
   | "stringNet"
   | "pendulumFan"
   | "spiralArp"
   | "radialSweep"
-  | "mandalaMatrix";
+  | "mandalaMatrix"
+  | "metatronLattice";
 
 export type VoiceSlotIndex = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -31,6 +34,14 @@ export type TriggerEvent = {
   hue: number;
   /** 0..1 perceived energy — drives ink-bleed radius + alpha. */
   velocity: number;
+  /**
+   * Optional pack override. When set, the scheduler dispatches this
+   * event through the named builtin pack instead of the dock's active
+   * pack. Used by multi-layer scenes (e.g. Metatron Lattice) that
+   * sonify each geometric layer with its own pack. Omit for the
+   * default behavior (follow the active pack).
+   */
+  pack?: PackId;
 };
 
 /** What every Scene receives on `update` / `draw`. */

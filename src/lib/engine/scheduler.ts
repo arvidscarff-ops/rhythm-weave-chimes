@@ -14,7 +14,8 @@
  */
 
 import { engineClock } from "./clock";
-import { triggerPackVoice, type RuntimePack } from "@/lib/sound/runtimePacks";
+import { triggerPackVoice, BUILTIN_RUNTIME_PACKS, type RuntimePack } from "@/lib/sound/runtimePacks";
+import type { PackId } from "@/lib/sound/packs";
 import { spawnInkBleed } from "@/lib/visuals/inkBleed";
 import type { Scene, SceneGlobals, TriggerEvent } from "./sceneTypes";
 
@@ -33,6 +34,11 @@ const HORIZON_S = 0.12;
 const UNISON_GUARD_S = 0.05;
 const UNISON_NUDGE_S = 0.012;
 const UNISON_EXACT_S = 0.001;
+
+/** Builtin-pack lookup so events with `ev.pack` can route per-layer. */
+const PACK_BY_ID = new Map<PackId, RuntimePack>(
+  BUILTIN_RUNTIME_PACKS.flatMap((p) => (p.kind === "builtin" ? [[p.id, p] as const] : [])),
+);
 
 type ActiveBinding = {
   scene: Scene<unknown>;
@@ -93,7 +99,8 @@ function schedulerTick(): void {
     }
   }
   for (const { ev, when } of scheduled) {
-    triggerPackVoice(audioCtx, audioDest, pack(), ev.slot, ev.freq, when);
+    const packForEvent = ev.pack ? (PACK_BY_ID.get(ev.pack) ?? pack()) : pack();
+    triggerPackVoice(audioCtx, audioDest, packForEvent, ev.slot, ev.freq, when);
     // Visual lands with the audio: delay ink-bleed by the nudge so
     // the bloom stays glued to the sound, not the original event time.
     const delayMs = Math.max(0, (when - audioCtx.currentTime) * 1000);

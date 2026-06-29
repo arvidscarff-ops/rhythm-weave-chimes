@@ -59,7 +59,7 @@ type Props = {
 };
 
 const DOCK_BTN =
-  "pr-dock-btn group relative inline-flex h-10 items-center gap-2 rounded-full px-3 text-[11px] font-medium uppercase tracking-[0.16em] text-foreground/70 hover:text-foreground";
+  "group relative inline-flex h-10 items-center gap-2 rounded-full px-3 text-[11px] font-medium uppercase tracking-[0.16em] text-foreground/70 hover:text-foreground transition-colors";
 
 export function PhaseDock(p: Props) {
   return (
@@ -69,7 +69,7 @@ export function PhaseDock(p: Props) {
     >
       <div
         className={cn(
-          "pr-dock-breathe pointer-events-auto flex items-center gap-1 rounded-full border border-white/10",
+          "pointer-events-auto flex items-center gap-1 rounded-full border border-white/10",
           "bg-[hsl(220_22%_7%/0.72)] backdrop-blur-2xl shadow-[0_24px_60px_-20px_rgba(0,0,0,0.65)]",
           "px-2 py-1.5",
         )}
@@ -81,7 +81,6 @@ export function PhaseDock(p: Props) {
           className={cn(
             DOCK_BTN,
             "h-9 w-9 px-0 justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.10]",
-            !p.playing && "pr-play-breathe",
           )}
         >
           {p.playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 translate-x-[1px]" />}

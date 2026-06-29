@@ -1,68 +1,42 @@
-# Maximize Game Juice — Living, Organic, Serene, Magical
+# Subtler, Organic, Note-Colored Light
 
-The engine already triggers notes, paints bursts, lens flares, and a reactive shader. What's missing is the *connective tissue* — the micro-feedback that makes every touch feel alive. This plan layers in tactile, breathing, and reactive details across input, audio, and visuals without rebuilding anything.
+Three coordinated fixes so flares and bursts feel like the same living organism, tinted by whatever note just played.
 
-## 1. Dock & UI — make controls feel physical
+## 1. Carry note color through the flash bus
 
-`src/components/dock/PhaseDock.tsx` + `src/components/ui/material-ui-dropdown-menu.tsx`
-- **Breathing dock**: dock background subtly pulses with the global tempo (slow opacity/scale via BPM-driven CSS var). Idle = inhale/exhale every 6s; on play = locked to beat.
-- **Magnetic hover**: buttons translate a few px toward the cursor on hover (pointer-tracked transform). Light spring easing, not bouncy.
-- **Press physics**: every dock button gets a scale-down + a soft inner glow on press (`active:scale-[0.96]` + radial highlight). The existing ripple stays.
-- **Slider feedback**: BPM/SPD/Glow/Flow sliders emit a tiny haptic-style "tick" (Web Audio click through master) at integer crossings, plus a faint glow trail behind the thumb that fades over ~400ms.
-- **Play button is the hero**: when paused it slowly breathes; on press, a single large concentric ring expands from it across the whole viewport (CSS, 600ms), and the first note triggers feel synchronized.
+Right now `flashBus.flash(x, y, intensity)` only carries position + intensity, so the lens flare has to guess color from the global preset. The bursts already receive a per-call `hue`, but the flares don't.
 
-## 2. Note triggers — multi-sensory layering
+- Extend `NeuralFlash` and `flashBus.flash` with an optional `hue` (0..1).
+- Update the three trigger sites in `src/routes/index.tsx` (Wheel, Pendulum, Bars) to pass the same hue they already pass to `spawnBurst`, so a single note emits one consistent color across burst + flare + neural background.
+- `NeuralNoise`'s flash handler ignores extra fields, so it stays compatible.
 
-`src/routes/index.tsx` (trigger sites), `src/lib/visuals/burstField.ts`, `src/lib/visuals/lensFlare.ts`
-- **Pre-trigger anticipation**: 80–120ms before a ring crosses a trigger line, the dot brightens and the line "inhales" toward it. Tiny but huge for perceived musicality. Computed from current angular velocity.
-- **Trigger weight**: heavier notes (lower octave / longer release) get bigger burst radius + lower flare hue saturation; light notes get sharper, smaller sparks. Already half-there — formalize as one `noteEnergy` value passed through `flashBus`.
-- **Echo ghosts**: each trigger leaves a faint, slow-shrinking ghost dot at the trigger point for ~1.2s — a visual decay matching the audio tail.
-- **Chromatic chord glow**: when 2+ rings trigger within ~60ms, spawn one extra "harmony" flare at the centroid, colored by hue-mix. Rewards polyrhythmic alignment moments — the magical "they synced!" payoff.
+## 2. Lens flare: organic, subtle, note-tinted
 
-## 3. The stage itself — alive between notes
+Rewrite `drawFlares` in `src/lib/visuals/lensFlare.ts` to remove the rectangular streak and lean fully into soft, living forms:
 
-`src/routes/index.tsx` render loop
-- **Idle drift**: rings rotate by ±0.3° with a slow noise wobble even when paused; centers of the stage drift by a few px on a 20s sine. Stage never feels frozen.
-- **Cursor gravity**: nearest ring's stroke brightens slightly as the cursor approaches; trigger lines lean ~1–2° toward the pointer. Pure feel, no functional change.
-- **Parallax depth**: bursts behind rings, lens flare in front, neural shader far behind. Add a single shared `parallaxOffset` driven by pointer (already partial in shader; mirror in 2D layer with ~0.4x and ~0.8x factors).
-- **Vignette breathing**: subtle radial vignette pulses with master amplitude (read tail RMS from limiter node). Louder passage → stage opens up; quiet → it tightens.
+- **Color source:** if the flash carried a hue, convert HSL→RGB and use that as the flare's base color; fall back to palette only when absent.
+- **No more `fillRect` streaks.** Replace with an organic bloom built from:
+  - A primary soft elliptical halo (radial gradient, very low alpha, gently elongated on a per-flare random angle — not always horizontal).
+  - 3–5 wispy "filaments" drawn as quadratic-bezier ribbons with hairline stroke width and additive alpha, offset and curved with seeded noise so each flare looks hand-drawn.
+  - Ghost orbs kept, but smaller, fewer (1–2), and only when energy is high.
+- **Subtlety pass:** roughly halve all alphas (halo ~0.18 max, filaments ~0.06, core ~0.4), shorten radii, raise the global opacity floor so it never spikes harsh. Tie max intensity to `neural.opacity` so the Visuals → Glow slider remains the master.
+- **Motion:** the ellipse rotates a few degrees over its lifetime and filaments drift outward slightly, so the flare breathes instead of just fading.
 
-## 4. Audio juice — feel through ears
+## 3. Bursts: respect the note hue
 
-`src/lib/sound/packs.ts` voicing + master chain
-- **Velocity humanization**: ±6% random gain + ±8ms timing jitter per voice. Removes machine-gun stiffness.
-- **Stereo wander**: each voice picks a stereo position weighted by ring index, with slow LFO drift so the field never feels static.
-- **Sympathetic resonance**: on every trigger, a very quiet, heavily filtered copy plays at a perfect 5th, 50ms later, panned opposite. Creates "the room is listening" effect.
-- **Pre-roll texture**: when Play is pressed, a single soft swell (filtered noise, 800ms fade-in) under the first beat. Sets the mood.
+In `src/lib/visuals/burstField.ts`, when `opts.hue` is provided, lock the burst's color to that hue (skip the neural-bias blend and the broad seed-driven phosphor randomness for the dominant tint). Keep a tiny per-burst jitter (±0.04) for life, but the dominant color must read as the note's color. Sprite recoloring stays — only the hue input changes.
 
-## 5. Transitions — nothing pops, everything melts
+## Files
 
-Across `PhaseDock`, scene switcher, pack switcher
-- **Scene crossfade**: switching Wheel → Pendulum → Bars fades the old scene out over 400ms while the new one fades/scales in. Currently a hard swap.
-- **Pack morph**: when switching sound packs, the existing color hue glides over ~600ms to the new pack's palette anchor (via a `packHue` interpolator read by both burst + flare).
-- **Menu open**: dock submenus already animate; add a brief 1-frame "blur in" (CSS `backdrop-filter` 8px→16px) so they feel like they materialize, not appear.
+Edited:
+- `src/lib/neural/flashBus.ts` — add optional `hue` field.
+- `src/routes/index.tsx` — pass `hue` into the three `flashBus.flash(...)` calls (same value already passed to `spawnBurst`).
+- `src/lib/visuals/lensFlare.ts` — note-hue coloring, organic bloom + bezier filaments replacing the rectangle, alpha/radius tuning, breathing rotation.
+- `src/lib/visuals/burstField.ts` — honor `opts.hue` as the dominant color.
 
-## 6. First-run / serene defaults
-
-- On first paint (before any user input), spawn 2–3 ambient bursts at random positions over 4s. The app is already alive when you arrive — don't make the user "wake it up."
-- Cursor leaves a faint, fast-fading trail (single canvas pass, additive, ~80ms life). One of the cheapest joy upgrades.
-
-## Technical notes
-
-- All new motion respects `prefers-reduced-motion`: replaced with static equivalents, never disabled hard cuts.
-- Frame budget: every effect above is 2D-canvas or CSS transform — no new shader passes. Existing RAF loop absorbs them.
-- New shared utility: `src/lib/visuals/juice.ts` for `noteEnergy`, hue-mix, and the chord-coincidence detector — keeps trigger sites readable.
-- No new dependencies. No backend changes. No dock layout changes.
+No new files. No changes to audio, composer, dock, routes, or UI controls.
 
 ## Out of scope
 
-- No new visual presets, scenes, or sound packs.
-- No keyboard/MIDI input (tracked separately).
-- No persistence of juice settings — single global "feel," not a config surface.
-
-## Suggested build order (each shippable on its own)
-
-1. Section 2 (triggers) + 3 (stage life) — biggest perceived gain
-2. Section 1 (dock physicality)
-3. Section 4 (audio humanization)
-4. Section 5 (transitions) + 6 (first-run)
+- No new visual settings; everything still flows through Visuals → Glow.
+- No shader work; stays on the existing 2D canvas.

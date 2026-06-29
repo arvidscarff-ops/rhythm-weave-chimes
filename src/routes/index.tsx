@@ -26,7 +26,6 @@ import {
 import { flashBus } from "@/lib/neural/flashBus";
 import { spawnBurst, updateBursts, drawBursts } from "@/lib/visuals/burstField";
 import { updateFlares, drawFlares } from "@/lib/visuals/lensFlare";
-import { updateJuice, drawJuice, welcomeOnce } from "@/lib/visuals/juice";
 import {
   composerAdvance, resetComposerSources, loadComposerSettings,
   saveComposerSettings, type ComposerSettings,
@@ -955,7 +954,6 @@ function PhaseApp() {
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    welcomeOnce();
 
     return () => {
       cancelAnimationFrame(raf);
@@ -1006,8 +1004,6 @@ function PhaseApp() {
     drawBursts(ctx2d);
     updateFlares(dt);
     drawFlares(ctx2d, W, H);
-    updateJuice(dt);
-    drawJuice(ctx2d, W, H);
     ctx2d.globalCompositeOperation = "source-over";
   };
 

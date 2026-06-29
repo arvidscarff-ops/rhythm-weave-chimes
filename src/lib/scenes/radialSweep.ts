@@ -28,6 +28,8 @@ type Target = {
   hue: number;
   /** Scene-time of most recent trigger; drives refractory + flash decay. */
   lastFireT: number;
+  /** Cached velocity for events (high pitch / "fast" → louder). */
+  velocityBase: number;
 };
 
 export type RadialSweepState = {
@@ -40,22 +42,64 @@ export type RadialSweepState = {
   density: number;
 };
 
+/** Per-target refractory; defensive (uniform ω rarely produces dupes). */
+const TARGET_COOLDOWN = 0.12;
+
 /** Map dock density (2..12) → target count (6..16). */
 function targetCount(density: number) {
   return Math.max(6, Math.min(16, Math.round(6 + (density - 2) * 1)));
 }
 
+/**
+ * Build N targets, then apply the universal fast→left/slow→right rule by
+ * placing higher-pitch ("faster"-feeling) targets on the canvas-left arc
+ * (π/2 .. 3π/2) and lower-pitch targets on the canvas-right arc.
+ * Targets are sorted by pitchSemis desc, then split into left/right halves
+ * and distributed evenly within each half so the sweep arm still hits them
+ * in a smooth cadence.
+ */
 function buildTargets(N: number): Target[] {
-  const out: Target[] = [];
+  const proto: Omit<Target, "angle">[] = [];
   for (let i = 0; i < N; i++) {
-    out.push({
-      angle: (i / N) * Math.PI * 2,
+    proto.push({
       rNorm: 0.45 + (i % 3) * 0.18,
       slot: (i % 6) as VoiceSlotIndex,
       pitchSemis: SCALE_SEMIS[i % SCALE_SEMIS.length],
       hue: 0.5 + (i / N) * 0.45,
       lastFireT: -Infinity,
+      velocityBase: 0,
     });
+  }
+  // Sort by pitchSemis desc (highest pitch first = "fastest").
+  proto.sort((a, b) => b.pitchSemis - a.pitchSemis);
+  const maxPitch = proto[0]?.pitchSemis ?? 0;
+  const minPitch = proto[proto.length - 1]?.pitchSemis ?? 0;
+  const pitchSpan = Math.max(1, maxPitch - minPitch);
+  const half = Math.ceil(N / 2);
+  const out: Target[] = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const p = proto[i];
+    let angle: number;
+    if (i < half) {
+      // Left half arc: angle in (π/2 .. 3π/2), top-left → bottom-left.
+      angle = Math.PI / 2 + ((i + 0.5) / half) * Math.PI;
+    } else {
+      // Right half arc: angle in (-π/2 .. π/2) wrapped = (3π/2 .. 5π/2),
+      // distributed bottom-right → top-right.
+      const j = i - half;
+      const rightN = N - half;
+      angle = -Math.PI / 2 + ((j + 0.5) / rightN) * Math.PI;
+      if (angle < 0) angle += Math.PI * 2;
+    }
+    out[i] = {
+      angle,
+      rNorm: p.rNorm,
+      slot: p.slot,
+      pitchSemis: p.pitchSemis,
+      hue: p.hue,
+      lastFireT: -Infinity,
+      velocityBase: 0.55 + ((p.pitchSemis - minPitch) / pitchSpan) * 0.4,
+    };
   }
   return out;
 }
@@ -123,6 +167,7 @@ export const radialSweepScene: Scene<RadialSweepState> = {
     }
     hits.sort((a, b) => a.tEv - b.tEv);
     for (const { tEv, target: tg } of hits) {
+      if (tEv - tg.lastFireT < TARGET_COOLDOWN) continue;
       tg.lastFireT = tEv;
       state.triggerCount++;
       if (state.triggerCount % 4 === 0) state.lastNebulaT = tEv;
@@ -135,7 +180,7 @@ export const radialSweepScene: Scene<RadialSweepState> = {
         x,
         y,
         hue: tg.hue,
-        velocity: 0.7,
+        velocity: tg.velocityBase,
       });
     }
     return events;

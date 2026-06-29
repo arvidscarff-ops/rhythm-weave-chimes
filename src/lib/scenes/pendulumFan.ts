@@ -12,7 +12,20 @@
 
 import type { Scene, SceneGlobals, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
 
+/**
+ * Modulation-period multipliers, sorted ascending so that strand index 0
+ * (the leftmost angle) gets the smallest ratio = fastest oscillation.
+ * Universal rule: fast notes on the left, slow on the right.
+ * If N exceeds RATIOS.length we extrapolate linearly instead of wrapping
+ * (which would put a fast ratio on the rightmost strand).
+ */
 const RATIOS = [1.0, 1.06, 1.13, 1.21, 1.3, 1.4, 1.51, 1.63, 1.76, 1.9, 2.05, 2.21];
+function ratioAt(i: number): number {
+  if (i < RATIOS.length) return RATIOS[i];
+  const last = RATIOS[RATIOS.length - 1];
+  const step = RATIOS[RATIOS.length - 1] - RATIOS[RATIOS.length - 2];
+  return last + step * (i - (RATIOS.length - 1));
+}
 /** Map dock density (2..12) → strand count (5..14). */
 function strandCount(density: number) {
   return Math.max(5, Math.min(14, Math.round(5 + (density - 2) * 0.9)));
@@ -50,6 +63,8 @@ type Strand = {
    * visual flash without per-frame mutation.
    */
   lastFireT: number;
+  /** Cached velocity for events from this strand (fast strand → louder). */
+  velocityBase: number;
 };
 
 export type PendulumFanState = {
@@ -74,14 +89,18 @@ function makeStrands(density: number): Strand[] {
   const out: Strand[] = [];
   for (let i = 0; i < N; i++) {
     const angle = ((i - (N - 1) / 2) / (N - 1)) * (Math.PI * 0.55);
+    const ratio = ratioAt(i);
+    // Faster strand → louder ink-bleed. Normalize 1/ratio across [1/maxRatio, 1].
+    const fastNorm = 1 / ratio; // ∈ (0, 1]; ratio≥1 always
     out.push({
       angle,
-      ratio: RATIOS[i % RATIOS.length],
+      ratio,
       phase0: RISING_PHASE,
       slot: (i % 6) as VoiceSlotIndex,
-      pitchSemis: 12 - i * 2,
+      pitchSemis: 12 - i * 2, // leftmost = highest pitch (matches fast = left)
       hue: 0.55 + (i / N) * 0.4,
       lastFireT: -Infinity,
+      velocityBase: 0.55 + fastNorm * 0.4,
     });
   }
   return out;
@@ -146,7 +165,7 @@ export const pendulumFanScene: Scene<PendulumFanState> = {
           x: tx,
           y: ty,
           hue: s.hue,
-          velocity: 0.75,
+          velocity: s.velocityBase,
         });
       }
     }

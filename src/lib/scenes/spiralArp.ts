@@ -112,6 +112,28 @@ function reseedGeometry(state: SpiralArpState, g: SceneGlobals) {
     arr[k] = state.Ltotal - arcLen(b, k * step);
   }
   state.arcAtBucket = arr;
+  applySpeedToLeftRight(state);
+}
+
+/**
+ * Universal "fast → left, slow → right" rule for spiralArp.
+ * Sort playheads by speed desc, then assign each an angular t=0 anchor
+ * spread across the canvas from θ ≈ π (left) to θ ≈ 0 (right) so the
+ * fastest playhead sits on the leftmost edge of the spiral at t = 0.
+ */
+function applySpeedToLeftRight(state: SpiralArpState) {
+  const ordered = [...state.playheads].sort((a, b) => b.speed - a.speed);
+  const N = ordered.length;
+  const step = (Math.PI * 2) / state.gridK;
+  for (let i = 0; i < N; i++) {
+    const targetTheta = N === 1 ? Math.PI : Math.PI * (1 - i / (N - 1));
+    // Snap to nearest bucket angle within the first lap so the playhead
+    // also lands on a polar grid line (keeps the Big Bang chord coherent).
+    const k = Math.round(targetTheta / step);
+    const safeK = Math.max(0, Math.min(state.arcAtBucket.length - 1, k));
+    ordered[i].s0 = state.arcAtBucket[safeK];
+    ordered[i].lastFireT = -Infinity;
+  }
 }
 
 export const spiralArpScene: Scene<SpiralArpState> = {

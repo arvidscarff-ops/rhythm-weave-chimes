@@ -49,6 +49,14 @@ type Particle = {
   pitchSemis: number;
   /** Hue 0..1. */
   hue: number;
+  /**
+   * Scene-time of most recent endpoint-wrap trigger.
+   * Drives per-particle refractory (parity with pendulumFan + spiralArp +
+   * radialSweep) and visual flash decay.
+   */
+  lastFireT: number;
+  /** Normalized speed (0..1) across the particle set — for velocity + draw. */
+  speedNorm: number;
 };
 
 type StringEdge = {
@@ -116,6 +124,9 @@ function makeStrings(n: number): StringEdge[] {
   return out;
 }
 
+/** Refractory window per particle (s). */
+const PARTICLE_COOLDOWN = 0.09;
+
 function makeParticles(strings: StringEdge[]): Particle[] {
   // Two particles per string, opposing directions, harmonic rates.
   // Phase-Zero: every particle starts at t0 = 0 so they all hit the
@@ -131,6 +142,8 @@ function makeParticles(strings: StringEdge[]): Particle[] {
       slot: slots[(idx * 2) % slots.length],
       pitchSemis: [0, 5, 7, 10, 12, 17][idx % 6],
       hue: 0.52 + idx * 0.07,
+      lastFireT: -Infinity,
+      speedNorm: 0,
     });
     out.push({
       stringIdx: idx,
@@ -139,9 +152,48 @@ function makeParticles(strings: StringEdge[]): Particle[] {
       slot: slots[(idx * 2 + 1) % slots.length],
       pitchSemis: [-5, -3, 0, 3, 7, 12][idx % 6],
       hue: 0.86 - idx * 0.05,
+      lastFireT: -Infinity,
+      speedNorm: 0,
     });
   });
   return out;
+}
+
+/**
+ * Apply universal "fast → left, slow → right" rule.
+ * Re-bind each particle to a string so that the highest-|rate| particles
+ * ride the strings whose midpoint X (at scene-time 0) is smallest.
+ * Two particles per string (opposing directions); leftmost string takes
+ * the two highest-|rate| particles, next pair to next-leftmost, etc.
+ * Also computes `speedNorm` for velocity + draw scaling.
+ */
+function bindParticlesLeftToRight(
+  particles: Particle[],
+  strings: StringEdge[],
+  anchors: Anchor[],
+  W: number,
+  H: number,
+): void {
+  // Midpoint X of each string at t=0.
+  const midX = strings.map((s) => {
+    const A = anchorAt(anchors[s.a], 0, W, H);
+    const B = anchorAt(anchors[s.b], 0, W, H);
+    return (A.x + B.x) * 0.5;
+  });
+  // Ascending by midX → leftmost first.
+  const stringOrder = strings.map((_, i) => i).sort((a, b) => midX[a] - midX[b]);
+  // Descending by |rate| → fastest first.
+  const particleOrder = particles.map((_, i) => i).sort(
+    (a, b) => Math.abs(particles[b].rate) - Math.abs(particles[a].rate),
+  );
+  const maxAbs = Math.max(...particles.map((p) => Math.abs(p.rate))) || 1;
+  for (let k = 0; k < particleOrder.length; k++) {
+    const pIdx = particleOrder[k];
+    // pair k of particles → string at floor(k/2) in leftOrder
+    const sIdx = stringOrder[Math.floor(k / 2) % stringOrder.length];
+    particles[pIdx].stringIdx = sIdx;
+    particles[pIdx].speedNorm = Math.abs(particles[pIdx].rate) / maxAbs;
+  }
 }
 
 /** Pure: anchor pixel position at scene-time t. */
@@ -181,6 +233,7 @@ export const stringNetworkScene: Scene<StringNetState> = {
     const anchors = makeAnchors(anchorCount(density));
     const strings = makeStrings(anchors.length);
     const particles = makeParticles(strings);
+    bindParticlesLeftToRight(particles, strings, anchors, _g.W, _g.H);
     return {
       anchors,
       strings,
@@ -201,6 +254,7 @@ export const stringNetworkScene: Scene<StringNetState> = {
       state.anchors = makeAnchors(targetN);
       state.strings = makeStrings(targetN);
       state.particles = makeParticles(state.strings);
+      bindParticlesLeftToRight(state.particles, state.strings, state.anchors, g.W, g.H);
       state.density = g.density;
       state.scratch.anchors = state.anchors.map(() => ({ x: 0, y: 0 }));
       state.scratch.particles = state.particles.map(() => ({ x: 0, y: 0, trail: [] }));
@@ -256,12 +310,12 @@ export const stringNetworkScene: Scene<StringNetState> = {
       const firstK = Math.floor(lo) + 1;
       const lastK = Math.floor(hi);
       for (let k = firstK; k <= lastK; k++) {
-        // Solve k = p.t0 + p.rate * tEv → tEv (kept for future per-event
-        // scheduling; right now the scheduler schedules at horizon).
-        // const tEv = (k - p.t0) / p.rate;
+        const tEv = (k - p.t0) / p.rate;
+        if (tEv - p.lastFireT < PARTICLE_COOLDOWN) continue;
+        p.lastFireT = tEv;
         const s = state.strings[p.stringIdx];
-        const A = anchorAt(state.anchors[s.a], (k - p.t0) / p.rate, g.W, g.H);
-        const B = anchorAt(state.anchors[s.b], (k - p.t0) / p.rate, g.W, g.H);
+        const A = anchorAt(state.anchors[s.a], tEv, g.W, g.H);
+        const B = anchorAt(state.anchors[s.b], tEv, g.W, g.H);
         // Wrap point is at u = integer → param 0 or 1 alternating.
         const u = k - Math.floor(k);
         const x = lerp(A.x, B.x, u);
@@ -272,7 +326,7 @@ export const stringNetworkScene: Scene<StringNetState> = {
           x,
           y,
           hue: p.hue,
-          velocity: 0.7,
+          velocity: 0.45 + p.speedNorm * 0.5,
         });
       }
     }
@@ -321,7 +375,7 @@ export const stringNetworkScene: Scene<StringNetState> = {
     return events;
   },
 
-  draw(state, ctx, _g) {
+  draw(state, ctx, g) {
     ctx.save();
     ctx.globalCompositeOperation = "screen";
     // Strings — 0.5px additive lines (compounding glow where they cross).
@@ -363,6 +417,8 @@ export const stringNetworkScene: Scene<StringNetState> = {
       const trail = sc.trail;
       if (trail.length < 2) continue;
       const hueDeg = (p.hue * 360) % 360;
+      // Flash decay from most recent wrap (parity with other scenes).
+      const flash = Math.max(0, Math.min(1, Math.exp(-(g.globalTime - p.lastFireT) * 3.0)));
       // Trail: fading polyline.
       for (let i = 1; i < trail.length; i++) {
         const a = i / trail.length;
@@ -375,12 +431,13 @@ export const stringNetworkScene: Scene<StringNetState> = {
       }
       // Head.
       const last = trail[trail.length - 1];
-      const grad = ctx.createRadialGradient(last.x, last.y, 0, last.x, last.y, 6);
-      grad.addColorStop(0, `oklch(0.95 0.2 ${hueDeg} / 0.9)`);
+      const radius = 6 + flash * 6;
+      const grad = ctx.createRadialGradient(last.x, last.y, 0, last.x, last.y, radius);
+      grad.addColorStop(0, `oklch(0.95 0.2 ${hueDeg} / ${(0.85 + flash * 0.1).toFixed(3)})`);
       grad.addColorStop(1, `oklch(0.7 0.18 ${hueDeg} / 0)`);
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(last.x, last.y, 6, 0, Math.PI * 2);
+      ctx.arc(last.x, last.y, radius, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();

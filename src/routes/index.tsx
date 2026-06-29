@@ -28,8 +28,11 @@ import { spawnBurst, updateBursts, drawBursts } from "@/lib/visuals/burstField";
 import { updateFlares, drawFlares } from "@/lib/visuals/lensFlare";
 import { updateShockwaves, drawShockwaves } from "@/lib/visuals/shockwave";
 import {
-  composerAdvance, resetComposerSources, loadComposerSettings,
-  saveComposerSettings, type ComposerSettings,
+  composerAdvance,
+  resetComposerSources,
+  loadComposerSettings,
+  saveComposerSettings,
+  type ComposerSettings,
 } from "@/lib/music/composer";
 import {
   NEURAL_PRESETS,
@@ -38,6 +41,27 @@ import {
   subscribeNeuralSettings,
   type NeuralSettings,
 } from "@/lib/neural/palette";
+import {
+  buildShareUrl,
+  copyShareUrl,
+  decodeSession,
+  encodeSession,
+  type SessionState,
+  knobsToSession,
+  knobsFromSession,
+  fxToSession,
+  fxFromSession,
+  neuralToSession,
+  neuralFromSession,
+  composerToSession,
+  composerFromSession,
+  wheelToSession,
+  wheelFromSession,
+  pendulumToSession,
+  pendulumFromSession,
+  barsToSession,
+  barsFromSession,
+} from "@/lib/session/sessionUrl";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -64,37 +88,45 @@ export const Route = createFileRoute("/")({
  * ============================================================ */
 
 type VoiceKind = "chime" | "pluck" | "bell" | "pad" | "bass" | "none";
-type SceneKind = "wheel" | "pendulum" | "bars";
+export type SceneKind = "wheel" | "pendulum" | "bars";
 
 type Knobs = {
-  mainVol: number;   // 0..1
-  pitch: number;     // -12..12 semitones
-  revMix: number;    // 0..1
-  revSize: number;   // 0.05..1.2 (delay seconds)
-  speed: number;     // 0.25..2
-  multiply: number;  // 2..12 (integer, vertex count)
-  fx1: number;       // 200..8000 cutoff
-  fx2: number;       // 0..40 detune cents
+  mainVol: number; // 0..1
+  pitch: number; // -12..12 semitones
+  revMix: number; // 0..1
+  revSize: number; // 0.05..1.2 (delay seconds)
+  speed: number; // 0.25..2
+  multiply: number; // 2..12 (integer, vertex count)
+  fx1: number; // 200..8000 cutoff
+  fx2: number; // 0..40 detune cents
 };
 
 type VoiceSel = { melo: VoiceKind; bass: VoiceKind; atmo: VoiceKind };
 
 type TriggerEvent = {
   vertex: number;
-  time: number;       // audioCtx time
+  time: number; // audioCtx time
   freq: number;
   voice: VoiceKind;
   laneColor: string;
 };
 
 type Particle = {
-  x: number; y: number; vx: number; vy: number;
-  life: number; max: number; size: number; hue: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  max: number;
+  size: number;
+  hue: string;
 };
 
 type EngineState = {
   // canvas
-  w: number; h: number; dpr: number;
+  w: number;
+  h: number;
+  dpr: number;
   // rhythm
   basePeriod: number; // seconds per full cycle at speed=1
   nextFire: number[]; // per-vertex next audio time
@@ -121,11 +153,11 @@ type AudioGraph = {
   busTrim: GainNode;
   highpass: BiquadFilterNode;
   limiter: DynamicsCompressorNode;
-  preFx: GainNode;       // input bus
+  preFx: GainNode; // input bus
   filter: BiquadFilterNode;
   shelf: BiquadFilterNode;
   chorusMix: GainNode;
-  chorusRate: AudioParam;       // proxy: control both chorus LFOs
+  chorusRate: AudioParam; // proxy: control both chorus LFOs
   delayL: DelayNode;
   delayR: DelayNode;
   delayFeedback: GainNode;
@@ -155,7 +187,7 @@ type VoiceSlot = "melo" | "bass" | "atmo";
 const VOICE_SLOTS: VoiceSlot[] = ["melo", "bass", "atmo"];
 void VOICES;
 
-type WheelNote = {
+export type WheelNote = {
   id: string;
   angle: number;
   pitchIndex: number;
@@ -163,7 +195,7 @@ type WheelNote = {
   flash: number;
 };
 
-type WheelRing = {
+export type WheelRing = {
   id: string;
   radiusFactor: number;
   beats: number;
@@ -175,44 +207,44 @@ type WheelRing = {
   flash: number;
 };
 
-type WheelLine = {
+export type WheelLine = {
   id: string;
   angle: number;
   flash: number;
   sparks: { x: number; y: number; t: number }[];
 };
 
-type WheelState = {
+export type WheelState = {
   rings: WheelRing[];
   lines: WheelLine[];
   lastFire: Map<string, number>;
 };
 
 /* ---- Pendulum scene ---- */
-type PendulumBob = {
+export type PendulumBob = {
   id: string;
-  ratioIndex: number;     // 0..N → picks ratio from PEND_RATIOS
-  slotIndex: number;      // 0..5 → pack slot
-  pitchIndex: number;     // semitone offset
-  phase: number;          // 0..1 normalized SHM phase
-  prevSign: -1 | 1;       // last side
-  flash: number;          // 0..1 visual
+  ratioIndex: number; // 0..N → picks ratio from PEND_RATIOS
+  slotIndex: number; // 0..5 → pack slot
+  pitchIndex: number; // semitone offset
+  phase: number; // 0..1 normalized SHM phase
+  prevSign: -1 | 1; // last side
+  flash: number; // 0..1 visual
 };
-type PendulumState = {
+export type PendulumState = {
   bobs: PendulumBob[];
 };
 
 /* ---- Bars scene ---- */
-type BarLane = {
+export type BarLane = {
   id: string;
-  ratioIndex: number;     // 0..N → picks ratio from BAR_RATIOS
+  ratioIndex: number; // 0..N → picks ratio from BAR_RATIOS
   slotIndex: number;
   pitchIndex: number;
-  phase: number;          // 0..1 playhead vertical position
+  phase: number; // 0..1 playhead vertical position
   flash: number;
-  lastTriggerY: number;   // for zigzag connector
+  lastTriggerY: number; // for zigzag connector
 };
-type BarsState = {
+export type BarsState = {
   lanes: BarLane[];
 };
 
@@ -221,9 +253,11 @@ const uid = (p = "id") => `${p}_${++_uid}`;
 
 function voiceSlotColor(slot: VoiceSlot, withAlpha = false): string {
   const base =
-    slot === "melo" ? "oklch(0.82 0.18 195" :
-    slot === "bass" ? "oklch(0.72 0.22 310" :
-                      "oklch(0.86 0.16 85";
+    slot === "melo"
+      ? "oklch(0.82 0.18 195"
+      : slot === "bass"
+        ? "oklch(0.72 0.22 310"
+        : "oklch(0.86 0.16 85";
   return withAlpha ? `${base} / a)` : `${base})`;
 }
 
@@ -244,26 +278,36 @@ function ringPeriodSec(r: WheelRing, bpm: number) {
 
 function makeSeedWheel(): WheelState {
   const mkRing = (
-    radiusFactor: number, beats: number, subdivision: number,
-    direction: 1 | -1, voiceSlot: VoiceSlot, noteAngles: number[], pitchBase: number,
+    radiusFactor: number,
+    beats: number,
+    subdivision: number,
+    direction: 1 | -1,
+    voiceSlot: VoiceSlot,
+    noteAngles: number[],
+    pitchBase: number,
   ): WheelRing => ({
     id: uid("ring"),
-    radiusFactor, beats, subdivision, direction,
-    phase: 0, voiceSlot, flash: 0,
+    radiusFactor,
+    beats,
+    subdivision,
+    direction,
+    phase: 0,
+    voiceSlot,
+    flash: 0,
     notes: noteAngles.map((a, i) => ({
-      id: uid("n"), angle: a, pitchIndex: pitchBase + i,
-      prevWorld: a, flash: 0,
+      id: uid("n"),
+      angle: a,
+      pitchIndex: pitchBase + i,
+      prevWorld: a,
+      flash: 0,
     })),
   });
   const tau = Math.PI * 2;
   return {
     rings: [
-      mkRing(0.78, 4, 4, 1,  "melo",
-        [0, tau * 0.25, tau * 0.5, tau * 0.75], 7),
-      mkRing(0.55, 3, 4, -1, "bass",
-        [0, tau / 3, (tau * 2) / 3], 3),
-      mkRing(0.32, 5, 8, 1,  "atmo",
-        [0, tau / 5, (tau * 2) / 5, (tau * 3) / 5, (tau * 4) / 5], 10),
+      mkRing(0.78, 4, 4, 1, "melo", [0, tau * 0.25, tau * 0.5, tau * 0.75], 7),
+      mkRing(0.55, 3, 4, -1, "bass", [0, tau / 3, (tau * 2) / 3], 3),
+      mkRing(0.32, 5, 8, 1, "atmo", [0, tau / 5, (tau * 2) / 5, (tau * 3) / 5, (tau * 4) / 5], 10),
     ],
     lines: [
       { id: uid("ln"), angle: Math.PI / 2, flash: 0, sparks: [] }, // vertical
@@ -277,17 +321,27 @@ const SCALE_DEG = [0, 3, 5, 7, 10];
 const ROOT_HZ = 110; // A2
 const MAX_ACTIVE_VOICES = 18;
 let activeVoiceCount = 0;
-void MAX_ACTIVE_VOICES; void activeVoiceCount;
+void MAX_ACTIVE_VOICES;
+void activeVoiceCount;
 
 /* ---- Pendulum / Bars constants & seeds ---- */
 
 // Ratios that produce a slow phasing fan-out (Galileo pendulum style).
 // Index N → period multiplier; longer index = slower swing.
-const PEND_RATIOS = [1.0, 1.06, 1.13, 1.21, 1.30, 1.40, 1.51, 1.63, 1.76, 1.90, 2.05, 2.21];
+const PEND_RATIOS = [1.0, 1.06, 1.13, 1.21, 1.3, 1.4, 1.51, 1.63, 1.76, 1.9, 2.05, 2.21];
 const BAR_RATIOS = [
-  { num: 3, den: 4 }, { num: 4, den: 5 }, { num: 5, den: 6 }, { num: 6, den: 7 },
-  { num: 7, den: 8 }, { num: 8, den: 9 }, { num: 9, den: 10 }, { num: 5, den: 8 },
-  { num: 4, den: 7 }, { num: 3, den: 8 }, { num: 7, den: 12 }, { num: 11, den: 13 },
+  { num: 3, den: 4 },
+  { num: 4, den: 5 },
+  { num: 5, den: 6 },
+  { num: 6, den: 7 },
+  { num: 7, den: 8 },
+  { num: 8, den: 9 },
+  { num: 9, den: 10 },
+  { num: 5, den: 8 },
+  { num: 4, den: 7 },
+  { num: 3, den: 8 },
+  { num: 7, den: 12 },
+  { num: 11, den: 13 },
 ];
 
 function pendBaseSec(bpm: number) {
@@ -318,12 +372,52 @@ function pitchToFreq(semitones: number) {
 function makeSeedPendulum(): PendulumState {
   return {
     bobs: [
-      { id: uid("p"), ratioIndex: 0, slotIndex: 0, pitchIndex: 7, phase: 0,    prevSign: 1, flash: 0 },
-      { id: uid("p"), ratioIndex: 1, slotIndex: 1, pitchIndex: 5, phase: 0.1,  prevSign: 1, flash: 0 },
-      { id: uid("p"), ratioIndex: 2, slotIndex: 2, pitchIndex: 3, phase: 0.2,  prevSign: 1, flash: 0 },
-      { id: uid("p"), ratioIndex: 3, slotIndex: 3, pitchIndex: 0, phase: 0.3,  prevSign: 1, flash: 0 },
-      { id: uid("p"), ratioIndex: 4, slotIndex: 4, pitchIndex: -2, phase: 0.4, prevSign: 1, flash: 0 },
-      { id: uid("p"), ratioIndex: 5, slotIndex: 5, pitchIndex: -5, phase: 0.5, prevSign: 1, flash: 0 },
+      { id: uid("p"), ratioIndex: 0, slotIndex: 0, pitchIndex: 7, phase: 0, prevSign: 1, flash: 0 },
+      {
+        id: uid("p"),
+        ratioIndex: 1,
+        slotIndex: 1,
+        pitchIndex: 5,
+        phase: 0.1,
+        prevSign: 1,
+        flash: 0,
+      },
+      {
+        id: uid("p"),
+        ratioIndex: 2,
+        slotIndex: 2,
+        pitchIndex: 3,
+        phase: 0.2,
+        prevSign: 1,
+        flash: 0,
+      },
+      {
+        id: uid("p"),
+        ratioIndex: 3,
+        slotIndex: 3,
+        pitchIndex: 0,
+        phase: 0.3,
+        prevSign: 1,
+        flash: 0,
+      },
+      {
+        id: uid("p"),
+        ratioIndex: 4,
+        slotIndex: 4,
+        pitchIndex: -2,
+        phase: 0.4,
+        prevSign: 1,
+        flash: 0,
+      },
+      {
+        id: uid("p"),
+        ratioIndex: 5,
+        slotIndex: 5,
+        pitchIndex: -5,
+        phase: 0.5,
+        prevSign: 1,
+        flash: 0,
+      },
     ],
   };
 }
@@ -331,12 +425,60 @@ function makeSeedPendulum(): PendulumState {
 function makeSeedBars(): BarsState {
   return {
     lanes: [
-      { id: uid("b"), ratioIndex: 0, slotIndex: 0, pitchIndex: 12, phase: 0,    flash: 0, lastTriggerY: 1 },
-      { id: uid("b"), ratioIndex: 1, slotIndex: 1, pitchIndex: 7,  phase: 0.07, flash: 0, lastTriggerY: 1 },
-      { id: uid("b"), ratioIndex: 2, slotIndex: 2, pitchIndex: 5,  phase: 0.14, flash: 0, lastTriggerY: 1 },
-      { id: uid("b"), ratioIndex: 3, slotIndex: 3, pitchIndex: 3,  phase: 0.21, flash: 0, lastTriggerY: 1 },
-      { id: uid("b"), ratioIndex: 4, slotIndex: 4, pitchIndex: 0,  phase: 0.28, flash: 0, lastTriggerY: 1 },
-      { id: uid("b"), ratioIndex: 5, slotIndex: 5, pitchIndex: -5, phase: 0.35, flash: 0, lastTriggerY: 1 },
+      {
+        id: uid("b"),
+        ratioIndex: 0,
+        slotIndex: 0,
+        pitchIndex: 12,
+        phase: 0,
+        flash: 0,
+        lastTriggerY: 1,
+      },
+      {
+        id: uid("b"),
+        ratioIndex: 1,
+        slotIndex: 1,
+        pitchIndex: 7,
+        phase: 0.07,
+        flash: 0,
+        lastTriggerY: 1,
+      },
+      {
+        id: uid("b"),
+        ratioIndex: 2,
+        slotIndex: 2,
+        pitchIndex: 5,
+        phase: 0.14,
+        flash: 0,
+        lastTriggerY: 1,
+      },
+      {
+        id: uid("b"),
+        ratioIndex: 3,
+        slotIndex: 3,
+        pitchIndex: 3,
+        phase: 0.21,
+        flash: 0,
+        lastTriggerY: 1,
+      },
+      {
+        id: uid("b"),
+        ratioIndex: 4,
+        slotIndex: 4,
+        pitchIndex: 0,
+        phase: 0.28,
+        flash: 0,
+        lastTriggerY: 1,
+      },
+      {
+        id: uid("b"),
+        ratioIndex: 5,
+        slotIndex: 5,
+        pitchIndex: -5,
+        phase: 0.35,
+        flash: 0,
+        lastTriggerY: 1,
+      },
     ],
   };
 }
@@ -401,32 +543,45 @@ function playVoice(
     return o;
   };
 
-  let attack = 0.01, hold = 0, release = 2.5, peak = 0.16;
+  let attack = 0.01,
+    hold = 0,
+    release = 2.5,
+    peak = 0.16;
   const oscs: OscillatorNode[] = [];
 
   if (voice === "chime") {
     oscs.push(mk("sine", freq, -detuneCents, 0.25));
     oscs.push(mk("sine", freq * 2.01, detuneCents, 0.08));
     oscs.push(mk("sine", freq * 3.0, 0, 0.035));
-    attack = 0.005; release = 3.2; peak = 0.14;
+    attack = 0.005;
+    release = 3.2;
+    peak = 0.14;
   } else if (voice === "pluck") {
     oscs.push(mk("triangle", freq, -detuneCents, 0.35));
     oscs.push(mk("triangle", freq * 1.005, detuneCents, 0.2));
-    attack = 0.003; release = 1.4; peak = 0.16;
+    attack = 0.003;
+    release = 1.4;
+    peak = 0.16;
   } else if (voice === "bell") {
     oscs.push(mk("sine", freq, 0, 0.28));
     oscs.push(mk("sine", freq * 3.5, 0, 0.12));
     oscs.push(mk("sine", freq * 5.2, 0, 0.04));
-    attack = 0.008; release = 4.5; peak = 0.12;
+    attack = 0.008;
+    release = 4.5;
+    peak = 0.12;
   } else if (voice === "pad") {
     oscs.push(mk("triangle", freq * 0.5, -detuneCents, 0.28));
     oscs.push(mk("sine", freq * 0.5 * 1.005, detuneCents, 0.2));
     oscs.push(mk("sine", freq, 0, 0.12));
-    attack = 0.45; release = 3.5; peak = 0.1;
+    attack = 0.45;
+    release = 3.5;
+    peak = 0.1;
   } else if (voice === "bass") {
     oscs.push(mk("sine", freq * 0.5, -detuneCents, 0.38));
     oscs.push(mk("triangle", freq * 0.5, detuneCents, 0.12));
-    attack = 0.01; release = 2.2; peak = 0.13;
+    attack = 0.01;
+    release = 2.2;
+    peak = 0.13;
   }
 
   const t = startAt;
@@ -440,9 +595,12 @@ function playVoice(
     o.start(t);
     o.stop(t + duration);
   });
-  window.setTimeout(() => {
-    activeVoiceCount = Math.max(0, activeVoiceCount - 1);
-  }, Math.max(0, (t + duration - ctx.currentTime) * 1000));
+  window.setTimeout(
+    () => {
+      activeVoiceCount = Math.max(0, activeVoiceCount - 1);
+    },
+    Math.max(0, (t + duration - ctx.currentTime) * 1000),
+  );
 }
 
 /* ============================================================
@@ -658,20 +816,28 @@ function PhaseApp() {
   });
 
   // Refs mirror state so the engine doesn't re-subscribe
-  const playingRef = useRef(playing); playingRef.current = playing;
-  const sceneRef = useRef(scene); sceneRef.current = scene;
-  const voicesRef = useRef(voices); voicesRef.current = voices;
-  const knobsRef = useRef(knobs); knobsRef.current = knobs;
-  const bpmRef = useRef(bpm); bpmRef.current = bpm;
+  const playingRef = useRef(playing);
+  playingRef.current = playing;
+  const sceneRef = useRef(scene);
+  sceneRef.current = scene;
+  const voicesRef = useRef(voices);
+  voicesRef.current = voices;
+  const knobsRef = useRef(knobs);
+  knobsRef.current = knobs;
+  const bpmRef = useRef(bpm);
+  bpmRef.current = bpm;
   // Resolve currently-selected pack into a RuntimePack (built-in or custom).
   const allPacks: RuntimePack[] = [...BUILTIN_RUNTIME_PACKS, ...customPacks];
   const activePack: RuntimePack =
     allPacks.find((p) => p.id === selectedPack) ?? BUILTIN_RUNTIME_PACKS[0];
-  const packRef = useRef<RuntimePack>(activePack); packRef.current = activePack;
+  const packRef = useRef<RuntimePack>(activePack);
+  packRef.current = activePack;
 
   const audioRef = useRef<AudioGraph | null>(null);
   const engineRef = useRef<EngineState>({
-    w: 0, h: 0, dpr: 1,
+    w: 0,
+    h: 0,
+    dpr: 1,
     basePeriod: 8,
     nextFire: [],
     lastFire: [],
@@ -691,14 +857,90 @@ function PhaseApp() {
   const lastHoverRef = useRef<string | null>(null);
   const [hoverRing, setHoverRing] = useState<string | null>(null);
 
+  /* ---- Session URL: share + restore ---- */
+  const buildSessionState = useCallback(
+    (): SessionState => ({
+      v: 1,
+      s: scene,
+      bpm,
+      knobs: knobsToSession(knobs),
+      fx: fxToSession(fxState),
+      pack: selectedPack,
+      neural: neuralToSession(neural),
+      composer: composerToSession(composer),
+      wheel: wheelToSession(engineRef.current.wheel),
+      pendulum: pendulumToSession(engineRef.current.pendulum),
+      bars: barsToSession(engineRef.current.bars),
+    }),
+    [scene, bpm, knobs, fxState, selectedPack, neural, composer, topo],
+  );
+
+  const restoreSessionState = useCallback((state: SessionState) => {
+    setScene(state.s);
+    setBpm(state.bpm);
+    setKnobs(knobsFromSession(state.knobs));
+    setFxState(fxFromSession(state.fx));
+    setSelectedPack(state.pack);
+    setNeural(neuralFromSession(state.neural));
+    saveNeuralSettings(neuralFromSession(state.neural));
+    setComposer(composerFromSession(state.composer));
+    saveComposerSettings(composerFromSession(state.composer));
+    engineRef.current.wheel = wheelFromSession(state.wheel);
+    engineRef.current.pendulum = pendulumFromSession(state.pendulum);
+    engineRef.current.bars = barsFromSession(state.bars);
+    bumpTopo();
+  }, []);
+
+  // Read hash on mount and restore session if present.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (!hash.startsWith("#s=")) return;
+    const encoded = hash.slice(3);
+    const state = decodeSession(encoded);
+    if (state) {
+      restoreSessionState(state);
+    }
+  }, [restoreSessionState]);
+
+  // Write hash when state changes (debounced).
+  const hashDebounceRef = useRef<number | null>(null);
+  const [shareToast, setShareToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (hashDebounceRef.current) window.clearTimeout(hashDebounceRef.current);
+    hashDebounceRef.current = window.setTimeout(() => {
+      const state = buildSessionState();
+      const encoded = encodeSession(state);
+      const url = new URL(window.location.href);
+      url.hash = `#s=${encoded}`;
+      window.history.replaceState(null, "", url.toString());
+    }, 600);
+    return () => {
+      if (hashDebounceRef.current) window.clearTimeout(hashDebounceRef.current);
+    };
+  }, [buildSessionState]);
+
+  const handleShare = useCallback(async () => {
+    const state = buildSessionState();
+    const ok = await copyShareUrl(state);
+    setShareToast(ok ? "Session link copied to clipboard" : "Could not copy link");
+    window.setTimeout(() => setShareToast(null), 2200);
+  }, [buildSessionState]);
+
   /* ---- Audio graph init ---- */
   const ensureAudio = useCallback((): AudioGraph => {
     if (audioRef.current) return audioRef.current;
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     // 48 kHz + interactive latency for a noticeably cleaner top end.
     let ctx: AudioContext;
-    try { ctx = new Ctx({ sampleRate: 48000, latencyHint: "interactive" }); }
-    catch { ctx = new Ctx(); }
+    try {
+      ctx = new Ctx({ sampleRate: 48000, latencyHint: "interactive" });
+    } catch {
+      ctx = new Ctx();
+    }
 
     const master = ctx.createGain();
     master.gain.value = knobsRef.current.mainVol * 0.7;
@@ -731,11 +973,16 @@ function PhaseApp() {
     // Phase B by 90° via cosine wavetable
     const cosTable = ctx.createPeriodicWave(new Float32Array([0, 0]), new Float32Array([0, 1]));
     chorusLFO_B.setPeriodicWave(cosTable);
-    const chorusDepthA = ctx.createGain(); chorusDepthA.gain.value = 0.004;
-    const chorusDepthB = ctx.createGain(); chorusDepthB.gain.value = 0.004;
-    chorusLFO_A.connect(chorusDepthA); chorusDepthA.connect(chorusDelayL.delayTime);
-    chorusLFO_B.connect(chorusDepthB); chorusDepthB.connect(chorusDelayR.delayTime);
-    chorusLFO_A.start(); chorusLFO_B.start();
+    const chorusDepthA = ctx.createGain();
+    chorusDepthA.gain.value = 0.004;
+    const chorusDepthB = ctx.createGain();
+    chorusDepthB.gain.value = 0.004;
+    chorusLFO_A.connect(chorusDepthA);
+    chorusDepthA.connect(chorusDelayL.delayTime);
+    chorusLFO_B.connect(chorusDepthB);
+    chorusDepthB.connect(chorusDelayR.delayTime);
+    chorusLFO_A.start();
+    chorusLFO_B.start();
     const chorusMix = ctx.createGain();
     chorusMix.gain.value = 0.08;
 
@@ -854,11 +1101,28 @@ function PhaseApp() {
     limiter.connect(ctx.destination);
 
     audioRef.current = {
-      ctx, master, busTrim, highpass, limiter, preFx, filter, shelf,
-      chorusMix, chorusRate: chorusLFO_A.frequency,
-      delayL, delayR, delayFeedback, wet, dryToMaster,
-      grainDelay, grainFeedback, grainMix,
-      convolver, reverbWet, reverbSend, irSeconds,
+      ctx,
+      master,
+      busTrim,
+      highpass,
+      limiter,
+      preFx,
+      filter,
+      shelf,
+      chorusMix,
+      chorusRate: chorusLFO_A.frequency,
+      delayL,
+      delayR,
+      delayFeedback,
+      wet,
+      dryToMaster,
+      grainDelay,
+      grainFeedback,
+      grainMix,
+      convolver,
+      reverbWet,
+      reverbSend,
+      irSeconds,
       // Internal handles for fxState (kept on the object for chorus depth + LFO B rate)
       _chorusRateB: chorusLFO_B.frequency,
       _chorusDepthA: chorusDepthA,
@@ -871,7 +1135,8 @@ function PhaseApp() {
 
   /* ---- Sync knobs -> audio params ---- */
   useEffect(() => {
-    const a = audioRef.current; if (!a) return;
+    const a = audioRef.current;
+    if (!a) return;
     const t = a.ctx.currentTime;
     a.master.gain.setTargetAtTime(knobs.mainVol * 0.7, t, 0.04);
     a.filter.frequency.setTargetAtTime(knobs.fx1, t, 0.04);
@@ -881,13 +1146,22 @@ function PhaseApp() {
     a.reverbWet.gain.setTargetAtTime(knobs.revMix * 0.45, t, 0.05);
     a.chorusMix.gain.setTargetAtTime(0.04 + (knobs.fx2 / 40) * 0.18, t, 0.05);
     const depth = 0.0015 + (knobs.fx2 / 40) * 0.006;
-    (a as unknown as { _chorusDepthA: GainNode })._chorusDepthA.gain.setTargetAtTime(depth, t, 0.05);
-    (a as unknown as { _chorusDepthB: GainNode })._chorusDepthB.gain.setTargetAtTime(depth, t, 0.05);
+    (a as unknown as { _chorusDepthA: GainNode })._chorusDepthA.gain.setTargetAtTime(
+      depth,
+      t,
+      0.05,
+    );
+    (a as unknown as { _chorusDepthB: GainNode })._chorusDepthB.gain.setTargetAtTime(
+      depth,
+      t,
+      0.05,
+    );
   }, [knobs]);
 
   /* ---- Sync FX state -> audio params (wins over knobs in wheel mode) ---- */
   useEffect(() => {
-    const a = audioRef.current; if (!a) return;
+    const a = audioRef.current;
+    if (!a) return;
     applyFxState(a, fxState);
   }, [fxState]);
 
@@ -904,7 +1178,9 @@ function PhaseApp() {
     };
     load();
     // Re-fetch when packs drawer opens so newly-published packs appear without reload.
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Pre-decode samples for the active custom pack as soon as it's selected.
@@ -921,7 +1197,8 @@ function PhaseApp() {
     let last = performance.now();
 
     const onResize = () => {
-      const c = canvasRef.current; if (!c) return;
+      const c = canvasRef.current;
+      if (!c) return;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const rect = c.getBoundingClientRect();
       c.width = Math.floor(rect.width * dpr);
@@ -965,12 +1242,15 @@ function PhaseApp() {
 
   /* ---- Renderer ---- */
   const render = (dt: number) => {
-    const c = canvasRef.current; if (!c) return;
-    const ctx2d = c.getContext("2d"); if (!ctx2d) return;
+    const c = canvasRef.current;
+    if (!c) return;
+    const ctx2d = c.getContext("2d");
+    if (!ctx2d) return;
     const e = engineRef.current;
     const a = audioRef.current;
 
-    const W = e.w, H = e.h;
+    const W = e.w,
+      H = e.h;
     ctx2d.setTransform(e.dpr, 0, 0, e.dpr, 0, 0);
 
     // Always: art surface (transparent + bloom + grain)
@@ -981,7 +1261,17 @@ function PhaseApp() {
     ctx2d.globalCompositeOperation = "lighter";
     if (scene === "wheel") {
       if (playing) {
-        updateWheel(e.wheel, dt, a!, bpmRef.current, voicesRef.current, knobsRef.current, packRef.current, W, H);
+        updateWheel(
+          e.wheel,
+          dt,
+          a!,
+          bpmRef.current,
+          voicesRef.current,
+          knobsRef.current,
+          packRef.current,
+          W,
+          H,
+        );
       } else {
         decayWheelFlashes(e.wheel, dt);
       }
@@ -1019,15 +1309,15 @@ function PhaseApp() {
     setPlaying((p) => !p);
   };
 
-  const setKnob = (key: keyof Knobs, val: number) =>
-    setKnobs((k) => ({ ...k, [key]: val }));
+  const setKnob = (key: keyof Knobs, val: number) => setKnobs((k) => ({ ...k, [key]: val }));
 
   const isWheel = scene === "wheel";
 
   /* ---- Wheel pointer interaction ---- */
   const onCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (sceneRef.current !== "wheel") return;
-    const c = canvasRef.current; if (!c) return;
+    const c = canvasRef.current;
+    if (!c) return;
     const rect = c.getBoundingClientRect();
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
@@ -1037,11 +1327,13 @@ function PhaseApp() {
 
   const onCanvasPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (sceneRef.current !== "wheel") return;
-    const c = canvasRef.current; if (!c) return;
+    const c = canvasRef.current;
+    if (!c) return;
     const rect = c.getBoundingClientRect();
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
-    const cx = rect.width / 2, cy = rect.height / 2;
+    const cx = rect.width / 2,
+      cy = rect.height / 2;
     const r = Math.hypot(px - cx, py - cy);
     const wh = engineRef.current.wheel;
     let hit: string | null = null;
@@ -1049,12 +1341,18 @@ function PhaseApp() {
     for (const ring of wh.rings) {
       const R = (ring.radiusFactor * Math.min(rect.width, rect.height)) / 2;
       const d = Math.abs(r - R);
-      if (d < bestD) { bestD = d; hit = ring.id; }
+      if (d < bestD) {
+        bestD = d;
+        hit = ring.id;
+      }
     }
     hoverRingIdRef.current = hit;
     setHoverRing((prev) => (prev === hit ? prev : hit));
   };
-  const onCanvasPointerLeave = () => { hoverRingIdRef.current = null; setHoverRing(null); };
+  const onCanvasPointerLeave = () => {
+    hoverRingIdRef.current = null;
+    setHoverRing(null);
+  };
 
   /* ---- Wheel ring/line mutators ---- */
   const addRing = () => {
@@ -1066,8 +1364,13 @@ function PhaseApp() {
     wh.rings.push({
       id: uid("ring"),
       radiusFactor: rf,
-      beats: 4, subdivision: 4, direction: wh.rings.length % 2 === 0 ? 1 : -1,
-      phase: 0, voiceSlot: slot, notes: [], flash: 0,
+      beats: 4,
+      subdivision: 4,
+      direction: wh.rings.length % 2 === 0 ? 1 : -1,
+      phase: 0,
+      voiceSlot: slot,
+      notes: [],
+      flash: 0,
     });
     bumpTopo();
   };
@@ -1078,7 +1381,14 @@ function PhaseApp() {
   };
   const addLine = () => {
     const wh = engineRef.current.wheel;
-    const presets = [Math.PI / 2, 0, Math.PI / 4, (3 * Math.PI) / 4, Math.PI / 6, (5 * Math.PI) / 6];
+    const presets = [
+      Math.PI / 2,
+      0,
+      Math.PI / 4,
+      (3 * Math.PI) / 4,
+      Math.PI / 6,
+      (5 * Math.PI) / 6,
+    ];
     const used = new Set(wh.lines.map((l) => Math.round(l.angle * 1000)));
     const a = presets.find((p) => !used.has(Math.round(p * 1000))) ?? Math.random() * Math.PI;
     wh.lines.push({ id: uid("ln"), angle: a, flash: 0, sparks: [] });
@@ -1092,7 +1402,10 @@ function PhaseApp() {
   const setLineAngle = (id: string, angle: number) => {
     const wh = engineRef.current.wheel;
     const l = wh.lines.find((x) => x.id === id);
-    if (l) { l.angle = angle; bumpTopo(); }
+    if (l) {
+      l.angle = angle;
+      bumpTopo();
+    }
   };
   const clearLines = () => {
     const wh = engineRef.current.wheel;
@@ -1113,9 +1426,13 @@ function PhaseApp() {
     const idx = p.bobs.length % PEND_RATIOS.length;
     const slot = p.bobs.length % 6;
     p.bobs.push({
-      id: uid("p"), ratioIndex: idx, slotIndex: slot,
-      pitchIndex: 7 - p.bobs.length * 2, phase: Math.random(),
-      prevSign: 1, flash: 0,
+      id: uid("p"),
+      ratioIndex: idx,
+      slotIndex: slot,
+      pitchIndex: 7 - p.bobs.length * 2,
+      phase: Math.random(),
+      prevSign: 1,
+      flash: 0,
     });
     bumpTopo();
   };
@@ -1130,9 +1447,13 @@ function PhaseApp() {
     const idx = b.lanes.length % BAR_RATIOS.length;
     const slot = b.lanes.length % 6;
     b.lanes.push({
-      id: uid("b"), ratioIndex: idx, slotIndex: slot,
+      id: uid("b"),
+      ratioIndex: idx,
+      slotIndex: slot,
       pitchIndex: 12 - b.lanes.length * 3,
-      phase: Math.random() * 0.4, flash: 0, lastTriggerY: 1,
+      phase: Math.random() * 0.4,
+      flash: 0,
+      lastTriggerY: 1,
     });
     bumpTopo();
   };
@@ -1177,7 +1498,10 @@ function PhaseApp() {
             onRemoveLine={removeLine}
             onSetLineAngle={setLineAngle}
             onUpdateRing={updateRing}
-            onHoverRing={(id) => { hoverRingIdRef.current = id; setHoverRing(id); }}
+            onHoverRing={(id) => {
+              hoverRingIdRef.current = id;
+              setHoverRing(id);
+            }}
           />
         )}
       </main>
@@ -1198,17 +1522,32 @@ function PhaseApp() {
         packId={selectedPack}
         onPackId={setSelectedPack}
         neural={neural}
-        onNeural={(s) => { setNeural(s); saveNeuralSettings(s); }}
+        onNeural={(s) => {
+          setNeural(s);
+          saveNeuralSettings(s);
+        }}
         composer={composer}
-        onComposer={(s) => { setComposer(s); saveComposerSettings(s); }}
+        onComposer={(s) => {
+          setComposer(s);
+          saveComposerSettings(s);
+        }}
         authed={!!auth.user}
         email={auth.user?.email ?? null}
-        onSignOut={() => { supabase.auth.signOut(); }}
+        onSignOut={() => {
+          supabase.auth.signOut();
+        }}
+        onShare={handleShare}
       />
+      {shareToast && (
+        <div className="fixed top-6 left-1/2 z-50 -translate-x-1/2 pointer-events-none">
+          <div className="px-4 py-2 rounded-full border border-white/10 bg-[hsl(220_22%_7%/0.88)] backdrop-blur-2xl text-[11px] uppercase tracking-[0.16em] text-white/80 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.65)]">
+            {shareToast}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
 
 /* ============================================================
  * Wheel — update, render, hit-testing, overlays
@@ -1216,11 +1555,13 @@ function PhaseApp() {
 
 const TAU = Math.PI * 2;
 
-function norm2pi(a: number) { return ((a % TAU) + TAU) % TAU; }
+function norm2pi(a: number) {
+  return ((a % TAU) + TAU) % TAU;
+}
 
 // Returns smallest forward distance from prev to target (prev → +ω → target).
 function fwdDist(prev: number, target: number) {
-  return ((target - prev) % TAU + TAU) % TAU;
+  return (((target - prev) % TAU) + TAU) % TAU;
 }
 
 function ringRadiusPx(r: WheelRing, W: number, H: number) {
@@ -1250,8 +1591,15 @@ function decayWheelFlashes(wh: WheelState, dt: number) {
 }
 
 function updateWheel(
-  wh: WheelState, dt: number, audio: AudioGraph, bpm: number, voices: VoiceSel, knobs: Knobs, pack: RuntimePack,
-  W = 0, H = 0,
+  wh: WheelState,
+  dt: number,
+  audio: AudioGraph,
+  bpm: number,
+  voices: VoiceSel,
+  knobs: Knobs,
+  pack: RuntimePack,
+  W = 0,
+  H = 0,
 ) {
   const now = audio.ctx.currentTime;
   const REFRACTORY = 0.16; // prevents frame jitter and ambient voice pileups
@@ -1327,8 +1675,10 @@ function updateWheel(
 }
 
 function wheelHandleClick(wh: WheelState, px: number, py: number, W: number, H: number): boolean {
-  const cx = W / 2, cy = H / 2;
-  const dx = px - cx, dy = py - cy;
+  const cx = W / 2,
+    cy = H / 2;
+  const dx = px - cx,
+    dy = py - cy;
   const r = Math.hypot(dx, dy);
   const ang = norm2pi(Math.atan2(dy, dx));
 
@@ -1354,7 +1704,11 @@ function wheelHandleClick(wh: WheelState, px: number, py: number, W: number, H: 
   wh.rings.forEach((ring, idx) => {
     const ringR = ringRadiusPx(ring, W, H);
     const d = Math.abs(r - ringR);
-    if (d < 14 && d < bestDist) { best = ring; bestIdx = idx; bestDist = d; }
+    if (d < 14 && d < bestDist) {
+      best = ring;
+      bestIdx = idx;
+      bestDist = d;
+    }
   });
   if (best) {
     const ring = best as WheelRing;
@@ -1373,10 +1727,16 @@ function wheelHandleClick(wh: WheelState, px: number, py: number, W: number, H: 
 }
 
 function drawWheelScene(
-  ctx: CanvasRenderingContext2D, W: number, H: number, wh: WheelState, voices: VoiceSel,
-  _dt: number = 0, hoverRingId: string | null = null,
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  wh: WheelState,
+  voices: VoiceSel,
+  _dt: number = 0,
+  hoverRingId: string | null = null,
 ) {
-  const cx = W / 2, cy = H / 2;
+  const cx = W / 2,
+    cy = H / 2;
   const maxR = Math.min(W, H) / 2;
   const t = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
 
@@ -1384,7 +1744,7 @@ function drawWheelScene(
   for (const ring of wh.rings) {
     const R = ringRadiusPx(ring, W, H);
     const hovered = ring.id === hoverRingId;
-    const base = hovered ? 0.20 : 0.06;
+    const base = hovered ? 0.2 : 0.06;
     ctx.strokeStyle = `rgba(255,255,255,${(base + ring.flash * 0.35).toFixed(3)})`;
     ctx.lineWidth = 0.5;
     ctx.beginPath();
@@ -1432,11 +1792,12 @@ function drawWheelScene(
     // Whole-chord breath — line itself gently brightens and dims on a slow sine.
     const linePhase = hashPhase(String(line.angle.toFixed(4)));
     const lineBreath = 0.5 + 0.5 * Math.sin(t * 0.32 + linePhase); // ~6.3s period
-    const lineAlpha = 0.08 + lineBreath * 0.12 + line.flash * 0.30;
+    const lineAlpha = 0.08 + lineBreath * 0.12 + line.flash * 0.3;
     ctx.strokeStyle = `rgba(255,255,255,${lineAlpha.toFixed(3)})`;
     ctx.lineWidth = 0.5;
     ctx.beginPath();
-    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
     ctx.stroke();
 
     // Trigger flash — whole-line bloom while line.flash decays
@@ -1447,7 +1808,8 @@ function drawWheelScene(
       ctx.strokeStyle = `rgba(255,255,255,${(0.55 * line.flash).toFixed(3)})`;
       ctx.lineWidth = 0.7;
       ctx.beginPath();
-      ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
       ctx.stroke();
       ctx.restore();
     }
@@ -1507,7 +1869,7 @@ function drawWheelScene(
       // soft note disc (with gentle breath)
       const baseR = (3.5 + inten * 5) * breathR;
       const g = ctx.createRadialGradient(nx, ny, 0, nx, ny, baseR + 10);
-      g.addColorStop(0, color.replace("a", (breathA).toFixed(3)));
+      g.addColorStop(0, color.replace("a", breathA.toFixed(3)));
       g.addColorStop(0.45, color.replace("a", (0.3 + inten * 0.4).toFixed(3)));
       g.addColorStop(1, color.replace("a", "0"));
       ctx.fillStyle = g;
@@ -1518,7 +1880,7 @@ function drawWheelScene(
       // Slow breath halo — quiet glow that swells with each note's own phase.
       {
         const haloR = baseR * 2.2 + 8;
-        const ha = (0.06 + 0.06 * breath);
+        const ha = 0.06 + 0.06 * breath;
         const bg = ctx.createRadialGradient(nx, ny, 0, nx, ny, haloR);
         bg.addColorStop(0, color.replace("a", ha.toFixed(3)));
         bg.addColorStop(1, color.replace("a", "0"));
@@ -1551,7 +1913,7 @@ function hashPhase(s: string): number {
     h ^= s.charCodeAt(i);
     h = Math.imul(h, 16777619);
   }
-  return ((h >>> 0) % 10000) / 10000 * TAU;
+  return (((h >>> 0) % 10000) / 10000) * TAU;
 }
 
 /* ============================================================
@@ -1561,14 +1923,18 @@ function hashPhase(s: string): number {
 const noteTrails = new WeakMap<WheelNote, { x: number; y: number }[]>();
 function getTrail(n: WheelNote): { x: number; y: number }[] {
   let t = noteTrails.get(n);
-  if (!t) { t = []; noteTrails.set(n, t); }
+  if (!t) {
+    t = [];
+    noteTrails.set(n, t);
+  }
   return t;
 }
 
 function buildGrainPattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
   const size = 256;
   const off = document.createElement("canvas");
-  off.width = size; off.height = size;
+  off.width = size;
+  off.height = size;
   const octx = off.getContext("2d");
   if (!octx) return null;
   const img = octx.createImageData(size, size);
@@ -1584,14 +1950,22 @@ function buildGrainPattern(ctx: CanvasRenderingContext2D): CanvasPattern | null 
 }
 
 function paintArtBackground(
-  ctx: CanvasRenderingContext2D, W: number, H: number,
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
   patternRef: { current: CanvasPattern | null },
 ) {
   // Canvas is transparent — the teal page field shows through the glass card.
   ctx.clearRect(0, 0, W, H);
   // Soft inner bloom for depth inside the card
-  const vg = ctx.createRadialGradient(W * 0.62, H * 0.42, Math.min(W, H) * 0.05,
-                                       W * 0.62, H * 0.42, Math.max(W, H) * 0.7);
+  const vg = ctx.createRadialGradient(
+    W * 0.62,
+    H * 0.42,
+    Math.min(W, H) * 0.05,
+    W * 0.62,
+    H * 0.42,
+    Math.max(W, H) * 0.7,
+  );
   vg.addColorStop(0, "rgba(255,255,255,0.07)");
   vg.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = vg;
@@ -1619,14 +1993,22 @@ function decayPendulumFlashes(pend: PendulumState, dt: number) {
 }
 
 function updatePendulum(
-  pend: PendulumState, dt: number, audio: AudioGraph, bpm: number,
-  knobs: Knobs, pack: RuntimePack, W = 0, H = 0,
+  pend: PendulumState,
+  dt: number,
+  audio: AudioGraph,
+  bpm: number,
+  knobs: Knobs,
+  pack: RuntimePack,
+  W = 0,
+  H = 0,
 ) {
   decayPendulumFlashes(pend, dt);
   const now = audio.ctx.currentTime;
   const n = pend.bobs.length;
-  const ax = W / 2, ay = H * 0.16;
-  const maxLen = H * 0.62, minLen = H * 0.30;
+  const ax = W / 2,
+    ay = H * 0.16;
+  const maxLen = H * 0.62,
+    minLen = H * 0.3;
   pend.bobs.forEach((b, i) => {
     const period = pendPeriodSec(b, bpm);
     const inc = dt / Math.max(0.001, period);
@@ -1660,20 +2042,24 @@ function updatePendulum(
 }
 
 function drawPendulumScene(
-  ctx: CanvasRenderingContext2D, W: number, H: number,
-  pend: PendulumState, hoverId: string | null,
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  pend: PendulumState,
+  hoverId: string | null,
 ) {
   const ax = W / 2;
   const ay = H * 0.16;
   const maxLen = H * 0.62;
-  const minLen = H * 0.30;
+  const minLen = H * 0.3;
   const n = pend.bobs.length;
 
   // anchor bar
   ctx.strokeStyle = "rgba(255,255,255,0.22)";
   ctx.lineWidth = 0.5;
   ctx.beginPath();
-  ctx.moveTo(ax - 220, ay); ctx.lineTo(ax + 220, ay);
+  ctx.moveTo(ax - 220, ay);
+  ctx.lineTo(ax + 220, ay);
   ctx.stroke();
 
   pend.bobs.forEach((b, i) => {
@@ -1690,7 +2076,8 @@ function drawPendulumScene(
     ctx.strokeStyle = hot ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.22)";
     ctx.lineWidth = 0.5;
     ctx.beginPath();
-    ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
     ctx.stroke();
 
     // bob glow
@@ -1701,12 +2088,16 @@ function drawPendulumScene(
     g.addColorStop(0.4, `rgba(120, 180, 230, ${a * 0.4})`);
     g.addColorStop(1, "rgba(120,180,230,0)");
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(bx, by, 60, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(bx, by, 60, 0, Math.PI * 2);
+    ctx.fill();
 
     // crisp ring
     ctx.strokeStyle = `rgba(220,235,255,${0.55 + b.flash * 0.4})`;
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(bx, by, baseR, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(bx, by, baseR, 0, Math.PI * 2);
+    ctx.stroke();
   });
 }
 
@@ -1720,8 +2111,14 @@ function decayBarsFlashes(bars: BarsState, dt: number) {
 }
 
 function updateBars(
-  bars: BarsState, dt: number, audio: AudioGraph, bpm: number,
-  knobs: Knobs, pack: RuntimePack, W = 0, H = 0,
+  bars: BarsState,
+  dt: number,
+  audio: AudioGraph,
+  bpm: number,
+  knobs: Knobs,
+  pack: RuntimePack,
+  W = 0,
+  H = 0,
 ) {
   decayBarsFlashes(bars, dt);
   const now = audio.ctx.currentTime;
@@ -1757,8 +2154,11 @@ function updateBars(
 }
 
 function drawBarsScene(
-  ctx: CanvasRenderingContext2D, W: number, H: number,
-  bars: BarsState, hoverId: string | null,
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  bars: BarsState,
+  hoverId: string | null,
 ) {
   const n = bars.lanes.length;
   if (n === 0) return;
@@ -1771,8 +2171,14 @@ function drawBarsScene(
   // baseline + ceiling hairlines
   ctx.strokeStyle = "rgba(255,255,255,0.18)";
   ctx.lineWidth = 0.5;
-  ctx.beginPath(); ctx.moveTo(padX - 30, bot); ctx.lineTo(W - padX + 30, bot); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(padX - 30, top); ctx.lineTo(W - padX + 30, top); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(padX - 30, bot);
+  ctx.lineTo(W - padX + 30, bot);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(padX - 30, top);
+  ctx.lineTo(W - padX + 30, top);
+  ctx.stroke();
 
   const pts: { x: number; y: number; flash: number; hot: boolean; id: string }[] = [];
 
@@ -1781,7 +2187,10 @@ function drawBarsScene(
     // lane track
     ctx.strokeStyle = "rgba(255,255,255,0.10)";
     ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bot); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bot);
+    ctx.stroke();
 
     const y = top + (bot - top) * l.phase;
     const hot = hoverId === l.id;
@@ -1792,10 +2201,14 @@ function drawBarsScene(
     g.addColorStop(0, "rgba(200,225,255,0.55)");
     g.addColorStop(1, "rgba(200,225,255,0)");
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(x, y, 40, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, 40, 0, Math.PI * 2);
+    ctx.fill();
     ctx.strokeStyle = hot ? "rgba(255,255,255,0.85)" : "rgba(220,235,255,0.6)";
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.stroke();
 
     // bottom strike node
     const sR = 4 + l.flash * 12;
@@ -1804,10 +2217,14 @@ function drawBarsScene(
     sg.addColorStop(0, `rgba(180,220,255,${sa})`);
     sg.addColorStop(1, "rgba(120,180,230,0)");
     ctx.fillStyle = sg;
-    ctx.beginPath(); ctx.arc(x, bot, 70, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, bot, 70, 0, Math.PI * 2);
+    ctx.fill();
     ctx.strokeStyle = `rgba(220,235,255,${0.5 + l.flash * 0.5})`;
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(x, bot, sR, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, bot, sR, 0, Math.PI * 2);
+    ctx.stroke();
   });
 
   // zigzag connector along bottom nodes
@@ -1828,8 +2245,17 @@ function drawBarsScene(
 /* ---- Wheel DOM overlays ---- */
 
 function WheelOverlays({
-  wheel, topo, canvasW, canvasH,
-  onAddRing, onAddLine, onRemoveRing, onRemoveLine, onSetLineAngle, onUpdateRing, onHoverRing,
+  wheel,
+  topo,
+  canvasW,
+  canvasH,
+  onAddRing,
+  onAddLine,
+  onRemoveRing,
+  onRemoveLine,
+  onSetLineAngle,
+  onUpdateRing,
+  onHoverRing,
 }: {
   wheel: WheelState;
   topo: number;
@@ -1845,7 +2271,8 @@ function WheelOverlays({
 }) {
   // touch topo so eslint doesn't whine and to force re-render
   void topo;
-  void onAddRing; void onAddLine;
+  void onAddRing;
+  void onAddLine;
 
   const cx = canvasW / 2;
   const cy = canvasH / 2;
@@ -1876,7 +2303,9 @@ function WheelOverlays({
         <LineHandle
           key={l.id}
           line={l}
-          cx={cx} cy={cy} maxR={maxR}
+          cx={cx}
+          cy={cy}
+          maxR={maxR}
           onSetAngle={(a) => onSetLineAngle(l.id, a)}
           onRemove={() => onRemoveLine(l.id)}
         />
@@ -1886,10 +2315,16 @@ function WheelOverlays({
 }
 
 function RingChip({
-  ring, left, top, onRemove, onUpdate, onHover,
+  ring,
+  left,
+  top,
+  onRemove,
+  onUpdate,
+  onHover,
 }: {
   ring: WheelRing;
-  left: number; top: number;
+  left: number;
+  top: number;
   onRemove: () => void;
   onUpdate: (patch: Partial<WheelRing>) => void;
   onHover?: (hover: boolean) => void;
@@ -1908,8 +2343,12 @@ function RingChip({
     setVal(`${ring.beats}/${ring.subdivision}`);
   };
 
-  const dot = ring.voiceSlot === "melo" ? "oklch(0.82 0.18 195)" :
-              ring.voiceSlot === "bass" ? "oklch(0.72 0.22 310)" : "oklch(0.86 0.16 85)";
+  const dot =
+    ring.voiceSlot === "melo"
+      ? "oklch(0.82 0.18 195)"
+      : ring.voiceSlot === "bass"
+        ? "oklch(0.72 0.22 310)"
+        : "oklch(0.86 0.16 85)";
 
   const cycleSlot = () => {
     const i = VOICE_SLOTS.indexOf(ring.voiceSlot);
@@ -1920,7 +2359,8 @@ function RingChip({
     <div
       className="absolute flex items-center gap-1.5 px-1.5 py-0.5 rounded-sm text-[10px] tracking-wider select-none transition-opacity"
       style={{
-        left, top,
+        left,
+        top,
         background: "transparent",
         color: "rgba(255,255,255,0.45)",
         fontFamily: "var(--pr-mono)",
@@ -1931,21 +2371,36 @@ function RingChip({
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
     >
-      <button title="cycle voice" onClick={cycleSlot}
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: dot }} />
+      <button
+        title="cycle voice"
+        onClick={cycleSlot}
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ background: dot }}
+      />
       {editing ? (
         <input
           autoFocus
           value={val}
           onChange={(e) => setVal(e.target.value)}
           onBlur={commit}
-          onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setEditing(false); setVal(`${ring.beats}/${ring.subdivision}`); } }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") {
+              setEditing(false);
+              setVal(`${ring.beats}/${ring.subdivision}`);
+            }
+          }}
           className="w-12 bg-transparent outline-none border-b"
           style={{ borderColor: "rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.8)" }}
         />
       ) : (
-        <button className="hover:text-white" onClick={() => { setVal(`${ring.beats}/${ring.subdivision}`); setEditing(true); }}>
+        <button
+          className="hover:text-white"
+          onClick={() => {
+            setVal(`${ring.beats}/${ring.subdivision}`);
+            setEditing(true);
+          }}
+        >
           {ring.beats}/{ring.subdivision}
         </button>
       )}
@@ -1957,17 +2412,28 @@ function RingChip({
         {ring.direction === 1 ? "↻" : "↺"}
       </button>
       <span className="opacity-50">·</span>
-      <button className="hover:text-white" onClick={cycleSlot}>{ring.voiceSlot}</button>
-      <button className="hover:text-white" onClick={onRemove} title="remove ring">×</button>
+      <button className="hover:text-white" onClick={cycleSlot}>
+        {ring.voiceSlot}
+      </button>
+      <button className="hover:text-white" onClick={onRemove} title="remove ring">
+        ×
+      </button>
     </div>
   );
 }
 
 function LineHandle({
-  line, cx, cy, maxR, onSetAngle, onRemove,
+  line,
+  cx,
+  cy,
+  maxR,
+  onSetAngle,
+  onRemove,
 }: {
   line: WheelLine;
-  cx: number; cy: number; maxR: number;
+  cx: number;
+  cy: number;
+  maxR: number;
   onSetAngle: (a: number) => void;
   onRemove: () => void;
 }) {
@@ -2001,7 +2467,10 @@ function LineHandle({
       <div
         className="absolute"
         style={{
-          left: hx - 8, top: hy - 8, width: 16, height: 16,
+          left: hx - 8,
+          top: hy - 8,
+          width: 16,
+          height: 16,
           borderRadius: 999,
           background: "transparent",
           boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.35)",
@@ -2027,7 +2496,13 @@ function LineHandle({
  * ============================================================ */
 
 function PhaseReadout({
-  scene, wheel, pendulum, bars, bpm, hoverRingId, topo,
+  scene,
+  wheel,
+  pendulum,
+  bars,
+  bpm,
+  hoverRingId,
+  topo,
 }: {
   scene: SceneKind;
   wheel: WheelState;
@@ -2081,7 +2556,14 @@ function PhaseReadout({
 
 type PanelId = "fx" | "packs" | "about" | "visuals";
 function PhaseChrome({
-  scene, onScene, fxOpen, packsOpen, aboutOpen, visualsOpen, onOpenPanel, onCloseAll,
+  scene,
+  onScene,
+  fxOpen,
+  packsOpen,
+  aboutOpen,
+  visualsOpen,
+  onOpenPanel,
+  onCloseAll,
 }: {
   scene: SceneKind;
   onScene: (s: SceneKind) => void;
@@ -2108,7 +2590,20 @@ function PhaseChrome({
     const ampm = h24 >= 12 ? "PM" : "AM";
     const h = ((h24 + 11) % 12) + 1;
     time = `${pad(h)}:${pad(now.getMinutes())}:${pad(now.getSeconds())} ${ampm}`;
-    const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+    const months = [
+      "JAN",
+      "FEB",
+      "MAR",
+      "APR",
+      "MAY",
+      "JUN",
+      "JUL",
+      "AUG",
+      "SEP",
+      "OCT",
+      "NOV",
+      "DEC",
+    ];
     date = `${months[now.getMonth()]} ${pad(now.getDate())}, ${now.getFullYear()}`;
   }
 
@@ -2116,12 +2611,23 @@ function PhaseChrome({
     <div className="pointer-events-none absolute inset-0 z-10">
       {/* Wordmark — top-left */}
       <div className="absolute top-6 left-7 flex items-center gap-2 pointer-events-auto">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" className="text-white/85">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          className="text-white/85"
+        >
           <circle cx="12" cy="12" r="9" />
           <circle cx="12" cy="12" r="3.5" />
           <path d="M12 3v4M12 17v4M3 12h4M17 12h4" strokeLinecap="round" />
         </svg>
-        <div className="text-white/90" style={{ fontFamily: "var(--pr-mono)", fontSize: 14, letterSpacing: "0.04em" }}>
+        <div
+          className="text-white/90"
+          style={{ fontFamily: "var(--pr-mono)", fontSize: 14, letterSpacing: "0.04em" }}
+        >
           Phase<span className="text-white/45 text-[10px] align-super">®</span>
         </div>
       </div>
@@ -2132,11 +2638,21 @@ function PhaseChrome({
         <div className="pr-label text-white/45 tabular-nums">{date}</div>
         <div className="flex items-center gap-2 mt-1">
           <button className="pr-hud-ring" title="ambient">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4a8 8 0 100 16V4z"/></svg>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 4a8 8 0 100 16V4z" />
+            </svg>
           </button>
           <button className="pr-hud-ring" title="phase">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-              <path d="M12 3v18M3 12h18M5.5 5.5l13 13M18.5 5.5l-13 13"/>
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            >
+              <path d="M12 3v18M3 12h18M5.5 5.5l13 13M18.5 5.5l-13 13" />
             </svg>
           </button>
         </div>
@@ -2147,58 +2663,96 @@ function PhaseChrome({
         <div className="pr-label text-white/30 mb-1">SCENE</div>
         <button
           className="pr-rail-link"
-          data-active={scene === "wheel" && !fxOpen && !packsOpen && !aboutOpen ? "true" : undefined}
-          onClick={() => { onScene("wheel"); onCloseAll(); }}
-        >Wheel</button>
+          data-active={
+            scene === "wheel" && !fxOpen && !packsOpen && !aboutOpen ? "true" : undefined
+          }
+          onClick={() => {
+            onScene("wheel");
+            onCloseAll();
+          }}
+        >
+          Wheel
+        </button>
         <button
           className="pr-rail-link"
-          data-active={scene === "pendulum" && !fxOpen && !packsOpen && !aboutOpen ? "true" : undefined}
-          onClick={() => { onScene("pendulum"); onCloseAll(); }}
-        >Pendulum</button>
+          data-active={
+            scene === "pendulum" && !fxOpen && !packsOpen && !aboutOpen ? "true" : undefined
+          }
+          onClick={() => {
+            onScene("pendulum");
+            onCloseAll();
+          }}
+        >
+          Pendulum
+        </button>
         <button
           className="pr-rail-link"
           data-active={scene === "bars" && !fxOpen && !packsOpen && !aboutOpen ? "true" : undefined}
-          onClick={() => { onScene("bars"); onCloseAll(); }}
-        >Bars</button>
+          onClick={() => {
+            onScene("bars");
+            onCloseAll();
+          }}
+        >
+          Bars
+        </button>
         <div className="pr-label text-white/30 mt-3 mb-1">PANELS</div>
         <button
           className="pr-rail-link"
           data-active={fxOpen ? "true" : undefined}
           onClick={() => onOpenPanel("fx")}
-        >FX</button>
+        >
+          FX
+        </button>
         <button
           className="pr-rail-link"
           data-active={packsOpen ? "true" : undefined}
           onClick={() => onOpenPanel("packs")}
-        >Packs</button>
+        >
+          Packs
+        </button>
         <button
           className="pr-rail-link"
           data-active={aboutOpen ? "true" : undefined}
           onClick={() => onOpenPanel("about")}
-        >About</button>
+        >
+          About
+        </button>
         <button
           className="pr-rail-link"
           data-active={visualsOpen ? "true" : undefined}
           onClick={() => onOpenPanel("visuals")}
-        >Visuals</button>
+        >
+          Visuals
+        </button>
         {isAdmin && (
-          <Link to="/dev" className="pr-rail-link">Dev</Link>
+          <Link to="/dev" className="pr-rail-link">
+            Dev
+          </Link>
         )}
         {!user ? (
-          <Link to="/auth" className="pr-rail-link">Sign in</Link>
+          <Link to="/auth" className="pr-rail-link">
+            Sign in
+          </Link>
         ) : (
-          <button className="pr-rail-link" onClick={async () => {
-            const { supabase } = await import("@/integrations/supabase/client");
-            await supabase.auth.signOut();
-          }}>Sign out</button>
+          <button
+            className="pr-rail-link"
+            onClick={async () => {
+              const { supabase } = await import("@/integrations/supabase/client");
+              await supabase.auth.signOut();
+            }}
+          >
+            Sign out
+          </button>
         )}
       </nav>
 
       {/* Bottom-left tagline */}
       <div className="absolute bottom-6 left-7 pointer-events-auto">
         <div className="pr-label text-white/55 leading-[1.7]">
-          GENERATIVE<br />
-          POLYRHYTHMIC<br />
+          GENERATIVE
+          <br />
+          POLYRHYTHMIC
+          <br />
           AMBIENT INSTRUMENT.
         </div>
       </div>
@@ -2213,8 +2767,18 @@ function PhaseChrome({
 }
 
 function ArtDock({
-  scene, playing, bpm, onTogglePlay, onAddNode, onAddLine, onClearLines, onBpm, fxOpen, onToggleFx,
-  packsOpen, onTogglePacks,
+  scene,
+  playing,
+  bpm,
+  onTogglePlay,
+  onAddNode,
+  onAddLine,
+  onClearLines,
+  onBpm,
+  fxOpen,
+  onToggleFx,
+  packsOpen,
+  onTogglePacks,
 }: {
   scene: SceneKind;
   playing: boolean;
@@ -2230,7 +2794,8 @@ function ArtDock({
   onTogglePacks: () => void;
 }) {
   const addLabel = scene === "wheel" ? "add circle" : scene === "pendulum" ? "add bob" : "add lane";
-  const clearLabel = scene === "wheel" ? "clear lines" : scene === "pendulum" ? "clear bobs" : "clear lanes";
+  const clearLabel =
+    scene === "wheel" ? "clear lines" : scene === "pendulum" ? "clear bobs" : "clear lanes";
   return (
     <div
       className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-xl bg-neutral-950/40 pr-mono"
@@ -2242,26 +2807,69 @@ function ArtDock({
     >
       <DockBtn label={playing ? "pause" : "play"} onClick={onTogglePlay} active={playing}>
         {playing ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="5" width="4" height="14" rx="1" />
+            <rect x="14" y="5" width="4" height="14" rx="1" />
+          </svg>
         ) : (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z" />
+          </svg>
         )}
       </DockBtn>
       <span className="h-4 w-px bg-white/10" />
       <DockBtn label={addLabel} onClick={onAddNode}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9" /><path d="M12 8v8M8 12h8" strokeLinecap="round" /></svg>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+        >
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 8v8M8 12h8" strokeLinecap="round" />
+        </svg>
       </DockBtn>
       {scene === "wheel" && (
         <DockBtn label="add line" onClick={onAddLine}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 20L20 4" /></svg>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          >
+            <path d="M4 20L20 4" />
+          </svg>
         </DockBtn>
       )}
       <DockBtn label={clearLabel} onClick={onClearLines}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M6 6l12 12M6 18L18 6" /></svg>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        >
+          <path d="M6 6l12 12M6 18L18 6" />
+        </svg>
       </DockBtn>
       <span className="h-4 w-px bg-white/10" />
       <DockBtn label="fx" onClick={onToggleFx} active={fxOpen}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        >
           <path d="M4 7h10M18 7h2" />
           <circle cx="16" cy="7" r="1.6" fill="currentColor" />
           <path d="M4 12h4M12 12h8" />
@@ -2271,7 +2879,16 @@ function ArtDock({
         </svg>
       </DockBtn>
       <DockBtn label="packs" onClick={onTogglePacks} active={packsOpen}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M4 8l8-4 8 4-8 4-8-4z" />
           <path d="M4 12l8 4 8-4" />
           <path d="M4 16l8 4 8-4" />
@@ -2281,7 +2898,9 @@ function ArtDock({
       <div className="flex items-center gap-3">
         <input
           type="range"
-          min={20} max={180} step={1}
+          min={20}
+          max={180}
+          step={1}
           value={bpm}
           onChange={(e) => onBpm(parseInt(e.target.value, 10))}
           className="pr-hairline-slider"
@@ -2289,7 +2908,8 @@ function ArtDock({
           title={`${bpm} bpm`}
         />
         <div className="pr-label tabular-nums text-white/55">
-          {bpm}<span className="ml-1 text-white/30">bpm</span>
+          {bpm}
+          <span className="ml-1 text-white/30">bpm</span>
         </div>
       </div>
     </div>
@@ -2297,7 +2917,10 @@ function ArtDock({
 }
 
 function DockBtn({
-  children, onClick, label, active,
+  children,
+  onClick,
+  label,
+  active,
 }: {
   children: ReactNode;
   onClick: () => void;
@@ -2324,7 +2947,9 @@ function DockBtn({
  * ============================================================ */
 
 function FxDrawer({
-  open, state, onChange,
+  open,
+  state,
+  onChange,
 }: {
   open: boolean;
   state: FxState;
@@ -2354,28 +2979,54 @@ function FxDrawer({
           bypass={state.reverb.bypass}
           onBypass={() => patch("reverb", { bypass: !state.reverb.bypass })}
           sliders={[
-            { label: "mix", value: state.reverb.mix, min: 0, max: 1, step: 0.01,
+            {
+              label: "mix",
+              value: state.reverb.mix,
+              min: 0,
+              max: 1,
+              step: 0.01,
               display: (v) => Math.round(v * 100).toString(),
-              onChange: (v) => patch("reverb", { mix: v }) },
-            { label: "size", value: state.reverb.size, min: 0.05, max: 1.2, step: 0.01,
+              onChange: (v) => patch("reverb", { mix: v }),
+            },
+            {
+              label: "size",
+              value: state.reverb.size,
+              min: 0.05,
+              max: 1.2,
+              step: 0.01,
               display: (v) => v.toFixed(2),
-              onChange: (v) => patch("reverb", { size: v }) },
+              onChange: (v) => patch("reverb", { size: v }),
+            },
           ]}
         />
         <FxChannel
           title="chorus"
           types={Object.keys(CHORUS_PRESETS) as ChorusType[]}
           activeType={state.chorus.type}
-          onType={(t) => patch("chorus", { type: t as ChorusType, rate: CHORUS_PRESETS[t as ChorusType].rate })}
+          onType={(t) =>
+            patch("chorus", { type: t as ChorusType, rate: CHORUS_PRESETS[t as ChorusType].rate })
+          }
           bypass={state.chorus.bypass}
           onBypass={() => patch("chorus", { bypass: !state.chorus.bypass })}
           sliders={[
-            { label: "mix", value: state.chorus.mix, min: 0, max: 1, step: 0.01,
+            {
+              label: "mix",
+              value: state.chorus.mix,
+              min: 0,
+              max: 1,
+              step: 0.01,
               display: (v) => Math.round(v * 100).toString(),
-              onChange: (v) => patch("chorus", { mix: v }) },
-            { label: "rate", value: state.chorus.rate, min: 0.1, max: 2, step: 0.01,
+              onChange: (v) => patch("chorus", { mix: v }),
+            },
+            {
+              label: "rate",
+              value: state.chorus.rate,
+              min: 0.1,
+              max: 2,
+              step: 0.01,
               display: (v) => `${v.toFixed(2)}hz`,
-              onChange: (v) => patch("chorus", { rate: v }) },
+              onChange: (v) => patch("chorus", { rate: v }),
+            },
           ]}
         />
         <FxChannel
@@ -2386,32 +3037,58 @@ function FxDrawer({
           bypass={state.grain.bypass}
           onBypass={() => patch("grain", { bypass: !state.grain.bypass })}
           sliders={[
-            { label: "mix", value: state.grain.mix, min: 0, max: 1, step: 0.01,
+            {
+              label: "mix",
+              value: state.grain.mix,
+              min: 0,
+              max: 1,
+              step: 0.01,
               display: (v) => Math.round(v * 100).toString(),
-              onChange: (v) => patch("grain", { mix: v }) },
-            { label: "density", value: state.grain.density, min: 0, max: 1, step: 0.01,
+              onChange: (v) => patch("grain", { mix: v }),
+            },
+            {
+              label: "density",
+              value: state.grain.density,
+              min: 0,
+              max: 1,
+              step: 0.01,
               display: (v) => Math.round(v * 100).toString(),
-              onChange: (v) => patch("grain", { density: v }) },
+              onChange: (v) => patch("grain", { density: v }),
+            },
           ]}
         />
         <FxChannel
           title="tone"
           types={Object.keys(TONE_PRESETS) as ToneType[]}
           activeType={state.tone.type}
-          onType={(t) => patch("tone", {
-            type: t as ToneType,
-            cutoff: TONE_PRESETS[t as ToneType].cutoff,
-            tilt: TONE_PRESETS[t as ToneType].tilt,
-          })}
+          onType={(t) =>
+            patch("tone", {
+              type: t as ToneType,
+              cutoff: TONE_PRESETS[t as ToneType].cutoff,
+              tilt: TONE_PRESETS[t as ToneType].tilt,
+            })
+          }
           bypass={state.tone.bypass}
           onBypass={() => patch("tone", { bypass: !state.tone.bypass })}
           sliders={[
-            { label: "cutoff", value: state.tone.cutoff, min: 200, max: 8000, step: 10,
+            {
+              label: "cutoff",
+              value: state.tone.cutoff,
+              min: 200,
+              max: 8000,
+              step: 10,
               display: (v) => `${(v / 1000).toFixed(1)}k`,
-              onChange: (v) => patch("tone", { cutoff: v }) },
-            { label: "tilt", value: state.tone.tilt, min: -8, max: 8, step: 0.1,
+              onChange: (v) => patch("tone", { cutoff: v }),
+            },
+            {
+              label: "tilt",
+              value: state.tone.tilt,
+              min: -8,
+              max: 8,
+              step: 0.1,
               display: (v) => `${v > 0 ? "+" : ""}${v.toFixed(1)}`,
-              onChange: (v) => patch("tone", { tilt: v }) },
+              onChange: (v) => patch("tone", { tilt: v }),
+            },
           ]}
         />
       </div>
@@ -2421,13 +3098,22 @@ function FxDrawer({
 
 type SliderSpec = {
   label: string;
-  value: number; min: number; max: number; step: number;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
   display: (v: number) => string;
   onChange: (v: number) => void;
 };
 
 function FxChannel({
-  title, types, activeType, onType, bypass, onBypass, sliders,
+  title,
+  types,
+  activeType,
+  onType,
+  bypass,
+  onBypass,
+  sliders,
 }: {
   title: string;
   types: string[];
@@ -2478,7 +3164,9 @@ function FxChannel({
             </div>
             <input
               type="range"
-              min={s.min} max={s.max} step={s.step}
+              min={s.min}
+              max={s.max}
+              step={s.step}
               value={s.value}
               onChange={(e) => s.onChange(parseFloat(e.target.value))}
               className="pr-hairline-slider w-full"
@@ -2494,7 +3182,11 @@ function FxChannel({
  * ============================================================ */
 
 function PacksDrawer({
-  open, packs, selected, onSelect, onAudition,
+  open,
+  packs,
+  selected,
+  onSelect,
+  onAudition,
 }: {
   open: boolean;
   packs: RuntimePack[];
@@ -2546,7 +3238,9 @@ function PacksDrawer({
                 <div className="text-[12px] tracking-[0.22em] text-white/90">{pack.name}</div>
                 <div className="flex items-center gap-1.5">
                   {pack.kind === "custom" && (
-                    <span className="text-[8px] tracking-[0.22em] uppercase text-white/40">user</span>
+                    <span className="text-[8px] tracking-[0.22em] uppercase text-white/40">
+                      user
+                    </span>
                   )}
                   <span
                     className="h-1.5 w-1.5 rounded-full"
@@ -2562,7 +3256,10 @@ function PacksDrawer({
                 {slotNames.map(({ name, idx }) => (
                   <div
                     key={idx}
-                    onMouseEnter={(e) => { e.stopPropagation(); onAudition(pack, idx); }}
+                    onMouseEnter={(e) => {
+                      e.stopPropagation();
+                      onAudition(pack, idx);
+                    }}
                     className="text-[9.5px] tracking-[0.08em] uppercase px-1.5 py-1 rounded-sm text-white/55 bg-white/[0.03] hover:bg-white/[0.09] hover:text-white/90 cursor-pointer truncate"
                     title={name}
                   >
@@ -2587,23 +3284,19 @@ function AboutDrawer({ open, onClose }: { open: boolean; onClose: () => void }) 
   const sections: { label: string; body: string }[] = [
     {
       label: "concept",
-      body:
-        "Phase is a generative polyrhythmic instrument. Concentric rings rotate at independent rates; whenever a ring crosses a radial line, a note sounds. Compositions emerge from the slow drift of mathematics into and out of phase.",
+      body: "Phase is a generative polyrhythmic instrument. Concentric rings rotate at independent rates; whenever a ring crosses a radial line, a note sounds. Compositions emerge from the slow drift of mathematics into and out of phase.",
     },
     {
       label: "engine",
-      body:
-        "All sound is synthesised live in the browser through the Web Audio API — additive partials, FM operators and filtered noise routed through reverb, chorus, grain and tone. No samples. No network. Just numbers becoming air.",
+      body: "All sound is synthesised live in the browser through the Web Audio API — additive partials, FM operators and filtered noise routed through reverb, chorus, grain and tone. No samples. No network. Just numbers becoming air.",
     },
     {
       label: "interaction",
-      body:
-        "Click the canvas to add rings and lines. Hover any ring to inspect its period. Use the dock to load a sound pack, sculpt the FX chain or set the project tempo. Hold space to pause time.",
+      body: "Click the canvas to add rings and lines. Hover any ring to inspect its period. Use the dock to load a sound pack, sculpt the FX chain or set the project tempo. Hold space to pause time.",
     },
     {
       label: "credits",
-      body:
-        "Designed and engineered as a study in ambient interfaces. Typography in JetBrains Mono. Colour space in OKLCH. Built with TanStack Start.",
+      body: "Designed and engineered as a study in ambient interfaces. Typography in JetBrains Mono. Colour space in OKLCH. Built with TanStack Start.",
     },
   ];
   return (
@@ -2636,7 +3329,9 @@ function AboutDrawer({ open, onClose }: { open: boolean; onClose: () => void }) 
         ))}
         <div className="flex items-center justify-between pt-2 border-t border-white/[0.05]">
           <span className="text-[9px] tracking-[0.22em] uppercase text-white/35">v 0.4 · 2026</span>
-          <span className="text-[9px] tracking-[0.22em] uppercase text-white/35">© phase, inc.</span>
+          <span className="text-[9px] tracking-[0.22em] uppercase text-white/35">
+            © phase, inc.
+          </span>
         </div>
       </div>
     </div>
@@ -2747,8 +3442,8 @@ function VisualsDrawer({ open }: { open: boolean }) {
           </div>
 
           <p className="text-[10px] leading-[1.55] text-white/40 mt-1">
-            Subtle WebGL field that breathes behind everything. Cursor brightens it locally;
-            every triggered note blooms a quiet flash at its position.
+            Subtle WebGL field that breathes behind everything. Cursor brightens it locally; every
+            triggered note blooms a quiet flash at its position.
           </p>
         </div>
       </div>

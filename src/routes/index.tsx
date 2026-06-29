@@ -889,6 +889,55 @@ function PhaseApp() {
   const lastHoverRef = useRef<string | null>(null);
   const [hoverRing, setHoverRing] = useState<string | null>(null);
 
+  /* ---- Phase-Zero scheduler binding ---------------------------------
+   * The scheduler ticks on its own (25 ms setInterval) and pulls events
+   * via `activeScene.eventsIn(t0, t1)`. We re-bind whenever the active
+   * scene changes; legacy scenes (no `eventsIn`) leave the scheduler
+   * dormant so the imperative `dispatchTriggers` path keeps owning audio.
+   * --------------------------------------------------------------- */
+  useEffect(() => {
+    engineScheduler.start();
+    return () => engineScheduler.stop();
+  }, []);
+  useEffect(() => {
+    const a = audioRef.current;
+    const e = engineRef.current;
+    if (!a) {
+      engineScheduler.setActive(null);
+      return;
+    }
+    const bind = <S,>(impl: import("@/lib/engine/sceneTypes").Scene<S>, getter: () => S | null) => {
+      const st = getter();
+      if (!st || !impl.eventsIn) {
+        engineScheduler.setActive(null);
+        return;
+      }
+      engineScheduler.setActive({
+        scene: impl as unknown as import("@/lib/engine/sceneTypes").Scene<unknown>,
+        state: st,
+        globals: () => {
+          const k = knobsRef.current;
+          const c = canvasRef.current;
+          return {
+            W: c?.clientWidth ?? 0,
+            H: c?.clientHeight ?? 0,
+            bpm: bpmRef.current,
+            speed: k.speed,
+            density: k.multiply,
+            pitchSemis: k.pitch,
+            audioNow: a.ctx.currentTime,
+            globalTime: engineClock.t(),
+          };
+        },
+        audioCtx: a.ctx,
+        audioDest: a.preFx,
+        pack: () => packRef.current,
+      });
+    };
+    if (scene === "stringNet") bind(stringNetworkScene, () => e.stringNet);
+    else engineScheduler.setActive(null);
+  }, [scene, playing, topo]);
+
   /* ---- Session URL: share + restore ---- */
   const buildSessionState = useCallback(
     (): SessionState => ({

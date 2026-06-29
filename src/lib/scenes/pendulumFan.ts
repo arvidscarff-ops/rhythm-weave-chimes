@@ -63,6 +63,8 @@ type Strand = {
    * visual flash without per-frame mutation.
    */
   lastFireT: number;
+  /** Cached velocity for events from this strand (fast strand → louder). */
+  velocityBase: number;
 };
 
 export type PendulumFanState = {
@@ -163,7 +165,7 @@ export const pendulumFanScene: Scene<PendulumFanState> = {
           x: tx,
           y: ty,
           hue: s.hue,
-          velocity: 0.75,
+          velocity: s.velocityBase,
         });
       }
     }

@@ -212,6 +212,28 @@ export const radialResonatorScene: Scene<RadialResonatorState> = {
     ctx.save();
     ctx.globalCompositeOperation = "screen";
 
+    // Static radial scaffolding: one faint spoke per note from center
+    // to Rmax, mirroring the polygon-outline scaffolding in the
+    // Metatron Lattice / Fractal Nebula scenes.
+    ctx.lineWidth = 0.5;
+    for (const n of state.notes) {
+      const cosT = Math.cos(n.theta);
+      const sinT = Math.sin(n.theta);
+      const hueDeg = (n.hue * 360) % 360;
+      ctx.strokeStyle = `oklch(0.78 0.08 ${hueDeg} / 0.22)`;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + cosT * Rmax, cy + sinT * Rmax);
+      ctx.stroke();
+    }
+
+    // Outer ring (Rmax boundary) — soft cyan, matches lattice palette.
+    ctx.lineWidth = 0.5;
+    ctx.strokeStyle = "oklch(0.78 0.06 220 / 0.18)";
+    ctx.beginPath();
+    ctx.arc(cx, cy, Rmax, 0, Math.PI * 2);
+    ctx.stroke();
+
     // Stroke a short ray-aligned segment from prev-r to current-r
     // for each note — accumulates into a fading spoke pattern.
     let minR = 1;

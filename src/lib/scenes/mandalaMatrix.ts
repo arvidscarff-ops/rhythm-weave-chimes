@@ -22,19 +22,22 @@
  */
 
 import type { Scene, SceneGlobals, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
+import { speedCoeffs, phaseOffsets } from "@/lib/engine/polyrhythm";
 
 const ROOT_HZ = 220;
 const freqOf = (s: number) => ROOT_HZ * Math.pow(2, s / 12);
 const SCALE_SEMIS = [0, 2, 3, 5, 7, 10, 12, 14, 15, 17, 19, 22];
-const FIB_RATIOS = [2, 3, 5, 8, 13];
 const COOLDOWN = 0.12;
 const NUM_SPOKES = 6;
 
 type Note = {
   /** Spoke index 0..5 → angle = i · (2π / 6). */
   spoke: number;
-  /** Period of the cosine sweep (scene seconds). */
+  /** Period of the cosine sweep (scene seconds). Derived from the
+   *  shared prime/φ velocity distribution. */
   period: number;
+  /** Golden-ratio phase offset in [0, 1) (cosine cycles). */
+  phaseOffset: number;
   slot: VoiceSlotIndex;
   pitchSemis: number;
   hue: number;
@@ -64,39 +67,38 @@ function basePeriod(bpm: number) {
 function buildNotes(density: number, bpm: number): Note[] {
   const N = noteCount(density);
   const base = basePeriod(bpm);
-  // Fastest period across the set, for velocity normalization.
-  let minPeriod = Infinity;
-  let maxPeriod = -Infinity;
-  const periods: number[] = [];
+  // Prime/φ-distributed coefficients ∈ (0, 1]. Period_i = base / coeff_i
+  // so higher coeff = faster note. Coefficients are irrational-ish, so no
+  // two notes share a rational period → polyrhythmic meander.
+  const coeffs = speedCoeffs(N);
+  const offsets = phaseOffsets(N);
+  const notes: Note[] = new Array(N);
   for (let i = 0; i < N; i++) {
-    const r = FIB_RATIOS[i % FIB_RATIOS.length];
-    const T = base * r;
-    periods.push(T);
-    if (T < minPeriod) minPeriod = T;
-    if (T > maxPeriod) maxPeriod = T;
-  }
-  const span = Math.max(1e-6, maxPeriod - minPeriod);
-  const notes: Note[] = [];
-  for (let i = 0; i < N; i++) {
-    const T = periods[i];
-    // Fast (small T) → louder. Map T ∈ [minPeriod, maxPeriod] → vel ∈ [0.95, 0.55].
-    const fastNorm = 1 - (T - minPeriod) / span;
-    notes.push({
+    const c = coeffs[i];
+    const T = base / Math.max(1e-6, c);
+    notes[i] = {
       spoke: i % NUM_SPOKES,
       period: T,
+      phaseOffset: offsets[i],
       slot: (i % 6) as VoiceSlotIndex,
       pitchSemis: SCALE_SEMIS[i % SCALE_SEMIS.length],
       hue: (i / N + 0.55) % 1,
       lastFireT: -Infinity,
-      velocityBase: 0.55 + fastNorm * 0.4,
-    });
+      // Faster coefficient → louder.
+      velocityBase: 0.55 + c * 0.4,
+    };
   }
   return notes;
 }
 
-/** u(t) = 0.5 - 0.5·cos(2π·t/T). */
-function spokeU(period: number, t: number) {
-  return 0.5 - 0.5 * Math.cos((2 * Math.PI * t) / period);
+/**
+ * u(t) with a prime/φ phase offset folded into the cosine argument.
+ * At t ≤ 0 we clamp u = 0 for every note so the universal Big Bang
+ * chord still ignites from the absolute center, regardless of offset.
+ */
+function spokeU(period: number, phaseOffset: number, t: number) {
+  if (t <= 0) return 0;
+  return 0.5 - 0.5 * Math.cos(2 * Math.PI * (t / period + phaseOffset));
 }
 
 export const mandalaMatrixScene: Scene<MandalaMatrixState> = {
@@ -132,19 +134,27 @@ export const mandalaMatrixScene: Scene<MandalaMatrixState> = {
     for (const n of state.notes) {
       const T = n.period;
       if (T <= 0) continue;
-      // u = 0 at t = k·T (center).  u = 1 at t = (k + 0.5)·T (vertex).
-      // Enumerate both anchor families inside [t0, t1).
+      // u(t) = 0.5 - 0.5·cos(2π·(t/T + φ))
+      //   center  (u=0) → t/T + φ = k        ⇒ t = (k - φ)·T
+      //   vertex  (u=1) → t/T + φ = k + 0.5  ⇒ t = (k + 0.5 - φ)·T
+      // Enumerate both anchor families inside [t0, t1). The t=0 Big Bang
+      // is preserved by always injecting tEv = 0 when it falls in the
+      // window — `spokeU` clamps to 0 there irrespective of φ.
       const hits: { tEv: number; outer: boolean }[] = [];
       const collect = (offset: number, outer: boolean) => {
-        const firstK = Math.ceil((t0 - offset * T) / T);
-        const lastK = Math.floor((t1 - offset * T) / T);
+        // Solve k·T + (offset - φ)·T ∈ [t0, t1).
+        const shift = (offset - n.phaseOffset) * T;
+        const firstK = Math.ceil((t0 - shift) / T);
+        const lastK = Math.floor((t1 - shift) / T);
         for (let k = firstK; k <= lastK; k++) {
-          const tEv = (k + offset) * T;
+          const tEv = k * T + shift;
           if (tEv >= t0 && tEv < t1) hits.push({ tEv, outer });
         }
       };
       collect(0, false); // center crossings
       collect(0.5, true); // outer-vertex crossings
+      // Big Bang anchor: every note fires from the center at t=0.
+      if (t0 <= 0 && 0 < t1) hits.push({ tEv: 0, outer: false });
       hits.sort((a, b) => a.tEv - b.tEv);
 
       for (const { tEv, outer } of hits) {
@@ -225,7 +235,7 @@ export const mandalaMatrixScene: Scene<MandalaMatrixState> = {
 
     // Notes — orbs on their spokes.
     for (const n of state.notes) {
-      const u = spokeU(n.period, t);
+      const u = spokeU(n.period, n.phaseOffset, t);
       const angle = (n.spoke / NUM_SPOKES) * Math.PI * 2 - Math.PI / 2;
       const r = R * u;
       const x = cx + Math.cos(angle) * r;

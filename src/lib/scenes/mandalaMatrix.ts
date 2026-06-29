@@ -100,7 +100,7 @@ function spokeU(period: number, t: number) {
 }
 
 export const mandalaMatrixScene: Scene<MandalaMatrixState> = {
-  id: "mandalaMatrix" as never,
+  id: "mandalaMatrix",
 
   init(g) {
     return {

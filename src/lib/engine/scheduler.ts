@@ -18,6 +18,7 @@ import { triggerPackVoice, BUILTIN_RUNTIME_PACKS, type RuntimePack } from "@/lib
 import type { PackId } from "@/lib/sound/packs";
 import { spawnInkBleed } from "@/lib/visuals/inkBleed";
 import type { Scene, SceneGlobals, TriggerEvent } from "./sceneTypes";
+import { applyOverlay } from "./sceneOverlay";
 
 /** How often the scheduler wakes (ms). */
 const TICK_MS = 25;
@@ -76,7 +77,8 @@ function schedulerTick(): void {
 
   const g = globals();
 
-  const events = scene.eventsIn(st, lastScheduledT, horizon, g);
+  const rawEvents = scene.eventsIn(st, lastScheduledT, horizon, g);
+  const events = rawEvents.map(applyOverlay);
   const whenHorizon = engineClock.sceneToAudioTime(horizon);
   // Compute each event's audio time, then apply the unison guard.
   const scheduled: { ev: TriggerEvent; when: number }[] = events.map((ev) => ({

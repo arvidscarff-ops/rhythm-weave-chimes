@@ -11,20 +11,20 @@
  */
 
 import type { Scene, SceneGlobals, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
+import { speedCoeffs, phaseOffsets } from "@/lib/engine/polyrhythm";
 
 /**
- * Modulation-period multipliers, sorted ascending so that strand index 0
- * (the leftmost angle) gets the smallest ratio = fastest oscillation.
- * Universal rule: fast notes on the left, slow on the right.
- * If N exceeds RATIOS.length we extrapolate linearly instead of wrapping
- * (which would put a fast ratio on the rightmost strand).
+ * Strand ratios are derived from the shared prime/φ distribution.
+ * Coefficients are sorted descending so strand 0 (leftmost) is the
+ * fastest oscillator (smallest period multiplier) — preserving the
+ * universal "fast notes on the left, slow on the right" rule.
+ * Range is compressed by a soft exponent so the slowest strand at
+ * high N still moves noticeably on screen.
  */
-const RATIOS = [1.0, 1.06, 1.13, 1.21, 1.3, 1.4, 1.51, 1.63, 1.76, 1.9, 2.05, 2.21];
-function ratioAt(i: number): number {
-  if (i < RATIOS.length) return RATIOS[i];
-  const last = RATIOS[RATIOS.length - 1];
-  const step = RATIOS[RATIOS.length - 1] - RATIOS[RATIOS.length - 2];
-  return last + step * (i - (RATIOS.length - 1));
+function strandRatios(N: number): number[] {
+  const coeffs = speedCoeffs(N).slice().sort((a, b) => b - a);
+  // ratio = 1 / coeff^0.6 — softens the dynamic range from ~18× to ~6×.
+  return coeffs.map((c) => 1 / Math.pow(Math.max(1e-3, c), 0.6));
 }
 /** Map dock density (2..12) → strand count (5..14). */
 function strandCount(density: number) {
@@ -50,8 +50,11 @@ type Strand = {
   /** Modulation period multiplier (Galileo ratio). */
   ratio: number;
   /**
-   * Phase-Zero offset (in θ-units, 0..1). Defaults to {@link RISING_PHASE}
-   * so every strand sits ON its target ring at t = 0 → universal Big Bang.
+   * Phase-Zero offset (in θ-units, 0..1). Set to {@link RISING_PHASE}
+   * plus a small golden-ratio perturbation so every strand starts
+   * visually NEAR its target ring at t=0 (the explicit t=0 trigger in
+   * `eventsIn` still fires the universal Big Bang chord), then phases
+   * out of unison immediately afterward.
    */
   phase0: number;
   slot: VoiceSlotIndex;
@@ -86,16 +89,20 @@ function strandD(s: Strand, t: number, period: number) {
 
 function makeStrands(density: number): Strand[] {
   const N = strandCount(density);
+  const ratios = strandRatios(N);
+  // Compressed golden offsets in (-0.05, +0.05) θ-units → tiny visual
+  // perturbation off the ring at t=0, big enough to desync over time.
+  const offsets = phaseOffsets(N).map((o) => (o - 0.5) * 0.1);
   const out: Strand[] = [];
   for (let i = 0; i < N; i++) {
     const angle = ((i - (N - 1) / 2) / (N - 1)) * (Math.PI * 0.55);
-    const ratio = ratioAt(i);
+    const ratio = ratios[i];
     // Faster strand → louder ink-bleed. Normalize 1/ratio across [1/maxRatio, 1].
     const fastNorm = 1 / ratio; // ∈ (0, 1]; ratio≥1 always
     out.push({
       angle,
       ratio,
-      phase0: RISING_PHASE,
+      phase0: RISING_PHASE + offsets[i],
       slot: (i % 6) as VoiceSlotIndex,
       pitchSemis: 12 - i * 2, // leftmost = highest pitch (matches fast = left)
       hue: 0.55 + (i / N) * 0.4,
@@ -151,6 +158,9 @@ export const pendulumFanScene: Scene<PendulumFanState> = {
       const thetas: number[] = [];
       collect(RISING_PHASE, thetas);
       collect(FALLING_PHASE, thetas);
+      // Big Bang anchor: every strand fires from its ring at t=0 even
+      // when a small phase offset moved its analytic crossing to t≠0.
+      if (t0 <= 0 && 0 < t1) thetas.push(s.phase0 + 0 / T);
       thetas.sort((p, q) => p - q);
 
       for (const theta of thetas) {

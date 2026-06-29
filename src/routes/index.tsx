@@ -1487,7 +1487,12 @@ function PhaseApp() {
     if (a.ctx.state === "suspended") await a.ctx.resume();
     if (playingRef.current) resetComposerSources();
     if (playingRef.current) engineClock.pause();
-    else engineClock.resume();
+    else {
+      // Always start a play session from the Big Bang formation so every
+      // note rests on its trigger point and fires together on click.
+      engineClock.resetPhaseZero();
+      engineClock.resume();
+    }
     engineScheduler.resync();
     setPlaying((p) => !p);
   };
@@ -1695,6 +1700,7 @@ function PhaseApp() {
         onScene={setScene}
         multiply={knobs.multiply}
         onMultiply={(n) => setKnobs((k) => ({ ...k, multiply: n }))}
+        notesCount={resolveNotesCount(scene, knobs.multiply)}
         bpm={bpm}
         onBpm={setBpm}
         speed={knobs.speed}

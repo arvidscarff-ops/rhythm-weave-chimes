@@ -1320,7 +1320,8 @@ function PhaseApp() {
         decayBarsFlashes(e.bars, dt);
       }
       drawBarsScene(ctx2d, W, H, e.bars, hoverRingIdRef.current);
-    } else if (scene === "stringNet") {
+    } else {
+      // Engine scenes (Scene interface). New scenes share one dispatch path.
       const k = knobsRef.current;
       const globals = {
         W,
@@ -1331,20 +1332,41 @@ function PhaseApp() {
         pitchSemis: k.pitch,
         audioNow: a ? a.ctx.currentTime : 0,
       };
-      if (!e.stringNet) e.stringNet = stringNetworkScene.init(globals);
-      if (playing && a) {
-        const events = stringNetworkScene.update(e.stringNet, dt, globals);
-        dispatchTriggers(events, {
-          audioCtx: a.ctx,
-          audioDest: a.preFx,
-          pack: packRef.current,
-          audioNow: a.ctx.currentTime,
-        });
-      } else if (e.stringNet) {
-        // keep visuals drifting even when paused
-        stringNetworkScene.update(e.stringNet, dt * 0.25, { ...globals, speed: 0 });
+      const runScene = <S,>(
+        impl: typeof stringNetworkScene extends import("@/lib/engine/sceneTypes").Scene<infer _>
+          ? import("@/lib/engine/sceneTypes").Scene<S>
+          : never,
+        getState: () => S | null,
+        setState: (s: S) => void,
+      ) => {
+        let st = getState();
+        if (!st) {
+          st = impl.init(globals);
+          setState(st);
+        }
+        if (playing && a) {
+          const events = impl.update(st, dt, globals);
+          dispatchTriggers(events, {
+            audioCtx: a.ctx,
+            audioDest: a.preFx,
+            pack: packRef.current,
+            audioNow: a.ctx.currentTime,
+          });
+        } else {
+          // keep visuals drifting even when paused (no audio events)
+          impl.update(st, dt * 0.25, { ...globals, speed: 0 });
+        }
+        impl.draw(st, ctx2d, globals);
+      };
+      if (scene === "stringNet") {
+        runScene(stringNetworkScene, () => e.stringNet, (s) => (e.stringNet = s));
+      } else if (scene === "pendulumFan") {
+        runScene(pendulumFanScene, () => e.pendulumFan, (s) => (e.pendulumFan = s));
+      } else if (scene === "spiralArp") {
+        runScene(spiralArpScene, () => e.spiralArp, (s) => (e.spiralArp = s));
+      } else if (scene === "radialSweep") {
+        runScene(radialSweepScene, () => e.radialSweep, (s) => (e.radialSweep = s));
       }
-      stringNetworkScene.draw(e.stringNet, ctx2d, globals);
     }
     updateBursts(dt);
     drawBursts(ctx2d);

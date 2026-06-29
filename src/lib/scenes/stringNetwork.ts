@@ -49,6 +49,14 @@ type Particle = {
   pitchSemis: number;
   /** Hue 0..1. */
   hue: number;
+  /**
+   * Scene-time of most recent endpoint-wrap trigger.
+   * Drives per-particle refractory (parity with pendulumFan + spiralArp +
+   * radialSweep) and visual flash decay.
+   */
+  lastFireT: number;
+  /** Normalized speed (0..1) across the particle set — for velocity + draw. */
+  speedNorm: number;
 };
 
 type StringEdge = {
@@ -116,6 +124,9 @@ function makeStrings(n: number): StringEdge[] {
   return out;
 }
 
+/** Refractory window per particle (s). */
+const PARTICLE_COOLDOWN = 0.09;
+
 function makeParticles(strings: StringEdge[]): Particle[] {
   // Two particles per string, opposing directions, harmonic rates.
   // Phase-Zero: every particle starts at t0 = 0 so they all hit the
@@ -131,6 +142,8 @@ function makeParticles(strings: StringEdge[]): Particle[] {
       slot: slots[(idx * 2) % slots.length],
       pitchSemis: [0, 5, 7, 10, 12, 17][idx % 6],
       hue: 0.52 + idx * 0.07,
+      lastFireT: -Infinity,
+      speedNorm: 0,
     });
     out.push({
       stringIdx: idx,
@@ -139,9 +152,48 @@ function makeParticles(strings: StringEdge[]): Particle[] {
       slot: slots[(idx * 2 + 1) % slots.length],
       pitchSemis: [-5, -3, 0, 3, 7, 12][idx % 6],
       hue: 0.86 - idx * 0.05,
+      lastFireT: -Infinity,
+      speedNorm: 0,
     });
   });
   return out;
+}
+
+/**
+ * Apply universal "fast → left, slow → right" rule.
+ * Re-bind each particle to a string so that the highest-|rate| particles
+ * ride the strings whose midpoint X (at scene-time 0) is smallest.
+ * Two particles per string (opposing directions); leftmost string takes
+ * the two highest-|rate| particles, next pair to next-leftmost, etc.
+ * Also computes `speedNorm` for velocity + draw scaling.
+ */
+function bindParticlesLeftToRight(
+  particles: Particle[],
+  strings: StringEdge[],
+  anchors: Anchor[],
+  W: number,
+  H: number,
+): void {
+  // Midpoint X of each string at t=0.
+  const midX = strings.map((s) => {
+    const A = anchorAt(anchors[s.a], 0, W, H);
+    const B = anchorAt(anchors[s.b], 0, W, H);
+    return (A.x + B.x) * 0.5;
+  });
+  // Ascending by midX → leftmost first.
+  const stringOrder = strings.map((_, i) => i).sort((a, b) => midX[a] - midX[b]);
+  // Descending by |rate| → fastest first.
+  const particleOrder = particles.map((_, i) => i).sort(
+    (a, b) => Math.abs(particles[b].rate) - Math.abs(particles[a].rate),
+  );
+  const maxAbs = Math.max(...particles.map((p) => Math.abs(p.rate))) || 1;
+  for (let k = 0; k < particleOrder.length; k++) {
+    const pIdx = particleOrder[k];
+    // pair k of particles → string at floor(k/2) in leftOrder
+    const sIdx = stringOrder[Math.floor(k / 2) % stringOrder.length];
+    particles[pIdx].stringIdx = sIdx;
+    particles[pIdx].speedNorm = Math.abs(particles[pIdx].rate) / maxAbs;
+  }
 }
 
 /** Pure: anchor pixel position at scene-time t. */
@@ -181,6 +233,7 @@ export const stringNetworkScene: Scene<StringNetState> = {
     const anchors = makeAnchors(anchorCount(density));
     const strings = makeStrings(anchors.length);
     const particles = makeParticles(strings);
+    bindParticlesLeftToRight(particles, strings, anchors, _g.W, _g.H);
     return {
       anchors,
       strings,
@@ -201,6 +254,7 @@ export const stringNetworkScene: Scene<StringNetState> = {
       state.anchors = makeAnchors(targetN);
       state.strings = makeStrings(targetN);
       state.particles = makeParticles(state.strings);
+      bindParticlesLeftToRight(state.particles, state.strings, state.anchors, g.W, g.H);
       state.density = g.density;
       state.scratch.anchors = state.anchors.map(() => ({ x: 0, y: 0 }));
       state.scratch.particles = state.particles.map(() => ({ x: 0, y: 0, trail: [] }));

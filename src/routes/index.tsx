@@ -34,7 +34,6 @@ import { spiralArpScene, type SpiralArpState } from "@/lib/scenes/spiralArp";
 import { radialSweepScene, type RadialSweepState } from "@/lib/scenes/radialSweep";
 import { engineClock } from "@/lib/engine/clock";
 import { engineScheduler } from "@/lib/engine/scheduler";
-import { dispatchTriggers } from "@/lib/engine/triggerBus";
 import {
   composerAdvance,
   resetComposerSources,

@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { NeuralNoise } from "../components/ui/neural-noise";
+import { Toaster } from "@/components/ui/sonner";
 import {
   loadNeuralSettings,
   presetById,
@@ -153,6 +154,7 @@ function RootComponent() {
       <NeuralNoise zIndex={2} blendMode="plus-lighter" />
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
+      <Toaster />
     </QueryClientProvider>
   );
 }

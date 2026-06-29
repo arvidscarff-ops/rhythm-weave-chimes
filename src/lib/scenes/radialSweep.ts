@@ -40,6 +40,26 @@ export type RadialSweepState = {
   clock: number;
 };
 
+/** Map dock density (2..12) → target count (6..16). */
+function targetCount(density: number) {
+  return Math.max(6, Math.min(16, Math.round(6 + (density - 2) * 1)));
+}
+
+function buildTargets(N: number): Target[] {
+  const out: Target[] = [];
+  for (let i = 0; i < N; i++) {
+    out.push({
+      angle: (i / N) * Math.PI * 2,
+      rNorm: 0.45 + (i % 3) * 0.18,
+      slot: (i % 6) as VoiceSlotIndex,
+      pitchSemis: SCALE_SEMIS[i % SCALE_SEMIS.length],
+      hue: 0.5 + (i / N) * 0.45,
+      flash: 0,
+    });
+  }
+  return out;
+}
+
 function armOmega(bpm: number) {
   // One full sweep ≈ 2 bars at 4/4.
   return (2 * Math.PI) / ((60 / Math.max(20, bpm)) * 8);
@@ -61,18 +81,7 @@ export const radialSweepScene: Scene<RadialSweepState> = {
   id: "radialSweep",
 
   init(_g) {
-    const N = 9;
-    const targets: Target[] = [];
-    for (let i = 0; i < N; i++) {
-      targets.push({
-        angle: (i / N) * Math.PI * 2,
-        rNorm: 0.45 + (i % 3) * 0.18,
-        slot: (i % 6) as VoiceSlotIndex,
-        pitchSemis: SCALE_SEMIS[i % SCALE_SEMIS.length],
-        hue: 0.5 + (i / N) * 0.45,
-        flash: 0,
-      });
-    }
+    const targets = buildTargets(targetCount(_g.density ?? 5));
     return {
       armAngle: 0,
       trailAngles: [],
@@ -84,6 +93,8 @@ export const radialSweepScene: Scene<RadialSweepState> = {
   },
 
   update(state, dt, g) {
+    const want = targetCount(g.density);
+    if (want !== state.targets.length) state.targets = buildTargets(want);
     state.clock += dt;
     state.nebula = Math.max(0, state.nebula - dt * 1.4);
     for (const t of state.targets) t.flash = Math.max(0, t.flash - dt * 2.2);

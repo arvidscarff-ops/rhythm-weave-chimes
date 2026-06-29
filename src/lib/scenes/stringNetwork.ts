@@ -66,6 +66,8 @@ export type StringNetState = {
   particles: Particle[];
   /** Seconds since scene started, for orbit phase. */
   clock: number;
+  /** Cached density to detect dock changes. */
+  density: number;
 };
 
 const ROOT_HZ = 220; // A3
@@ -73,13 +75,30 @@ function freqOf(semis: number) {
   return ROOT_HZ * Math.pow(2, semis / 12);
 }
 
-function makeAnchors(): Anchor[] {
-  // Triangle of anchors, each drifting on its own slow Lissajous.
-  return [
-    { cx: 0.5, cy: 0.28, ax: 0.06, ay: 0.04, wx: 0.18, wy: 0.27, px: 0,   py: 1.1, x: 0, y: 0 },
-    { cx: 0.28, cy: 0.7, ax: 0.05, ay: 0.05, wx: 0.21, wy: 0.16, px: 1.3, py: 0.4, x: 0, y: 0 },
-    { cx: 0.72, cy: 0.7, ax: 0.05, ay: 0.05, wx: 0.15, wy: 0.23, px: 2.1, py: 2.6, x: 0, y: 0 },
-  ];
+function makeAnchors(n: number): Anchor[] {
+  // Ring of n anchors around the canvas centroid, each on its own Lissajous.
+  const out: Anchor[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+    out.push({
+      cx: 0.5 + Math.cos(a) * 0.22,
+      cy: 0.5 + Math.sin(a) * 0.22,
+      ax: 0.05,
+      ay: 0.05,
+      wx: 0.14 + (i % 3) * 0.05,
+      wy: 0.19 + (i % 4) * 0.04,
+      px: i * 1.1,
+      py: i * 0.7 + 0.4,
+      x: 0,
+      y: 0,
+    });
+  }
+  return out;
+}
+
+/** Map dock density (2..12) → anchor count (3..6). */
+function anchorCount(density: number) {
+  return Math.max(3, Math.min(6, Math.round(3 + (density - 2) * 0.3)));
 }
 
 function makeStrings(n: number): StringEdge[] {
@@ -152,17 +171,27 @@ export const stringNetworkScene: Scene<StringNetState> = {
   id: "stringNet",
 
   init(_g) {
-    const anchors = makeAnchors();
+    const density = _g.density ?? 5;
+    const anchors = makeAnchors(anchorCount(density));
     const strings = makeStrings(anchors.length);
     return {
       anchors,
       strings,
       particles: makeParticles(strings),
       clock: 0,
+      density,
     };
   },
 
   update(state, dt, g) {
+    // Hot-reseed when dock density changes.
+    const targetN = anchorCount(g.density);
+    if (targetN !== state.anchors.length) {
+      state.anchors = makeAnchors(targetN);
+      state.strings = makeStrings(targetN);
+      state.particles = makeParticles(state.strings);
+      state.density = g.density;
+    }
     state.clock += dt;
     projectAnchors(state, g);
 

@@ -132,6 +132,7 @@ export function PhaseDock(p: Props) {
           multiply={p.multiply}
           onMultiply={p.onMultiply}
         />
+        <SceneChips scene={p.scene} onScene={p.onScene} />
         <FxMenu fx={p.fx} onFx={p.onFx} />
         <ComposeMenu composer={p.composer} onComposer={p.onComposer} />
         <PacksMenu packs={p.packs} packId={p.packId} onPackId={p.onPackId} />
@@ -181,6 +182,45 @@ export function PhaseDock(p: Props) {
 
 function Divider() {
   return <span className="mx-1 h-5 w-px bg-white/[0.08]" />;
+}
+
+/* =================== Engine scene chips =================== */
+const ENGINE_SCENES: { id: SceneKind; label: string; short: string }[] = [
+  { id: "stringNet", label: "String Network", short: "STR" },
+  { id: "pendulumFan", label: "Pendulum Fan", short: "PEN" },
+  { id: "spiralArp", label: "Spiral Arpeggiator", short: "SPI" },
+  { id: "radialSweep", label: "Radial Sweep", short: "RAD" },
+];
+
+function SceneChips({
+  scene,
+  onScene,
+}: {
+  scene: SceneKind;
+  onScene: (s: SceneKind) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 rounded-full bg-white/[0.03] p-0.5">
+      {ENGINE_SCENES.map((s) => {
+        const active = scene === s.id;
+        return (
+          <button
+            key={s.id}
+            onClick={() => onScene(s.id)}
+            title={s.label}
+            className={cn(
+              "rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] transition-all",
+              active
+                ? "bg-white/[0.10] text-foreground shadow-[0_0_18px_-6px_rgba(255,255,255,0.45)] ring-1 ring-white/15"
+                : "text-foreground/45 hover:text-foreground/80 hover:bg-white/[0.04]",
+            )}
+          >
+            {s.short}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function InlineSlider({

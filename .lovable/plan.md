@@ -1,45 +1,80 @@
-## Problem
+# Scene Expansion & Global Architecture Compliance
 
-On the first Play click, every scene already snaps to its Big Bang formation (each scene's `eventsIn` is written so the resting position at `t = 0` lies exactly on its trigger anchor — `RISING_PHASE` for pendulumFan, `angle 0` for radialSweep, `s = 0` for spiralArp, the t=0 string positions for stringNetwork). But the chord never plays: the user sees the notes start moving and only hear them when each one independently reaches its trigger point during its first cycle.
+## Status of the existing roadmap
 
-## Root cause
+Most of the scenes you describe are **already in the tree** and already on the Global Clock contract (`globalTime`, `sample`/`eventsIn`, no internal mutating clock):
 
-In `src/lib/engine/scheduler.ts`, `schedulerTick()` runs on a 25 ms interval. After `engineClock.resetPhaseZero()` + `engineScheduler.resync()`, the cursor `lastScheduledT` is set to `engineClock.t()` (= 0). By the time the first tick fires, `engineClock.t()` is already ≈ 0.025 s, so this line:
+| Roadmap scene        | Current file                        | State |
+|----------------------|-------------------------------------|-------|
+| Harmonic Pendulum    | `src/lib/scenes/pendulumFan.ts`     | Built, Phase-Zero compliant. Strands rest on their target ring at `t=0` (`phase0 = RISING_PHASE`) — Big Bang fires. |
+| Spiral Arpeggiator   | `src/lib/scenes/spiralArp.ts`       | Built, Phase-Zero compliant. |
+| Radial Sweep (Radar) | `src/lib/scenes/radialSweep.ts`     | Built, Phase-Zero compliant. |
+| Mandala Matrix       | — (not yet built)                   | **New work.** |
 
-```ts
-if (lastScheduledT < now) lastScheduledT = now;
-```
+The legacy "wheel / pendulum / bars" scenes still exist alongside the engine scenes and remain on the imperative path; they're not in your roadmap so I'll leave them untouched unless you say otherwise.
 
-bumps the cursor past 0 and the `eventsIn(0, ...)` window — which is the only window where the universal Big Bang events live — is never queried. The clamp exists to prevent dumping a backlog after long pauses, but it also kills the t=0 chord on every play.
+So this phase is really two things: (1) a quick **compliance audit pass** across the four engine scenes and the dispatch layer, and (2) **building Mandala Matrix** as a fifth engine scene.
 
-## Fix
+## 1. Compliance audit (no behavior changes unless a violation is found)
 
-Change the clamp in `schedulerTick()` so it only triggers when we are genuinely behind (more than one horizon stale), not on the normal first tick after `resync()`:
+Sweep each engine scene + shared layer and confirm:
 
-```ts
-if (now - lastScheduledT > HORIZON_S * 2) lastScheduledT = now;
-```
+- No `useState`/`useEffect`/local clock fields drive geometry. Geometry is `f(globalTime)`.
+- `sample(state, t, g)` is pure for draw (mutations limited to density reseed / cached flash markers used only for visuals).
+- `eventsIn(state, t0, t1, g)` is deterministic and includes the `t=0` boundary so the Big Bang chord fires on first Play.
+- Audio is routed exclusively through `triggerPackVoice` via `engineScheduler` (no direct `ctx.createOscillator`, no `dispatchTriggers` shortcut).
+- Visual triggers go through `spawnInkBleed` only — no hard flashes, no full-canvas alpha sweeps. The recent `inkBleed` coalesce-damp stays.
+- The `flashBus` Big Bang effect remains the toned-down version.
 
-That preserves the cursor set by `resync()` for the first tick, so `eventsIn(0, ~0.145)` runs and every scene's Big Bang events are scheduled. After the first tick, `lastScheduledT` advances normally to `horizon` and steady-state behavior is unchanged.
+Deliverable: a short written audit in `.lovable/plan.md`. Code edits only where a violation is found.
 
-Also tighten the audio target so the Big Bang chord lands at the user's click rather than `+HORIZON_S` later: schedule events whose scene-time falls within the first window at `max(audioCtx.currentTime, sceneToAudioTime(eventSceneTime))`. Since `eventsIn` currently returns events without per-event scene-time, use `engineClock.sceneToAudioTime(Math.max(lastScheduledT, 0))` for the first tick's batch — i.e. schedule them at "now" in audio time — and keep the existing `horizon` target for subsequent ticks. This is a minimal change to `schedulerTick` and does not touch the scene contract.
+## 2. New scene — Mandala Matrix
 
-## Scene audit (no changes required)
+New file `src/lib/scenes/mandalaMatrix.ts` implementing the `Scene<MandalaState>` contract.
 
-Verified each scene already places its rest formation on the trigger anchor:
+### Geometry
 
-- `pendulumFan.ts` — `phase0 = RISING_PHASE` for every strand → θ(0) hits the trigger ring.
-- `radialSweep.ts` — arm at angle 0 at t=0, target placed at angle 0.
-- `spiralArp.ts` — all playheads start at outer end (s=0), bucket 0 aligns to t=0.
-- `stringNetwork.ts` — particles bound left-to-right and seeded on the "B" anchor at t=0.
+- Hexagram skeleton: 6 outer vertices on a circle of radius `R = min(W,H) * 0.36`, centered at canvas mid. Draw the 6 "spokes" (center↔vertex) and the 6 chord edges that form the two overlapping triangles — these are the structural paths.
+- 12 structural path segments total. Each note is assigned to one segment and travels along it.
 
-So fixing the scheduler is sufficient to make every scene fire its full chord on first play.
+### Motion (pure `f(globalTime)`)
 
-## Files touched
+- Each note `i` has a Fibonacci ratio `r_i ∈ {2, 3, 5, 8, 13}` (cycled by `i % 5`).
+- Period for note `i`: `T_i = basePeriod(bpm) * r_i`.
+- Parametric position on its segment: `u_i(t) = 0.5 - 0.5 * cos(2π * t / T_i)` — a smooth 0→1→0 sweep that **passes through u=0 at t=0**.
+- Segment endpoints are arranged so `u=0` is the **center origin** for every note. At `t=0` every note sits at the absolute center → unified Big Bang chord.
 
-- `src/lib/engine/scheduler.ts` — relax the `lastScheduledT < now` clamp and special-case the first-tick audio target.
+### Triggers
 
-## Verification
+- An event fires for note `i` whenever `u_i` crosses `0` (center) or `1` (outer vertex). Solved analytically inside `eventsIn(t0, t1)` (cosine root enumeration), same shape as `pendulumFan.eventsIn`.
+- Center crossings → low octave; vertex crossings → high octave. Slot cycles across the 6 pack voices.
+- Refractory window per note (~`0.12 s`) to prevent double-fires.
 
-1. `tsgo` typecheck.
-2. Manual: load each of the four scenes, click Play, confirm all notes sound simultaneously on the first click, then continue their independent cycles.
+### Visuals
+
+- Canvas trail decay handled at the scene level: `ctx.save(); ctx.fillStyle = 'rgba(15, 23, 42, 0.08)'; ctx.fillRect(0,0,W,H); ctx.restore();` at the top of `draw`. (Trail "paints out" the matrix as notes orbit — exactly the brief.)
+- Skeleton drawn with very low-alpha hairlines under `globalCompositeOperation = 'screen'`.
+- Notes drawn as small radial gradients (`screen` blend). No hard flashes — trigger visuals come from `spawnInkBleed` via the scheduler.
+- Density knob (2..12) → note count scaled `6..30` (multiples of 6 to keep symmetry).
+
+### Wiring
+
+1. Register scene in `src/routes/index.tsx`:
+   - import `mandalaMatrixScene` + `MandalaState`
+   - add `"mandalaMatrix"` to `SceneKind`, `SCENES`, and `resolveNotesCount`
+   - add the lazy-init slot on `EngineState`
+   - bind it in the scheduler-active switch like the other engine scenes
+2. Add the scene tile + label in `src/components/dock/PhaseDock.tsx`.
+3. No clock, scheduler, or inkBleed changes required.
+
+## Technical notes
+
+- All new code lives under `src/lib/scenes/` and follows the existing `Scene<TState>` contract (`init` / `sample` / `eventsIn` / `draw`).
+- No audio code paths change. The scheduler's first-tick Big Bang fix (recent change to `scheduler.ts`) already covers Mandala.
+- Trail-fill is the *only* place a scene is allowed to paint a full-canvas rectangle, and only at ~8% opacity per frame — this is the documented Mandala visual signature, not a flash.
+
+## Out of scope for this phase
+
+- Touching the legacy `wheel`/`pendulum`/`bars` scenes.
+- Any dock/UX rework beyond adding the new scene tile.
+- Changing the Big Bang flash effect (already toned down in a prior pass).

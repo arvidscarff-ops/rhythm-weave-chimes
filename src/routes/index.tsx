@@ -27,6 +27,9 @@ import { flashBus } from "@/lib/neural/flashBus";
 import { spawnBurst, updateBursts, drawBursts } from "@/lib/visuals/burstField";
 import { updateFlares, drawFlares } from "@/lib/visuals/lensFlare";
 import { updateShockwaves, drawShockwaves } from "@/lib/visuals/shockwave";
+import { updateInkBleeds, drawInkBleeds } from "@/lib/visuals/inkBleed";
+import { stringNetworkScene, type StringNetState } from "@/lib/scenes/stringNetwork";
+import { dispatchTriggers } from "@/lib/engine/triggerBus";
 import {
   composerAdvance,
   resetComposerSources,
@@ -88,7 +91,7 @@ export const Route = createFileRoute("/")({
  * ============================================================ */
 
 type VoiceKind = "chime" | "pluck" | "bell" | "pad" | "bass" | "none";
-export type SceneKind = "wheel" | "pendulum" | "bars";
+export type SceneKind = "wheel" | "pendulum" | "bars" | "stringNet";
 
 type Knobs = {
   mainVol: number; // 0..1
@@ -145,6 +148,8 @@ type EngineState = {
   pendulum: PendulumState;
   // bars
   bars: BarsState;
+  // engine scenes (lazy-initialized in render loop)
+  stringNet: StringNetState | null;
 };
 
 type AudioGraph = {
@@ -182,7 +187,7 @@ type AudioGraph = {
  * ============================================================ */
 
 const VOICES: VoiceKind[] = ["chime", "pluck", "bell", "pad", "bass", "none"];
-const SCENES: SceneKind[] = ["wheel", "pendulum", "bars"];
+const SCENES: SceneKind[] = ["wheel", "pendulum", "bars", "stringNet"];
 type VoiceSlot = "melo" | "bass" | "atmo";
 const VOICE_SLOTS: VoiceSlot[] = ["melo", "bass", "atmo"];
 void VOICES;
@@ -849,6 +854,7 @@ function PhaseApp() {
     wheel: makeSeedWheel(),
     pendulum: makeSeedPendulum(),
     bars: makeSeedBars(),
+    stringNet: null,
   });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const grainPatternRef = useRef<CanvasPattern | null>(null);
@@ -1283,13 +1289,38 @@ function PhaseApp() {
         decayPendulumFlashes(e.pendulum, dt);
       }
       drawPendulumScene(ctx2d, W, H, e.pendulum, hoverRingIdRef.current);
-    } else {
+    } else if (scene === "bars") {
       if (playing) {
         updateBars(e.bars, dt, a!, bpmRef.current, knobsRef.current, packRef.current, W, H);
       } else {
         decayBarsFlashes(e.bars, dt);
       }
       drawBarsScene(ctx2d, W, H, e.bars, hoverRingIdRef.current);
+    } else if (scene === "stringNet") {
+      const k = knobsRef.current;
+      const globals = {
+        W,
+        H,
+        bpm: bpmRef.current,
+        speed: k.speed,
+        density: k.multiply,
+        pitchSemis: k.pitch,
+        audioNow: a ? a.ctx.currentTime : 0,
+      };
+      if (!e.stringNet) e.stringNet = stringNetworkScene.init(globals);
+      if (playing && a) {
+        const events = stringNetworkScene.update(e.stringNet, dt, globals);
+        dispatchTriggers(events, {
+          audioCtx: a.ctx,
+          audioDest: a.preFx,
+          pack: packRef.current,
+          audioNow: a.ctx.currentTime,
+        });
+      } else if (e.stringNet) {
+        // keep visuals drifting even when paused
+        stringNetworkScene.update(e.stringNet, dt * 0.25, { ...globals, speed: 0 });
+      }
+      stringNetworkScene.draw(e.stringNet, ctx2d, globals);
     }
     updateBursts(dt);
     drawBursts(ctx2d);
@@ -1297,6 +1328,8 @@ function PhaseApp() {
     drawFlares(ctx2d, W, H);
     updateShockwaves(dt);
     drawShockwaves(ctx2d, W, H);
+    updateInkBleeds(dt);
+    drawInkBleeds(ctx2d);
     ctx2d.globalCompositeOperation = "source-over";
   };
 

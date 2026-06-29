@@ -1501,6 +1501,22 @@ function PhaseApp() {
 
   const isWheel = scene === "wheel";
 
+  /* ---- Universal Big Bang on shape change ----
+   * Whenever the composition shape changes (scene, note count, scale, root,
+   * or any composer slot), snap scene-time back to t=0 so every node returns
+   * to its rest formation and the next play click is a Big Bang.
+   */
+  const shapeSig =
+    `${scene}|${knobs.multiply}|${composer.scaleId}|${composer.root}|` +
+    composer.slots
+      .map((s) => `${s.k}/${s.n}/${s.rotation}/${s.noteMode}`)
+      .join(",");
+  useEffect(() => {
+    engineClock.resetPhaseZero();
+    engineScheduler.resync();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shapeSig]);
+
   /* ---- Wheel pointer interaction ---- */
   const onCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (sceneRef.current !== "wheel") return;

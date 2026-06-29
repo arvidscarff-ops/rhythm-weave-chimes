@@ -907,14 +907,13 @@ function PhaseApp() {
       return;
     }
     const bind = <S,>(impl: import("@/lib/engine/sceneTypes").Scene<S>, getter: () => S | null) => {
-      const st = getter();
-      if (!st || !impl.eventsIn) {
+      if (!impl.eventsIn) {
         engineScheduler.setActive(null);
         return;
       }
       engineScheduler.setActive({
         scene: impl as unknown as import("@/lib/engine/sceneTypes").Scene<unknown>,
-        state: st,
+        state: () => getter(),
         globals: () => {
           const k = knobsRef.current;
           const c = canvasRef.current;

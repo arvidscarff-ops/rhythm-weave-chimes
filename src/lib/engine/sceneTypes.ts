@@ -18,7 +18,8 @@ export type SceneId =
   | "radialSweep"
   | "mandalaMatrix"
   | "metatronLattice"
-  | "fractalNebula";
+  | "fractalNebula"
+  | "radialResonator";
 
 export type VoiceSlotIndex = 0 | 1 | 2 | 3 | 4 | 5;
 

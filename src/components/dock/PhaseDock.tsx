@@ -96,15 +96,38 @@ const DOCK_BTN =
   "group relative inline-flex h-10 items-center gap-2 rounded-full px-3 text-[11px] font-medium uppercase tracking-[0.16em] text-foreground/70 hover:text-foreground transition-colors";
 
 export function PhaseDock(p: Props) {
+  const sceneShort =
+    ENGINE_SCENES.find((s) => s.id === p.scene)?.short ??
+    p.scene.slice(0, 3).toUpperCase();
   return (
     <div
       className="pointer-events-none fixed bottom-4 left-1/2 z-40 -translate-x-1/2 max-w-[calc(100vw-1rem)]"
       style={{ fontFamily: "var(--font-mono, 'JetBrains Mono', ui-monospace, monospace)" }}
     >
+      {/* Metadata strip */}
       <div
         className={cn(
-          "pointer-events-auto flex items-center gap-1 rounded-full border border-white/10",
-          "bg-[hsl(220_22%_7%/0.72)] backdrop-blur-2xl shadow-[0_24px_60px_-20px_rgba(0,0,0,0.65)]",
+          "pointer-events-auto group/meta mx-auto mb-1.5 flex w-fit items-center justify-center gap-3",
+          "text-[10px] tracking-[0.28em] uppercase text-white/[0.10] hover:text-white/40 transition-colors duration-300",
+          "select-none",
+        )}
+      >
+        <span>SCN·{sceneShort}</span>
+        <span aria-hidden>·</span>
+        <span>{p.bpm} BPM</span>
+        <span aria-hidden>·</span>
+        <span>{p.speed.toFixed(2)}×</span>
+        <span aria-hidden>·</span>
+        <span>DEN·{p.multiply}</span>
+      </div>
+      <div
+        className={cn(
+          "pointer-events-auto relative flex items-center gap-1 rounded-full",
+          "bg-neutral-950/55 backdrop-blur-2xl shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)]",
+          // 1px masked-gradient border
+          "before:pointer-events-none before:absolute before:inset-0 before:rounded-full before:p-px",
+          "before:bg-[linear-gradient(135deg,rgba(255,255,255,0.18),rgba(255,255,255,0.04)_45%,rgba(255,255,255,0.14))]",
+          "before:[mask:linear-gradient(#000,#000)_content-box,linear-gradient(#000,#000)] before:[mask-composite:exclude] before:[-webkit-mask-composite:xor]",
           "px-2 py-1.5 overflow-x-auto max-w-[calc(100vw-1rem)] no-scrollbar [&>*]:shrink-0",
         )}
       >

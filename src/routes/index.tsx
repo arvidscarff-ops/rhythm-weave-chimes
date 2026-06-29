@@ -1475,6 +1475,8 @@ function PhaseApp() {
         runScene(spiralArpScene, () => e.spiralArp, (s) => (e.spiralArp = s));
       } else if (scene === "radialSweep") {
         runScene(radialSweepScene, () => e.radialSweep, (s) => (e.radialSweep = s));
+      } else if (scene === "mandalaMatrix") {
+        runScene(mandalaMatrixScene, () => e.mandalaMatrix, (s) => (e.mandalaMatrix = s));
       }
     }
     updateBursts(dt);

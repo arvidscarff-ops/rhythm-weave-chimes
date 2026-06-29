@@ -162,7 +162,6 @@ export const pendulumFanScene: Scene<PendulumFanState> = {
 
       for (const theta of thetas) {
         const tEv = (theta - s.phase0) * T;
-        if (tEv <= 0) continue; // Big Bang owns t=0
         if (tEv - s.lastFireT < COOLDOWN) continue;
         s.lastFireT = tEv;
         const tx = ax + Math.sin(s.angle) * stringLen * TARGET_DIST_NORM;
@@ -178,25 +177,6 @@ export const pendulumFanScene: Scene<PendulumFanState> = {
       }
     }
     return events;
-  },
-
-  bigBang(state, g) {
-    const ax = g.W / 2;
-    const ay = g.H * 0.14;
-    const stringLen = g.H * 0.68;
-    return state.strands.map((s) => {
-      const tx = ax + Math.sin(s.angle) * stringLen * TARGET_DIST_NORM;
-      const ty = ay + Math.cos(s.angle) * stringLen * TARGET_DIST_NORM;
-      s.lastFireT = 0;
-      return {
-        slot: s.slot,
-        freq: freqOf(s.pitchSemis + g.pitchSemis),
-        x: tx,
-        y: ty,
-        hue: s.hue,
-        velocity: s.velocityBase,
-      };
-    });
   },
 
   draw(state, ctx, g) {

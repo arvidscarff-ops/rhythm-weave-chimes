@@ -23,13 +23,16 @@ const TICK_MS = 25;
 /** How far ahead each tick looks (s). Must exceed TICK_MS + jitter. */
 const HORIZON_S = 0.12;
 /**
- * Unison-guard window: if two scheduled events would fire within this
- * many seconds of each other, the second is nudged forward by
- * `UNISON_NUDGE_S` to keep them rhythmically independent. The t=0
- * Big Bang chord is intentionally exempt.
+ * Unison-guard window. Two events whose audio times fall in
+ * `[UNISON_EXACT_S, UNISON_GUARD_S)` apart are nudged forward to keep
+ * near-misses rhythmically independent. Events closer than
+ * `UNISON_EXACT_S` are treated as the SAME instant (an intentional
+ * coincidence / chord — e.g. the play-time chord, or a future
+ * polyrhythm realignment) and pass through untouched.
  */
 const UNISON_GUARD_S = 0.05;
 const UNISON_NUDGE_S = 0.012;
+const UNISON_EXACT_S = 0.001;
 
 type ActiveBinding = {
   scene: Scene<unknown>;
@@ -45,8 +48,6 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let active: ActiveBinding | null = null;
 /** End of the last horizon we scheduled, in scene-time. */
 let lastScheduledT = 0;
-/** Whether the Big Bang chord has been dispatched for the current binding. */
-let bigBangFired = false;
 
 function schedulerTick(): void {
   if (!active) return;
@@ -69,25 +70,6 @@ function schedulerTick(): void {
 
   const g = globals();
 
-  // One-shot Big Bang: every note strikes from its resting position the
-  // first time scene time crosses 0. Scheduled at audio currentTime so
-  // it lands on the user's click, never queued behind the look-ahead
-  // horizon. After this fires, eventsIn owns everything from t > 0.
-  if (!bigBangFired && now >= 0) {
-    const chord = scene.bigBang
-      ? scene.bigBang(st, g)
-      : (scene.eventsIn(st, -1e-6, 1e-6, g) ?? []);
-    const when = audioCtx.currentTime;
-    for (const ev of chord) {
-      triggerPackVoice(audioCtx, audioDest, pack(), ev.slot, ev.freq, when);
-      spawnInkBleed(ev.x, ev.y, { hue: ev.hue, energy: ev.velocity });
-    }
-    bigBangFired = true;
-    // Skip past the t=0 anchor so the analytic path starts clean.
-    lastScheduledT = Math.max(lastScheduledT, 1e-4);
-    if (lastScheduledT >= horizon) return;
-  }
-
   const events = scene.eventsIn(st, lastScheduledT, horizon, g);
   const whenHorizon = engineClock.sceneToAudioTime(horizon);
   // Compute each event's audio time, then apply the unison guard.
@@ -99,11 +81,14 @@ function schedulerTick(): void {
     scheduled.sort((a, b) => a.when - b.when || a.ev.slot - b.ev.slot);
     for (let i = 1; i < scheduled.length; i++) {
       const prev = scheduled[i - 1].when;
-      if (scheduled[i].when - prev < UNISON_GUARD_S) {
-        // Deterministic ± nudge by slot parity; forward only (never
-        // back into the past) so dispatch order is preserved.
-        const sign = scheduled[i].ev.slot % 2 === 0 ? 1 : 1; // forward
-        scheduled[i].when = prev + UNISON_GUARD_S + UNISON_NUDGE_S * sign;
+      const delta = scheduled[i].when - prev;
+      // Exact coincidence — emergent chord (Big Bang on play, or a
+      // future polyrhythm realignment). Leave it alone.
+      if (delta < UNISON_EXACT_S) continue;
+      // Near miss — nudge forward so the two notes are heard as
+      // distinct rhythmic events, not a smeared unison.
+      if (delta < UNISON_GUARD_S) {
+        scheduled[i].when = prev + UNISON_GUARD_S + UNISON_NUDGE_S;
       }
     }
   }
@@ -126,7 +111,6 @@ export const engineScheduler = {
   setActive(binding: ActiveBinding | null): void {
     active = binding;
     lastScheduledT = engineClock.t();
-    bigBangFired = false;
   },
 
   /** Begin ticking. Safe to call repeatedly. */
@@ -151,7 +135,6 @@ export const engineScheduler = {
    */
   resync(): void {
     lastScheduledT = engineClock.t();
-    bigBangFired = false;
   },
 
   /** Whether the scheduler owns audio for the currently bound scene. */

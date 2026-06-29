@@ -306,12 +306,14 @@ export const stringNetworkScene: Scene<StringNetState> = {
       if (p.rate === 0) continue;
       const lo = Math.min(u0, u1);
       const hi = Math.max(u0, u1);
-      // Integers k with lo < k <= hi
-      const firstK = Math.floor(lo) + 1;
+      // Integers k with lo <= k <= hi — include lo so the t=0 wrap
+      // (every particle resting on anchor A) fires as part of the
+      // emergent play-time chord.
+      const firstK = Math.ceil(lo);
       const lastK = Math.floor(hi);
       for (let k = firstK; k <= lastK; k++) {
         const tEv = (k - p.t0) / p.rate;
-        if (tEv <= 0) continue; // Big Bang owns t=0
+        if (tEv < t0 || tEv >= t1) continue;
         if (tEv - p.lastFireT < PARTICLE_COOLDOWN) continue;
         p.lastFireT = tEv;
         const s = state.strings[p.stringIdx];
@@ -374,22 +376,6 @@ export const stringNetworkScene: Scene<StringNetState> = {
     }
 
     return events;
-  },
-
-  bigBang(state, g) {
-    return state.particles.map((p) => {
-      const s = state.strings[p.stringIdx];
-      const A = anchorAt(state.anchors[s.a], 0, g.W, g.H);
-      p.lastFireT = 0;
-      return {
-        slot: p.slot,
-        freq: freqOf(p.pitchSemis + g.pitchSemis),
-        x: A.x,
-        y: A.y,
-        hue: p.hue,
-        velocity: 0.45 + p.speedNorm * 0.5,
-      };
-    });
   },
 
   draw(state, ctx, g) {

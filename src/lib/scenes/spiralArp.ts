@@ -231,7 +231,6 @@ export const spiralArpScene: Scene<SpiralArpState> = {
       }
       hits.sort((a, b) => a - b);
       for (const tEv of hits) {
-        if (tEv <= 0) continue; // Big Bang owns t=0
         if (tEv - p.lastFireT < COOLDOWN) continue;
         p.lastFireT = tEv;
         const sMod = ((p.s0 + v * tEv) % Ltotal + Ltotal) % Ltotal;
@@ -252,30 +251,6 @@ export const spiralArpScene: Scene<SpiralArpState> = {
       }
     }
     return events;
-  },
-
-  bigBang(state, g) {
-    const cx = g.W / 2;
-    const cy = g.H / 2;
-    const tMaxR = radiusAt(state, thetaMax(state.turns));
-    return state.playheads.map((p) => {
-      const sMod = ((p.s0 % state.Ltotal) + state.Ltotal) % state.Ltotal;
-      const theta = thetaForArc(state, sMod);
-      const r = radiusAt(state, theta);
-      const x = cx + Math.cos(theta) * r;
-      const y = cy + Math.sin(theta) * r;
-      const rNorm = Math.max(0, Math.min(1, 1 - r / tMaxR));
-      const semIdx = Math.floor(rNorm * (SCALE_SEMIS.length - 1));
-      p.lastFireT = 0;
-      return {
-        slot: p.slot,
-        freq: freqOf(SCALE_SEMIS[semIdx] + g.pitchSemis),
-        x,
-        y,
-        hue: p.hue,
-        velocity: 0.5 + rNorm * 0.45,
-      };
-    });
   },
 
   draw(state, ctx, g) {

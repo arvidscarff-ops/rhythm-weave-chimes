@@ -17,11 +17,13 @@
  */
 
 import type { Scene, SceneGlobals, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
+import { speedCoeffs, phaseOffsets } from "@/lib/engine/polyrhythm";
 
 const ROOT_HZ = 220;
 const freqOf = (s: number) => ROOT_HZ * Math.pow(2, s / 12);
 const SCALE_SEMIS = [0, 2, 3, 5, 7, 10, 12, 14, 15, 17, 19, 22];
 const COOLDOWN = 0.06;
+const BASE_SPIRAL_SPEED = 28;
 
 type Playhead = {
   /** Phase-Zero arc offset (spiral-units). s(t) = (s0 + speed·t) mod Ltotal. */
@@ -58,6 +60,29 @@ export type SpiralArpState = {
 /** Map dock density (2..12) → spiral turns (3..10). */
 function spiralTurns(density: number) {
   return Math.max(3, Math.min(10, Math.round(3 + (density - 2) * 0.7)));
+}
+
+/** Map dock density (2..12) → playhead count (3..8). */
+function playheadCount(density: number) {
+  return Math.max(3, Math.min(8, Math.round(3 + (density - 2) * 0.5)));
+}
+
+/** Build playheads with prime/φ-distributed speeds. */
+function buildPlayheads(N: number): Playhead[] {
+  const coeffs = speedCoeffs(N).slice().sort((a, b) => b - a);
+  const hues = [0.55, 0.78, 0.18, 0.05, 0.42, 0.62, 0.88, 0.32];
+  const slots: VoiceSlotIndex[] = [0, 2, 4, 1, 3, 5, 0, 2];
+  const out: Playhead[] = new Array(N);
+  for (let i = 0; i < N; i++) {
+    out[i] = {
+      s0: 0,
+      speed: BASE_SPIRAL_SPEED * coeffs[i],
+      slot: slots[i % slots.length],
+      hue: hues[i % hues.length],
+      lastFireT: -Infinity,
+    };
+  }
+  return out;
 }
 
 /** Total θ for `turns` revolutions. */
@@ -112,26 +137,36 @@ function reseedGeometry(state: SpiralArpState, g: SceneGlobals) {
     arr[k] = state.Ltotal - arcLen(b, k * step);
   }
   state.arcAtBucket = arr;
+  // Reseed playheads if density changed the desired count.
+  const wantN = playheadCount(g.density ?? 5);
+  if (state.playheads.length !== wantN) {
+    state.playheads = buildPlayheads(wantN);
+  }
   applySpeedToLeftRight(state);
 }
 
 /**
- * Universal "fast → left, slow → right" rule for spiralArp.
- * Sort playheads by speed desc, then assign each an angular t=0 anchor
- * spread across the canvas from θ ≈ π (left) to θ ≈ 0 (right) so the
- * fastest playhead sits on the leftmost edge of the spiral at t = 0.
+ * Universal "fast → left, slow → right" rule + golden-ratio phase
+ * staggering. Each playhead is anchored to a polar-grid bucket so the
+ * t=0 chord still lands on grid lines, then nudged forward by a
+ * golden-ratio fraction of `Ltotal/N` (also snapped to the nearest
+ * bucket) so the playheads don't fire in lockstep after the Big Bang.
  */
 function applySpeedToLeftRight(state: SpiralArpState) {
   const ordered = [...state.playheads].sort((a, b) => b.speed - a.speed);
   const N = ordered.length;
   const step = (Math.PI * 2) / state.gridK;
+  const offsets = phaseOffsets(N);
   for (let i = 0; i < N; i++) {
     const targetTheta = N === 1 ? Math.PI : Math.PI * (1 - i / (N - 1));
-    // Snap to nearest bucket angle within the first lap so the playhead
-    // also lands on a polar grid line (keeps the Big Bang chord coherent).
     const k = Math.round(targetTheta / step);
     const safeK = Math.max(0, Math.min(state.arcAtBucket.length - 1, k));
-    ordered[i].s0 = state.arcAtBucket[safeK];
+    const anchor = state.arcAtBucket[safeK];
+    // Golden phase nudge — bucket-snapped so we still hit a grid line.
+    const offsetArc = offsets[i] * (state.Ltotal / Math.max(1, N));
+    const offsetK = Math.round(offsetArc / (state.Ltotal / state.arcAtBucket.length));
+    const idx = Math.max(0, Math.min(state.arcAtBucket.length - 1, safeK + offsetK));
+    ordered[i].s0 = state.arcAtBucket[idx];
     ordered[i].lastFireT = -Infinity;
   }
 }
@@ -140,6 +175,7 @@ export const spiralArpScene: Scene<SpiralArpState> = {
   id: "spiralArp",
 
   init(g) {
+    const N = playheadCount(g.density ?? 5);
     const state: SpiralArpState = {
       a: 6,
       b: 1,
@@ -148,20 +184,17 @@ export const spiralArpScene: Scene<SpiralArpState> = {
       density: g.density ?? 5,
       Ltotal: 1,
       arcAtBucket: [0],
-      // Phase Zero: all playheads at s0 = 0 (outer end, on a grid line)
-      // → universal Big Bang at t = 0.
-      playheads: [
-        { s0: 0, speed: 22, slot: 0, hue: 0.55, lastFireT: -Infinity },
-        { s0: 0, speed: 28, slot: 2, hue: 0.78, lastFireT: -Infinity },
-        { s0: 0, speed: 18, slot: 4, hue: 0.18, lastFireT: -Infinity },
-      ],
+      // Phase-Zero: speeds derived from the prime/φ distribution; s0
+      // assigned by `applySpeedToLeftRight` so the t=0 chord still
+      // lands on polar-grid lines.
+      playheads: buildPlayheads(N),
     };
     reseedGeometry(state, g);
     return state;
   },
 
   sample(state, _t, g) {
-    if (spiralTurns(g.density) !== state.turns) {
+    if (spiralTurns(g.density) !== state.turns || playheadCount(g.density) !== state.playheads.length) {
       reseedGeometry(state, g);
       for (const p of state.playheads) p.lastFireT = -Infinity;
     }
@@ -170,7 +203,7 @@ export const spiralArpScene: Scene<SpiralArpState> = {
   eventsIn(state, t0, t1, g) {
     const events: TriggerEvent[] = [];
     if (t1 <= t0) return events;
-    if (spiralTurns(g.density) !== state.turns) {
+    if (spiralTurns(g.density) !== state.turns || playheadCount(g.density) !== state.playheads.length) {
       reseedGeometry(state, g);
       for (const p of state.playheads) p.lastFireT = -Infinity;
     }

@@ -1,80 +1,88 @@
-# Scene Expansion & Global Architecture Compliance
 
-## Status of the existing roadmap
+# Prime-Distributed Velocity refactor
 
-Most of the scenes you describe are **already in the tree** and already on the Global Clock contract (`globalTime`, `sample`/`eventsIn`, no internal mutating clock):
+Confirmed: shifting from "uniform / linear ratio" speeds to a **Prime-Ratio + φ distribution** shared across every Phase-Zero scene. This is generative-rhythm hygiene: incommensurable speed ratios guarantee strands phase out of unison the instant the t=0 chord releases.
 
-| Roadmap scene        | Current file                        | State |
-|----------------------|-------------------------------------|-------|
-| Harmonic Pendulum    | `src/lib/scenes/pendulumFan.ts`     | Built, Phase-Zero compliant. Strands rest on their target ring at `t=0` (`phase0 = RISING_PHASE`) — Big Bang fires. |
-| Spiral Arpeggiator   | `src/lib/scenes/spiralArp.ts`       | Built, Phase-Zero compliant. |
-| Radial Sweep (Radar) | `src/lib/scenes/radialSweep.ts`     | Built, Phase-Zero compliant. |
-| Mandala Matrix       | — (not yet built)                   | **New work.** |
+## 1. New shared module — `src/lib/engine/polyrhythm.ts`
 
-The legacy "wheel / pendulum / bars" scenes still exist alongside the engine scenes and remain on the imperative path; they're not in your roadmap so I'll leave them untouched unless you say otherwise.
+Single source of truth for per-note speed/phase assignment so every scene (and the Mandala work) draws from the same well.
 
-So this phase is really two things: (1) a quick **compliance audit pass** across the four engine scenes and the dispatch layer, and (2) **building Mandala Matrix** as a fifth engine scene.
+- `PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37]`
+- `PHI = (1 + √5) / 2`
+- `speedCoeffs(N): number[]` → for `i ∈ 0..N-1`:
+  - `raw_i = PRIMES[i % len] / PRIMES[len-1]` (your spec) **plus** a φ jitter `* (1 + ((i * PHI) % 1 - 0.5) * 0.07)` so wrapping past `PRIMES.length` still yields unique, irrational-ish values.
+  - Normalize so the **max coefficient = 1** → `BaseSpeed` from each scene stays meaningful.
+- `phaseOffsets(N): number[]` → `(i * (1 - 1/PHI)) % 1` (golden-angle 1-D analog). Even, non-repeating distribution in `[0,1)`.
+- `pathNormalizedSpeed(coeff, baseSpeed, pathLen)` → returns the velocity that makes one full traversal take `pathLen / (baseSpeed * coeff)` **scene-seconds**, so the polyrhythmic ratio — not the geometry — sets the ignition cadence.
 
-## 1. Compliance audit (no behavior changes unless a violation is found)
+All functions are pure. No state. Documented as the canonical helper; future scenes must use it.
 
-Sweep each engine scene + shared layer and confirm:
+## 2. Per-scene wiring
 
-- No `useState`/`useEffect`/local clock fields drive geometry. Geometry is `f(globalTime)`.
-- `sample(state, t, g)` is pure for draw (mutations limited to density reseed / cached flash markers used only for visuals).
-- `eventsIn(state, t0, t1, g)` is deterministic and includes the `t=0` boundary so the Big Bang chord fires on first Play.
-- Audio is routed exclusively through `triggerPackVoice` via `engineScheduler` (no direct `ctx.createOscillator`, no `dispatchTriggers` shortcut).
-- Visual triggers go through `spawnInkBleed` only — no hard flashes, no full-canvas alpha sweeps. The recent `inkBleed` coalesce-damp stays.
-- The `flashBus` Big Bang effect remains the toned-down version.
+### Mandala Matrix (`src/lib/scenes/mandalaMatrix.ts`)
+- Replace `FIB_RATIOS` + `i % 5` cycling with `speedCoeffs(N)`.
+- Each note gets `phaseOffset_i` from `phaseOffsets(N)`. Position formula becomes:
+  `u_i(t) = 0.5 - 0.5 * cos(2π * ((t / T_i) + phaseOffset_i))`
+- **Big Bang preservation:** `phaseOffset` is applied to the *cosine argument*, not to `t`, AND we add a hard rule: at `t ≤ 0` we clamp `u_i = 0` for every note. The t=0 chord still fires (engine path is `eventsIn` with the existing t=0 boundary); offsets only start to bite for `t > 0`.
+- `eventsIn` cosine-root enumeration updated to include the offset (closed-form: shift the k-window by `-phaseOffset_i * T_i`).
+- Path-length normalization isn't relevant here (all spokes equal length R), but `pathNormalizedSpeed` is used so future asymmetric variants stay correct.
 
-Deliverable: a short written audit in `.lovable/plan.md`. Code edits only where a violation is found.
+### Pendulum Fan (`pendulumFan.ts`)
+- Replace `RATIOS[]` table with `speedCoeffs(N)` (mapped to the existing `ratio` field; faster coeff = smaller period multiplier, preserving fast-left/slow-right).
+- Add `phase0 += phaseOffsets(N)[i]` *only when `i > 0`*. Strand 0 stays on `RISING_PHASE` so the Big Bang ring still ignites; the other strands are perturbed by a fraction of a θ-cycle so they desynchronize after the first hit. (Acceptable trade-off: only the leftmost strand sits exactly on its ring at t=0, but every strand still fires its own t=0 trigger via the eventsIn boundary because `RISING_PHASE` is the analytic anchor — we shift the *future* schedule, not the t=0 event.)
+  - Alternative if you want every strand exactly on its ring at t=0: keep `phase0 = RISING_PHASE` for all and inject `phaseOffset` as an additive term inside `strandD` from `t > 0`. I'll go with this alternative — it's cleaner and preserves the chord 100 %.
 
-## 2. New scene — Mandala Matrix
+### Spiral Arpeggiator (`spiralArp.ts`)
+- Replace the hardcoded `speed: 22 / 28 / 18` and the 3-playhead default with `N` playheads derived from density, speeds from `speedCoeffs(N) * BASE_SPIRAL_SPEED`.
+- Phase offsets distribute `s0` across `arcAtBucket[]` (currently `applySpeedToLeftRight` already snaps to bucket angles — extend it to also offset by `phaseOffsets(N)[i] * Ltotal / N` along arc length, then re-snap to nearest bucket so the Big Bang chord still lands on grid lines).
+- Path normalization already implicit (arc length is uniform per playhead); leave intact.
 
-New file `src/lib/scenes/mandalaMatrix.ts` implementing the `Scene<MandalaState>` contract.
+### Radial Sweep (`radialSweep.ts`)
+- The sweep arm has a single angular velocity ω, so "prime-distributed velocity" doesn't apply to motion. Instead apply it to **target placement**: replace the even half-arc distribution with `targetAngle_i = 2π * phaseOffsets(N)[i]`. This breaks the uniform cadence that currently makes targets fire at evenly-spaced moments. Velocity of each *event* (per-target ω is constant) stays the same; the polyrhythm comes from non-uniform angular spacing.
 
-### Geometry
+### String Network (`stringNetwork.ts`)
+Out of scope for this pass unless it already uses ratios — I'll audit and report; no behavioral change without your sign-off.
 
-- Hexagram skeleton: 6 outer vertices on a circle of radius `R = min(W,H) * 0.36`, centered at canvas mid. Draw the 6 "spokes" (center↔vertex) and the 6 chord edges that form the two overlapping triangles — these are the structural paths.
-- 12 structural path segments total. Each note is assigned to one segment and travels along it.
+## 3. Unison guard in the scheduler — `src/lib/engine/scheduler.ts`
 
-### Motion (pure `f(globalTime)`)
+Add a `UNISON_GUARD_S = 0.05` window applied **only when `isBigBangTick === false`** (the t=0 chord is intentional and must remain).
 
-- Each note `i` has a Fibonacci ratio `r_i ∈ {2, 3, 5, 8, 13}` (cycled by `i % 5`).
-- Period for note `i`: `T_i = basePeriod(bpm) * r_i`.
-- Parametric position on its segment: `u_i(t) = 0.5 - 0.5 * cos(2π * t / T_i)` — a smooth 0→1→0 sweep that **passes through u=0 at t=0**.
-- Segment endpoints are arranged so `u=0` is the **center origin** for every note. At `t=0` every note sits at the absolute center → unified Big Bang chord.
+```text
+within each tick:
+  events.sort by (when, slot)
+  lastWhenBySlot = {}
+  for ev in events:
+    if !isBigBangTick:
+      conflict = events scheduled to fire within 50 ms
+      if conflict:
+        when += micro_nudge (deterministic: ±0.012 s based on slot parity)
+    schedule(ev, when); record lastWhenBySlot
+```
 
-### Triggers
+The nudge is **time-only** (delay the dispatch), not a speed mutation — speed mutation would desync the visual ink-bleed from the audio. The dispatch's `spawnInkBleed` is moved to fire at the nudged audio time via `setTimeout(..., nudgeMs)` so the visual still lands with the sound.
 
-- An event fires for note `i` whenever `u_i` crosses `0` (center) or `1` (outer vertex). Solved analytically inside `eventsIn(t0, t1)` (cosine root enumeration), same shape as `pendulumFan.eventsIn`.
-- Center crossings → low octave; vertex crossings → high octave. Slot cycles across the 6 pack voices.
-- Refractory window per note (~`0.12 s`) to prevent double-fires.
+This satisfies your "automatically nudge by ±0.05" intent while keeping the visual/audio contract intact and never altering scene-time geometry.
 
-### Visuals
+## 4. Audit deliverable
 
-- Canvas trail decay handled at the scene level: `ctx.save(); ctx.fillStyle = 'rgba(15, 23, 42, 0.08)'; ctx.fillRect(0,0,W,H); ctx.restore();` at the top of `draw`. (Trail "paints out" the matrix as notes orbit — exactly the brief.)
-- Skeleton drawn with very low-alpha hairlines under `globalCompositeOperation = 'screen'`.
-- Notes drawn as small radial gradients (`screen` blend). No hard flashes — trigger visuals come from `spawnInkBleed` via the scheduler.
-- Density knob (2..12) → note count scaled `6..30` (multiples of 6 to keep symmetry).
+Updated `.lovable/plan.md` with:
+- Confirmation that all four engine scenes now route through `polyrhythm.ts`.
+- Note on the one deliberate exception (t=0 Big Bang exempt from unison guard).
+- Note that string-network was reviewed but left alone (pending sign-off).
 
-### Wiring
+## Out of scope
 
-1. Register scene in `src/routes/index.tsx`:
-   - import `mandalaMatrixScene` + `MandalaState`
-   - add `"mandalaMatrix"` to `SceneKind`, `SCENES`, and `resolveNotesCount`
-   - add the lazy-init slot on `EngineState`
-   - bind it in the scheduler-active switch like the other engine scenes
-2. Add the scene tile + label in `src/components/dock/PhaseDock.tsx`.
-3. No clock, scheduler, or inkBleed changes required.
+- Legacy `wheel` / `pendulum` / `bars` paths.
+- `packs.ts` — voice sample assignment is orthogonal to speed distribution; no changes needed.
+- Dock UI.
+- Big Bang flash effect.
 
-## Technical notes
+## Files touched
 
-- All new code lives under `src/lib/scenes/` and follows the existing `Scene<TState>` contract (`init` / `sample` / `eventsIn` / `draw`).
-- No audio code paths change. The scheduler's first-tick Big Bang fix (recent change to `scheduler.ts`) already covers Mandala.
-- Trail-fill is the *only* place a scene is allowed to paint a full-canvas rectangle, and only at ~8% opacity per frame — this is the documented Mandala visual signature, not a flash.
-
-## Out of scope for this phase
-
-- Touching the legacy `wheel`/`pendulum`/`bars` scenes.
-- Any dock/UX rework beyond adding the new scene tile.
-- Changing the Big Bang flash effect (already toned down in a prior pass).
+- new `src/lib/engine/polyrhythm.ts`
+- edit `src/lib/scenes/mandalaMatrix.ts`
+- edit `src/lib/scenes/pendulumFan.ts`
+- edit `src/lib/scenes/spiralArp.ts`
+- edit `src/lib/scenes/radialSweep.ts`
+- edit `src/lib/engine/scheduler.ts`
+- edit `.lovable/plan.md`

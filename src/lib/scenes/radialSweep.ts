@@ -13,6 +13,7 @@
  */
 
 import type { Scene, SceneGlobals, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
+import { phaseOffsets } from "@/lib/engine/polyrhythm";
 
 const ROOT_HZ = 220;
 const freqOf = (s: number) => ROOT_HZ * Math.pow(2, s / 12);
@@ -51,12 +52,12 @@ function targetCount(density: number) {
 }
 
 /**
- * Build N targets, then apply the universal fast→left/slow→right rule by
- * placing higher-pitch ("faster"-feeling) targets on the canvas-left arc
- * (π/2 .. 3π/2) and lower-pitch targets on the canvas-right arc.
- * Targets are sorted by pitchSemis desc, then split into left/right halves
- * and distributed evenly within each half so the sweep arm still hits them
- * in a smooth cadence.
+ * Build N targets, then place them at golden-ratio-spaced angles
+ * around the circle. The sweep arm has a single ω so polyrhythm here
+ * comes from *non-uniform angular spacing* between targets — replacing
+ * the previous even half-arc layout that fired triggers on a uniform
+ * cadence. Higher-pitch ("faster"-feeling) targets land first in the
+ * sweep so the universal fast→left rule is still felt sonically.
  */
 function buildTargets(N: number): Target[] {
   const proto: Omit<Target, "angle">[] = [];
@@ -75,22 +76,16 @@ function buildTargets(N: number): Target[] {
   const maxPitch = proto[0]?.pitchSemis ?? 0;
   const minPitch = proto[proto.length - 1]?.pitchSemis ?? 0;
   const pitchSpan = Math.max(1, maxPitch - minPitch);
-  const half = Math.ceil(N / 2);
+  // Golden-ratio angular distribution → no two angular gaps are equal,
+  // so the sweep arm never produces a uniform tick-tick cadence.
+  const offsets = phaseOffsets(N);
   const out: Target[] = new Array(N);
   for (let i = 0; i < N; i++) {
     const p = proto[i];
-    let angle: number;
-    if (i < half) {
-      // Left half arc: angle in (π/2 .. 3π/2), top-left → bottom-left.
-      angle = Math.PI / 2 + ((i + 0.5) / half) * Math.PI;
-    } else {
-      // Right half arc: angle in (-π/2 .. π/2) wrapped = (3π/2 .. 5π/2),
-      // distributed bottom-right → top-right.
-      const j = i - half;
-      const rightN = N - half;
-      angle = -Math.PI / 2 + ((j + 0.5) / rightN) * Math.PI;
-      if (angle < 0) angle += Math.PI * 2;
-    }
+    // Highest-pitch target sits at angle 0 (Big Bang anchor — the sweep
+    // arm starts there at t=0). Subsequent targets fan out by the
+    // golden-ratio fractional sequence.
+    const angle = (offsets[i] * Math.PI * 2) % (Math.PI * 2);
     out[i] = {
       angle,
       rNorm: p.rNorm,

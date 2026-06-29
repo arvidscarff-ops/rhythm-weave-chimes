@@ -57,7 +57,8 @@ export type SceneKind =
   | "stringNet"
   | "pendulumFan"
   | "spiralArp"
-  | "radialSweep";
+  | "radialSweep"
+  | "mandalaMatrix";
 
 type Props = {
   playing: boolean;
@@ -230,6 +231,7 @@ const ENGINE_SCENES: { id: SceneKind; label: string; short: string }[] = [
   { id: "pendulumFan", label: "Pendulum Fan", short: "PEN" },
   { id: "spiralArp", label: "Spiral Arpeggiator", short: "SPI" },
   { id: "radialSweep", label: "Radial Sweep", short: "RAD" },
+  { id: "mandalaMatrix", label: "Mandala Matrix", short: "MND" },
 ];
 
 function SceneChips({
@@ -330,6 +332,7 @@ function SceneMenu({
             <DropdownMenuRadioItem value="pendulumFan">Pendulum Fan</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="spiralArp">Spiral Arpeggiator</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="radialSweep">Radial Sweep</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="mandalaMatrix">Mandala Matrix</DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-foreground/40">Classic</DropdownMenuLabel>

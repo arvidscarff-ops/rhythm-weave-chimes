@@ -32,6 +32,7 @@ import { stringNetworkScene, type StringNetState } from "@/lib/scenes/stringNetw
 import { pendulumFanScene, type PendulumFanState } from "@/lib/scenes/pendulumFan";
 import { spiralArpScene, type SpiralArpState } from "@/lib/scenes/spiralArp";
 import { radialSweepScene, type RadialSweepState } from "@/lib/scenes/radialSweep";
+import { mandalaMatrixScene, type MandalaMatrixState } from "@/lib/scenes/mandalaMatrix";
 import { engineClock } from "@/lib/engine/clock";
 import { engineScheduler } from "@/lib/engine/scheduler";
 import {
@@ -67,6 +68,8 @@ function resolveNotesCount(scene: SceneKind, density: number): number {
       return 3;
     case "radialSweep":
       return Math.max(6, Math.min(16, Math.round(6 + (density - 2) * 1)));
+    case "mandalaMatrix":
+      return Math.max(6, Math.min(30, Math.round((6 + (density - 2) * 2.4) / 6) * 6));
     case "wheel":
     case "pendulum":
     case "bars":
@@ -128,7 +131,8 @@ export type SceneKind =
   | "stringNet"
   | "pendulumFan"
   | "spiralArp"
-  | "radialSweep";
+  | "radialSweep"
+  | "mandalaMatrix";
 
 type Knobs = {
   mainVol: number; // 0..1
@@ -190,6 +194,7 @@ type EngineState = {
   pendulumFan: PendulumFanState | null;
   spiralArp: SpiralArpState | null;
   radialSweep: RadialSweepState | null;
+  mandalaMatrix: MandalaMatrixState | null;
 };
 
 type AudioGraph = {
@@ -235,6 +240,7 @@ const SCENES: SceneKind[] = [
   "pendulumFan",
   "spiralArp",
   "radialSweep",
+  "mandalaMatrix",
 ];
 type VoiceSlot = "melo" | "bass" | "atmo";
 const VOICE_SLOTS: VoiceSlot[] = ["melo", "bass", "atmo"];
@@ -906,6 +912,7 @@ function PhaseApp() {
     pendulumFan: null,
     spiralArp: null,
     radialSweep: null,
+    mandalaMatrix: null,
   });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const grainPatternRef = useRef<CanvasPattern | null>(null);
@@ -962,6 +969,7 @@ function PhaseApp() {
     else if (scene === "pendulumFan") bind(pendulumFanScene, () => e.pendulumFan);
     else if (scene === "spiralArp") bind(spiralArpScene, () => e.spiralArp);
     else if (scene === "radialSweep") bind(radialSweepScene, () => e.radialSweep);
+    else if (scene === "mandalaMatrix") bind(mandalaMatrixScene, () => e.mandalaMatrix);
     else engineScheduler.setActive(null);
   }, [scene, playing, topo]);
 
@@ -1011,6 +1019,7 @@ function PhaseApp() {
     engineRef.current.pendulumFan = null;
     engineRef.current.spiralArp = null;
     engineRef.current.radialSweep = null;
+    engineRef.current.mandalaMatrix = null;
     const eng = state.engine;
     if (eng) {
       // Defer until after first runScene init populates the state.
@@ -1466,6 +1475,8 @@ function PhaseApp() {
         runScene(spiralArpScene, () => e.spiralArp, (s) => (e.spiralArp = s));
       } else if (scene === "radialSweep") {
         runScene(radialSweepScene, () => e.radialSweep, (s) => (e.radialSweep = s));
+      } else if (scene === "mandalaMatrix") {
+        runScene(mandalaMatrixScene, () => e.mandalaMatrix, (s) => (e.mandalaMatrix = s));
       }
     }
     updateBursts(dt);

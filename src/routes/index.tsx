@@ -903,9 +903,9 @@ function PhaseApp() {
       pendulum: pendulumToSession(engineRef.current.pendulum),
       bars: barsToSession(engineRef.current.bars),
       engine: {
-        stringNet: engineRef.current.stringNet
-          ? { clock: engineRef.current.stringNet.clock }
-          : undefined,
+        // stringNet is now Phase-Zero (pure function of globalTime);
+        // its position is reconstructed from `engineClock.t()` and
+        // doesn't need per-share state. Field omitted on purpose.
         pendulumFan: engineRef.current.pendulumFan
           ? { clock: engineRef.current.pendulumFan.clock }
           : undefined,
@@ -949,7 +949,8 @@ function PhaseApp() {
       // Defer until after first runScene init populates the state.
       requestAnimationFrame(() => {
         const ref = engineRef.current;
-        if (eng.stringNet && ref.stringNet) ref.stringNet.clock = eng.stringNet.clock;
+        // stringNet: legacy `clock` field ignored (Phase-Zero scenes
+        // derive position from engineClock).
         if (eng.pendulumFan && ref.pendulumFan) ref.pendulumFan.clock = eng.pendulumFan.clock;
         if (eng.spiralArp && ref.spiralArp) ref.spiralArp.clock = eng.spiralArp.clock;
         if (eng.radialSweep && ref.radialSweep) {

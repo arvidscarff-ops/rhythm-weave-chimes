@@ -180,6 +180,25 @@ export const pendulumFanScene: Scene<PendulumFanState> = {
     return events;
   },
 
+  bigBang(state, g) {
+    const ax = g.W / 2;
+    const ay = g.H * 0.14;
+    const stringLen = g.H * 0.68;
+    return state.strands.map((s) => {
+      const tx = ax + Math.sin(s.angle) * stringLen * TARGET_DIST_NORM;
+      const ty = ay + Math.cos(s.angle) * stringLen * TARGET_DIST_NORM;
+      s.lastFireT = 0;
+      return {
+        slot: s.slot,
+        freq: freqOf(s.pitchSemis + g.pitchSemis),
+        x: tx,
+        y: ty,
+        hue: s.hue,
+        velocity: s.velocityBase,
+      };
+    });
+  },
+
   draw(state, ctx, g) {
     const ax = g.W / 2;
     const ay = g.H * 0.14;

@@ -22,7 +22,11 @@
 
 let audioCtx: AudioContext | null = null;
 let speed = 1;
-let paused = false;
+/**
+ * Default to paused so the scene rests in its Big Bang formation until the
+ * user clicks Play. Nothing moves, nothing fires.
+ */
+let paused = true;
 
 /** Last raw timeline sample, seconds (from performance.now() / 1000). */
 let lastRaw = nowRaw();

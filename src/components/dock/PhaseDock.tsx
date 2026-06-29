@@ -90,6 +90,8 @@ type Props = {
   email?: string | null;
   onSignOut: () => void;
   onShare: () => void;
+  /** Snap scene time to t=0 — every node fires its Big Bang chord. */
+  onBigBang: () => void;
 };
 
 const DOCK_BTN =
@@ -195,6 +197,18 @@ export function PhaseDock(p: Props) {
           )}
         >
           <Share2 className="h-4 w-4" />
+        </button>
+
+        <button
+          onClick={p.onBigBang}
+          aria-label="Big Bang — reset phase to zero"
+          title="Big Bang — reset phase to zero"
+          className={cn(
+            DOCK_BTN,
+            "h-9 w-9 px-0 justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.10]",
+          )}
+        >
+          <Sparkles className="h-4 w-4" />
         </button>
 
         <MoreMenu authed={p.authed} email={p.email} onSignOut={p.onSignOut} />

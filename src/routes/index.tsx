@@ -35,6 +35,7 @@ import { radialSweepScene, type RadialSweepState } from "@/lib/scenes/radialSwee
 import { mandalaMatrixScene, type MandalaMatrixState } from "@/lib/scenes/mandalaMatrix";
 import { metatronLatticeScene, type MetatronLatticeState } from "@/lib/scenes/metatronLattice";
 import { fractalNebulaScene, type FractalNebulaState } from "@/lib/scenes/fractalNebula";
+import { radialResonatorScene, type RadialResonatorState } from "@/lib/scenes/radialResonator";
 import { engineClock } from "@/lib/engine/clock";
 import { engineScheduler } from "@/lib/engine/scheduler";
 import {
@@ -76,6 +77,8 @@ function resolveNotesCount(scene: SceneKind, density: number): number {
       return 25;
     case "fractalNebula":
       return 50;
+    case "radialResonator":
+      return 24;
     case "wheel":
     case "pendulum":
     case "bars":
@@ -140,7 +143,8 @@ export type SceneKind =
   | "radialSweep"
   | "mandalaMatrix"
   | "metatronLattice"
-  | "fractalNebula";
+  | "fractalNebula"
+  | "radialResonator";
 
 type Knobs = {
   mainVol: number; // 0..1
@@ -205,6 +209,7 @@ type EngineState = {
   mandalaMatrix: MandalaMatrixState | null;
   metatronLattice: MetatronLatticeState | null;
   fractalNebula: FractalNebulaState | null;
+  radialResonator: RadialResonatorState | null;
 };
 
 type AudioGraph = {
@@ -253,6 +258,7 @@ const SCENES: SceneKind[] = [
   "mandalaMatrix",
   "metatronLattice",
   "fractalNebula",
+  "radialResonator",
 ];
 type VoiceSlot = "melo" | "bass" | "atmo";
 const VOICE_SLOTS: VoiceSlot[] = ["melo", "bass", "atmo"];
@@ -927,6 +933,7 @@ function PhaseApp() {
     mandalaMatrix: null,
     metatronLattice: null,
     fractalNebula: null,
+    radialResonator: null,
   });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const grainPatternRef = useRef<CanvasPattern | null>(null);
@@ -986,6 +993,7 @@ function PhaseApp() {
     else if (scene === "mandalaMatrix") bind(mandalaMatrixScene, () => e.mandalaMatrix);
     else if (scene === "metatronLattice") bind(metatronLatticeScene, () => e.metatronLattice);
     else if (scene === "fractalNebula") bind(fractalNebulaScene, () => e.fractalNebula);
+    else if (scene === "radialResonator") bind(radialResonatorScene, () => e.radialResonator);
     else engineScheduler.setActive(null);
   }, [scene, playing, topo]);
 
@@ -1038,6 +1046,7 @@ function PhaseApp() {
     engineRef.current.mandalaMatrix = null;
     engineRef.current.metatronLattice = null;
     engineRef.current.fractalNebula = null;
+    engineRef.current.radialResonator = null;
     const eng = state.engine;
     if (eng) {
       // Defer until after first runScene init populates the state.
@@ -1499,6 +1508,8 @@ function PhaseApp() {
         runScene(metatronLatticeScene, () => e.metatronLattice, (s) => (e.metatronLattice = s));
       } else if (scene === "fractalNebula") {
         runScene(fractalNebulaScene, () => e.fractalNebula, (s) => (e.fractalNebula = s));
+      } else if (scene === "radialResonator") {
+        runScene(radialResonatorScene, () => e.radialResonator, (s) => (e.radialResonator = s));
       }
     }
     updateBursts(dt);

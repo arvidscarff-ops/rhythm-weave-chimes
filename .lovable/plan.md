@@ -1,86 +1,45 @@
-# Plan: Fractal Nebula scene (50-particle, 5-layer lattice)
+## Radial Resonator — new scene module
 
-A new scene `fractalNebula` following the same `eventsIn` / `sample` / `draw` contract as Metatron, but at higher density and with a particle-pool architecture instead of one-note-per-edge.
+A distinct Phase-Zero scene, fully separate from `metatronLattice.ts`. No nested-polygon vertices, no lattice path-finding code is reused. Notes oscillate on fixed radial rays from a central "Ignition Point," firing audio every time `r` re-touches the origin.
 
-## Geometry — 5 nested polygons
+### Files
 
-| L | Shape      | Vertices | Radius (× minR) | Pack       |
-|---|------------|----------|-----------------|------------|
-| 0 | Triangle   | 3        | 0.14            | moss       |
-| 1 | Square     | 4        | 0.22            | moss       |
-| 2 | Hexagon    | 6        | 0.30            | prism      |
-| 3 | Octagon    | 8        | 0.36            | prism      |
-| 4 | Dodecagon  | 12       | 0.42            | obsidian   |
+- **New** `src/lib/scenes/radialResonator.ts` — full scene module (state, `sample`, `eventsIn`, `draw`).
+- **Edit** `src/lib/engine/sceneTypes.ts` — add `"radialResonator"` to `SceneId`.
+- **Edit** `src/routes/index.tsx` — register scene (note count, state type, bind/runScene wiring) alongside the other scenes.
+- **Edit** `src/components/dock/PhaseDock.tsx` — add dock entry, label `"RAD"`.
 
-`minR = min(W, H) * 0.42`. Each layer rotates as a whole at `ω_layer = ω_base · φ^(-L)` (inner spins fastest, outer slowest — see direction note below).
+### Physics — `updateRadialNodes` (pure, `globalTime`-driven)
 
-## Particles — 50 total
+For N notes (target 24, scales with `density`):
+- Fixed angle: `θ_i = (i / N) · 2π`.
+- Per-note speed: `ω_i = baseω · primeSpeedCoeff(i)` from the existing `speedCoeffs(N)` helper (same anti-clump table as Metatron / Nebula). Guarantees no two rays share a period.
+- Radius: `r_i(t) = |sin(ω_i · t + φ_i)| · R_max`, with `R_max = 0.42 · min(W,H)`.
+- Position: `(W/2 + r·cos θ_i, H/2 + r·sin θ_i)`.
 
-**10 particles per layer**, riding the layer's polygon edges (`particle.edge ∈ 0..V-1`, position `u ∈ [0,1]` along that edge). At `t = 0` every particle parks at `u = 0` → play-time emergent chord (consistent with the rest of the engine).
+This is the only motion model — no lattice traversal, no vertex lerp.
 
-### Velocity formula — direction call-out
+### Ignition firing — `eventsIn(t0, t1)`
 
-Your spec says `V_i = BaseSpeed · φ^L + NoiseOffset`. Taken literally, `φ^L` grows with layer (φ ≈ 1.618), making outer = faster — which contradicts both the project-wide "inner = fastest" convention and your own "outer layers trigger less often" rule from §3 (outer being faster + outer triggering less would mean outer particles whip around silently). I will implement:
+Each note's contraction zero-crossing happens at `t_k = (k·π − φ_i) / ω_i` for integer `k`. For every note, enumerate `k` whose `t_k ∈ [t0, t1)` and emit one `TriggerEvent` per crossing. Slot/freq derived from `(i mod 6)` and the scale buffer (same pattern used in `metatronLattice` / `fractalNebula`).
 
-```
-V_i = BaseSpeed · φ^(-L) · noise_i
-noise_i = speedCoeffs(10)[i % 10]   // prime/φ within each layer's 10 particles
-```
+**Stochastic Stagger.** Sort the produced events by time; walk the list and, when ≥3 events fall inside a 20 ms window, nudge `ω_i` on the trailing notes by ±1% (deterministic hash on `i`) and recompute their crossings inside `[t0,t1)`. ω perturbation is persisted in state so future windows stay coherent.
 
-so inner = fastest, outer = slowest, and the `noise_i` term gives every particle in a layer a unique prime/φ-derived coefficient (otherwise 10 same-layer particles would share a period and clump immediately).
+### Draw
 
-Per-particle period: `T_i = basePeriod(bpm) / V_i`. Phase offsets from `phaseOffsets(50)` (golden-ratio 1-D), so initial positions stagger off `u=0` immediately after t=0.
+- Persistent trail buffer: at the start of each `draw`, paint a translucent dark rect over the full canvas (low alpha, e.g. 0.08) → produces the fading radial-flower look without clearing trails.
+- `ctx.globalCompositeOperation = 'screen'` for note heads + trail strokes.
+- Central Ignition circle drawn last with a soft additive glow; pulses brighter when `min_i r_i` is near zero.
+- Per-note: stroke a short tangent-free segment from previous-frame `(r_prev, θ_i)` to current `(r, θ_i)` so trails accumulate exactly along the ray.
 
-### The "meander" wobble — visual only
+### Scene registration
 
-A `sin(globalTime)` modulation injected into the live velocity would invalidate the analytical crossing solver in `eventsIn` (it solves `cos(2π · (t/T + φ))` roots, which assumes constant T). Two options:
+- `SceneId` += `"radialResonator"`.
+- `index.tsx`: add `radialResonatorScene`, default note count 24, state record, `bind`/`runScene` parallel to the Metatron/Nebula entries.
+- `PhaseDock.tsx`: add scene button labeled `RAD`.
 
-- **(a)** Apply the wobble **to the rendered `u` only** — visuals breathe, audio cadence stays clean and analytically solvable. Recommended.
-- **(b)** Drop the analytical solver and numerically scan each particle each tick. Costlier; loses the "pure function of scene-time" guarantee.
+### Explicit boundaries
 
-I'll do **(a)**. The wobble formula: `u_render = u(t) + 0.04 · sin(2π · t / wobblePeriod + particle.phaseOffset)`. Audio still fires on the un-wobbled `u` crossings.
-
-### Anti-clump pass (the "Micro-Quantization")
-
-Same deterministic build-time pass that ships in Metatron, scaled up: after assigning the 50 coefficients, walk every pair; if `|T_i / T_j - 1| < 0.001`, perturb `coeffs[j]` by `±1%` (golden-nudge sign). With 50 notes this is the only sane place to do it — true "approaching the intersection within 20 ms" detection at dispatch time would fight the existing emergent-chord behavior.
-
-## Auditory density filter
-
-Triggers per particle fire when `u` crosses 0 (A-vertex, loud) or 1 (B-vertex, softer). Then a **deterministic** gate (no `Math.random` — the scheduler contract is "same args → same events"):
-
-```
-keep = ((hashInt(particle.id, crossingIndex)) % (L + 1)) === 0
-```
-
-So L=0 keeps 100 %, L=1 keeps 50 %, L=2 keeps 33 %, L=3 keeps 25 %, L=4 keeps 20 % — outer layers feel airier exactly as you described, and the result is reproducible across renders / hot reloads. (`hashInt` = small xorshift-style int hash of `(particleId, k)`.)
-
-## Per-event pack routing
-
-Reuses the optional `pack` field on `TriggerEvent` shipped with Metatron. Each particle carries its layer's `PackId` ("moss" | "prism" | "obsidian") and emits it on every event.
-
-## Rendering
-
-- Trail-wipe: `rgba(15, 23, 42, 0.18)` (a bit heavier than Metatron — 50 particles).
-- Lattice scaffolding: polygon outlines + radial spokes + nearest-neighbor inter-layer connectors, all on `globalCompositeOperation = "screen"`.
-- Particles: `globalCompositeOperation = "hard-light"` for the orb pass so heads punch above the additive halo. Tail/glow stays on `screen`.
-- Layer hue ramp: moss-cyan inner → obsidian-violet outer.
-
-## Integration touchpoints
-
-1. **New `src/lib/scenes/fractalNebula.ts`** — scene object + `FractalNebulaState`.
-2. **`src/lib/engine/sceneTypes.ts`** — add `"fractalNebula"` to `SceneId`.
-3. **`src/routes/index.tsx`** — import, add to engine state map + null reset, scene-id switch in `bind()` and the render loop, `resolveNotesCount` returns `50`, append to `SCENES`.
-4. **`src/components/dock/PhaseDock.tsx`** — add `{ id: "fractalNebula", label: "Fractal Nebula", short: "NEB" }` to chips + dropdown.
-5. **`.lovable/plan.md`** — refresh.
-
-## Out of scope
-
-- Touching legacy `wheel` / `pendulum` / `bars`.
-- Reworking the scheduler's per-tick `whenHorizon` coalescing.
-- Exposing density-filter or wobble depth as dock knobs (fixed in code; can be lifted later).
-
-## Open questions
-
-1. **φ^L direction** — I'm flipping to `φ^(-L)` for engine consistency (inner = fastest). Say so if you actually want outer = faster.
-2. **Probability gate at L=0** — I'm using `1/(L+1)` so the triangle (L=0) keeps every hit. `1/L` is undefined; happy to use `1/max(1, L)` instead (triangle still 100 %).
-3. **Meander wobble** — visual-only by default; flag if you want the audio cadence itself to wobble (requires dropping the analytical solver).
+- Does **not** import from `metatronLattice.ts` or `fractalNebula.ts`.
+- Does **not** call any nested-polygon vertex or lattice path helpers.
+- Reuses only generic shared utilities: `speedCoeffs`, scale buffer, and the `TriggerEvent` / `Scene` contract.

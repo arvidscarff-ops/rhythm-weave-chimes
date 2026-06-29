@@ -66,14 +66,11 @@ export interface Scene<TState = unknown> {
   /** Build a fresh state (called when the scene is first selected). */
   init(globals: SceneGlobals): TState;
   /**
-   * Advance physics by `dt` seconds. Return any audio events to fire
-   * THIS frame. The render loop dispatches them via `triggerBus`.
-   *
-   * @deprecated Phase-Zero contract: scenes should expose `sample(t)` +
-   * `eventsIn(t0, t1)` instead and let the global scheduler own time.
-   * `update` is kept while individual scenes are migrated.
+   * @deprecated Legacy per-frame physics. All in-tree scenes are now
+   * Phase-Zero (`sample` + `eventsIn`); the render loop no longer calls
+   * this. Kept as an optional escape hatch for experimental scenes.
    */
-  update(state: TState, dt: number, globals: SceneGlobals): TriggerEvent[];
+  update?(state: TState, dt: number, globals: SceneGlobals): TriggerEvent[];
   /** Paint the scene. Additive blending owned per-scene (set + reset). */
   draw(state: TState, ctx: CanvasRenderingContext2D, globals: SceneGlobals): void;
 

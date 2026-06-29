@@ -305,15 +305,19 @@ function SceneMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="center">
         <DropdownMenuPage id="main">
-          <DropdownMenuLabel>Scene</DropdownMenuLabel>
+          <DropdownMenuLabel>Engine</DropdownMenuLabel>
           <DropdownMenuRadioGroup value={scene} onValueChange={(v) => onScene(v as SceneKind)}>
-            <DropdownMenuRadioItem value="wheel">Wheel</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="pendulum">Pendulum</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="bars">Bars</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="stringNet">String Network</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="pendulumFan">Pendulum Fan</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="spiralArp">Spiral Arpeggiator</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="radialSweep">Radial Sweep</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-foreground/40">Classic</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={scene} onValueChange={(v) => onScene(v as SceneKind)}>
+            <DropdownMenuRadioItem value="wheel">Wheel</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="pendulum">Pendulum</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="bars">Bars</DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
           <DropdownMenuPageTrigger targetId="multiply">

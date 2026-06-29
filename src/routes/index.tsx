@@ -934,6 +934,7 @@ function PhaseApp() {
       });
     };
     if (scene === "stringNet") bind(stringNetworkScene, () => e.stringNet);
+    else if (scene === "pendulumFan") bind(pendulumFanScene, () => e.pendulumFan);
     else engineScheduler.setActive(null);
   }, [scene, playing, topo]);
 
@@ -955,9 +956,7 @@ function PhaseApp() {
         // stringNet is now Phase-Zero (pure function of globalTime);
         // its position is reconstructed from `engineClock.t()` and
         // doesn't need per-share state. Field omitted on purpose.
-        pendulumFan: engineRef.current.pendulumFan
-          ? { clock: engineRef.current.pendulumFan.clock }
-          : undefined,
+        // pendulumFan: Phase-Zero — derived from engineClock.
         spiralArp: engineRef.current.spiralArp
           ? { clock: engineRef.current.spiralArp.clock }
           : undefined,
@@ -1000,7 +999,7 @@ function PhaseApp() {
         const ref = engineRef.current;
         // stringNet: legacy `clock` field ignored (Phase-Zero scenes
         // derive position from engineClock).
-        if (eng.pendulumFan && ref.pendulumFan) ref.pendulumFan.clock = eng.pendulumFan.clock;
+        // pendulumFan: legacy `clock` field ignored (Phase-Zero).
         if (eng.spiralArp && ref.spiralArp) ref.spiralArp.clock = eng.spiralArp.clock;
         if (eng.radialSweep && ref.radialSweep) {
           ref.radialSweep.clock = eng.radialSweep.clock;

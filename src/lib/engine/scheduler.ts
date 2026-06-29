@@ -50,19 +50,22 @@ function schedulerTick(): void {
   const now = engineClock.t();
   const horizon = now + HORIZON_S;
 
-  // Clamp lastScheduledT so a long pause / phase-zero reset doesn't dump
-  // hours of triggers into one tick.
-  if (lastScheduledT < now) lastScheduledT = now;
+  // Only clamp when we're genuinely behind (e.g. after a long pause). On
+  // the normal first tick after `resync()`, lastScheduledT is just a hair
+  // behind `now` and we MUST preserve it so the t=0 Big Bang window gets
+  // queried — otherwise every scene loses its first-click chord.
+  if (now - lastScheduledT > HORIZON_S * 2) lastScheduledT = now;
   if (lastScheduledT >= horizon) return;
 
+  // If the window includes t≈0 (first tick after a Phase-Zero reset),
+  // schedule the chord at the current audio time so it lands on the user's
+  // click instead of one horizon later.
+  const isBigBangTick = lastScheduledT <= 0;
   const events = scene.eventsIn(st, lastScheduledT, horizon, globals());
+  const whenBigBang = audioCtx.currentTime;
+  const whenHorizon = engineClock.sceneToAudioTime(horizon);
   for (const ev of events) {
-    // Events carry their scene-time implicitly via the [t0, t1) window;
-    // we schedule them at the appropriate AudioContext target.
-    // Approximation: distribute uniformly across the window.
-    // Scenes that need precise per-event timing should emit the time
-    // alongside the event in a follow-up extension (Step 3).
-    const when = engineClock.sceneToAudioTime(horizon);
+    const when = isBigBangTick ? whenBigBang : whenHorizon;
     triggerPackVoice(audioCtx, audioDest, pack(), ev.slot, ev.freq, when);
     spawnInkBleed(ev.x, ev.y, { hue: ev.hue, energy: ev.velocity });
   }

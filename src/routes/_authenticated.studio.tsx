@@ -1155,7 +1155,15 @@ function SceneEditor({
   const audition = () => {
     window.sessionStorage.setItem(
       "phaseZeroAudition",
-      JSON.stringify({ scene: def.templateId, pack: def.pack ?? undefined }),
+      JSON.stringify({
+        scene: def.templateId,
+        pack: def.pack ?? undefined,
+        densityOverride: def.densityOverride,
+        speedMultiplier: def.speedMultiplier,
+        pitchOffset: def.pitchOffset,
+        slotMap: def.slotMap,
+        ink: def.ink,
+      }),
     );
     window.location.href = "/";
   };

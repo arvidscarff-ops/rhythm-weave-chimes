@@ -33,6 +33,7 @@ import { pendulumFanScene, type PendulumFanState } from "@/lib/scenes/pendulumFa
 import { spiralArpScene, type SpiralArpState } from "@/lib/scenes/spiralArp";
 import { radialSweepScene, type RadialSweepState } from "@/lib/scenes/radialSweep";
 import { mandalaMatrixScene, type MandalaMatrixState } from "@/lib/scenes/mandalaMatrix";
+import { metatronLatticeScene, type MetatronLatticeState } from "@/lib/scenes/metatronLattice";
 import { engineClock } from "@/lib/engine/clock";
 import { engineScheduler } from "@/lib/engine/scheduler";
 import {
@@ -70,6 +71,8 @@ function resolveNotesCount(scene: SceneKind, density: number): number {
       return Math.max(6, Math.min(16, Math.round(6 + (density - 2) * 1)));
     case "mandalaMatrix":
       return Math.max(6, Math.min(30, Math.round((6 + (density - 2) * 2.4) / 6) * 6));
+    case "metatronLattice":
+      return 25;
     case "wheel":
     case "pendulum":
     case "bars":
@@ -132,7 +135,8 @@ export type SceneKind =
   | "pendulumFan"
   | "spiralArp"
   | "radialSweep"
-  | "mandalaMatrix";
+  | "mandalaMatrix"
+  | "metatronLattice";
 
 type Knobs = {
   mainVol: number; // 0..1
@@ -195,6 +199,7 @@ type EngineState = {
   spiralArp: SpiralArpState | null;
   radialSweep: RadialSweepState | null;
   mandalaMatrix: MandalaMatrixState | null;
+  metatronLattice: MetatronLatticeState | null;
 };
 
 type AudioGraph = {
@@ -241,6 +246,7 @@ const SCENES: SceneKind[] = [
   "spiralArp",
   "radialSweep",
   "mandalaMatrix",
+  "metatronLattice",
 ];
 type VoiceSlot = "melo" | "bass" | "atmo";
 const VOICE_SLOTS: VoiceSlot[] = ["melo", "bass", "atmo"];
@@ -913,6 +919,7 @@ function PhaseApp() {
     spiralArp: null,
     radialSweep: null,
     mandalaMatrix: null,
+    metatronLattice: null,
   });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const grainPatternRef = useRef<CanvasPattern | null>(null);
@@ -970,6 +977,7 @@ function PhaseApp() {
     else if (scene === "spiralArp") bind(spiralArpScene, () => e.spiralArp);
     else if (scene === "radialSweep") bind(radialSweepScene, () => e.radialSweep);
     else if (scene === "mandalaMatrix") bind(mandalaMatrixScene, () => e.mandalaMatrix);
+    else if (scene === "metatronLattice") bind(metatronLatticeScene, () => e.metatronLattice);
     else engineScheduler.setActive(null);
   }, [scene, playing, topo]);
 
@@ -1020,6 +1028,7 @@ function PhaseApp() {
     engineRef.current.spiralArp = null;
     engineRef.current.radialSweep = null;
     engineRef.current.mandalaMatrix = null;
+    engineRef.current.metatronLattice = null;
     const eng = state.engine;
     if (eng) {
       // Defer until after first runScene init populates the state.
@@ -1477,6 +1486,8 @@ function PhaseApp() {
         runScene(radialSweepScene, () => e.radialSweep, (s) => (e.radialSweep = s));
       } else if (scene === "mandalaMatrix") {
         runScene(mandalaMatrixScene, () => e.mandalaMatrix, (s) => (e.mandalaMatrix = s));
+      } else if (scene === "metatronLattice") {
+        runScene(metatronLatticeScene, () => e.metatronLattice, (s) => (e.metatronLattice = s));
       }
     }
     updateBursts(dt);

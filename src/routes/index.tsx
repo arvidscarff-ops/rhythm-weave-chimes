@@ -725,7 +725,7 @@ function PhaseApp() {
     wheel: wheelToSession(engineRef.current.wheel),
     pendulum: pendulumToSession(engineRef.current.pendulum),
     bars: barsToSession(engineRef.current.bars),
-  }), [scene, bpm, knobs, fxState, selectedPack, neural, composer]);
+  }, [scene, bpm, knobs, fxState, selectedPack, neural, composer, topo]);
 
   const restoreSessionState = useCallback((state: SessionState) => {
     setScene(state.s);

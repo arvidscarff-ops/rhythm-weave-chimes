@@ -1,8 +1,12 @@
 import type { SceneKind } from "@/routes/index.tsx";
 import type { FxState, ReverbType, ChorusType, GrainType, ToneType } from "@/lib/fx/fxState";
 import type { NeuralSettings } from "@/lib/neural/palette";
-import type { ComposerSettings, SlotSettings, RootName, ScaleId } from "@/lib/music/composer";
-import type { WheelState, WheelRing, WheelLine, WheelNote, PendulumState, BarsState } from "@/routes/index.tsx";
+import type { ComposerSettings, SlotSettings } from "@/lib/music/composer";
+import type { RootName, ScaleId } from "@/lib/music/scales";
+import type {
+  WheelState, WheelRing, WheelLine, WheelNote,
+  PendulumState, PendulumBob, BarsState, BarLane,
+} from "@/routes/index.tsx";
 
 export type SessionState = {
   v: 1;
@@ -156,15 +160,15 @@ export function composerFromSession(c: SessionState["composer"]): ComposerSettin
 
 export function wheelToSession(w: WheelState): SessionState["wheel"] {
   return {
-    rings: w.rings.map((r) => ({
+    rings: w.rings.map((r: WheelRing) => ({
       rf: r.radiusFactor,
       b: r.beats,
       sd: r.subdivision,
       d: r.direction,
       vs: r.voiceSlot,
-      n: r.notes.map((n) => [n.angle, n.pitchIndex] as [number, number]),
+      n: r.notes.map((n: WheelNote) => [n.angle, n.pitchIndex] as [number, number]),
     })),
-    lines: w.lines.map((l) => ({ a: l.angle })),
+    lines: w.lines.map((l: WheelLine) => ({ a: l.angle })),
   };
 }
 
@@ -173,7 +177,6 @@ export function wheelFromSession(w: SessionState["wheel"]): WheelState {
   const uid = (p = "id") => `${p}_${++idCounter}`;
   return {
     rings: w.rings.map((r) => {
-      const slotIndex = VOICE_SLOT_ORDER.indexOf(r.vs);
       return {
         id: uid("ring"),
         radiusFactor: r.rf,
@@ -183,13 +186,13 @@ export function wheelFromSession(w: SessionState["wheel"]): WheelState {
         phase: 0,
         voiceSlot: r.vs,
         flash: 0,
-        notes: r.n.map((n) => ({
+        notes: r.n.map((n: [number, number]) => ({
           id: uid("n"),
           angle: n[0],
           pitchIndex: n[1],
           prevWorld: n[0],
           flash: 0,
-        })),
+        })) as WheelNote[],
       } as WheelRing;
     }),
     lines: w.lines.map((l) => ({
@@ -204,7 +207,7 @@ export function wheelFromSession(w: SessionState["wheel"]): WheelState {
 
 export function pendulumToSession(p: PendulumState): SessionState["pendulum"] {
   return {
-    bobs: p.bobs.map((b) => [b.ratioIndex, b.slotIndex, b.pitchIndex, b.phase] as [number, number, number, number]),
+    bobs: p.bobs.map((b: PendulumBob) => [b.ratioIndex, b.slotIndex, b.pitchIndex, b.phase] as [number, number, number, number]),
   };
 }
 
@@ -219,13 +222,13 @@ export function pendulumFromSession(p: SessionState["pendulum"]): PendulumState 
       phase: b[3],
       prevSign: 1,
       flash: 0,
-    })),
+    }) as PendulumBob),
   };
 }
 
 export function barsToSession(b: BarsState): SessionState["bars"] {
   return {
-    lanes: b.lanes.map((l) => [l.ratioIndex, l.slotIndex, l.pitchIndex, l.phase] as [number, number, number, number]),
+    lanes: b.lanes.map((l: BarLane) => [l.ratioIndex, l.slotIndex, l.pitchIndex, l.phase] as [number, number, number, number]),
   };
 }
 
@@ -240,6 +243,6 @@ export function barsFromSession(b: SessionState["bars"]): BarsState {
       phase: l[3],
       flash: 0,
       lastTriggerY: 1,
-    })),
+    }) as BarLane),
   };
 }

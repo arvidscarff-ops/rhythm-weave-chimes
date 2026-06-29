@@ -1441,6 +1441,7 @@ function PhaseApp() {
     if (playingRef.current) resetComposerSources();
     if (playingRef.current) engineClock.pause();
     else engineClock.resume();
+    engineScheduler.resync();
     setPlaying((p) => !p);
   };
 

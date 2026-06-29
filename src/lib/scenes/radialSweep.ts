@@ -2,12 +2,14 @@
  * Scene D — Radial Sweep & Nebula.
  *
  * A central origin with a sweeping segmented arm (radar logic). The arm
- * has angular velocity ω derived from BPM. Targets sit at fixed angles
- * (and varied radii). A trigger fires when the arm angle crosses each
- * target's angle.
+ * angle is a pure function of scene-time: armAngle(t) = ω · t with ω
+ * derived from BPM. Targets sit at fixed angles (and varied radii).
  *
- * On every Kth trigger the central nebula gets a soft, blooming pulse —
- * a large slow-decay ink-bleed-style radial gradient.
+ * Phase-Zero contract: at t = 0 the arm sits at angle 0, so the target
+ * placed at angle 0 fires the universal Big Bang. Every subsequent
+ * trigger is found analytically by solving ω · t ≡ θ_i (mod 2π) inside
+ * `eventsIn`. The nebula pulse decays from `lastNebulaT` and the per-
+ * target flash from `lastFireT` — both are pure functions of scene-time.
  */
 
 import type { Scene, SceneGlobals, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
@@ -24,20 +26,18 @@ type Target = {
   slot: VoiceSlotIndex;
   pitchSemis: number;
   hue: number;
-  flash: number;
+  /** Scene-time of most recent trigger; drives refractory + flash decay. */
+  lastFireT: number;
 };
 
 export type RadialSweepState = {
-  /** Current arm angle (rad). */
-  armAngle: number;
-  /** Trail of recent arm angles for the sweep wedge. */
-  trailAngles: number[];
   targets: Target[];
-  /** Trigger counter for nebula pulses. */
+  /** Cumulative trigger count (every 4th drives a nebula pulse). */
   triggerCount: number;
-  /** Nebula pulse intensity 0..1 (decays). */
-  nebula: number;
-  clock: number;
+  /** Scene-time of last nebula pulse; drives derived intensity. */
+  lastNebulaT: number;
+  /** Cached density so we can hot-reseed on dock changes. */
+  density: number;
 };
 
 /** Map dock density (2..12) → target count (6..16). */
@@ -54,7 +54,7 @@ function buildTargets(N: number): Target[] {
       slot: (i % 6) as VoiceSlotIndex,
       pitchSemis: SCALE_SEMIS[i % SCALE_SEMIS.length],
       hue: 0.5 + (i / N) * 0.45,
-      flash: 0,
+      lastFireT: -Infinity,
     });
   }
   return out;
@@ -65,74 +65,83 @@ function armOmega(bpm: number) {
   return (2 * Math.PI) / ((60 / Math.max(20, bpm)) * 8);
 }
 
-/** Normalize to [0, 2π). */
-function norm(a: number) {
-  const tau = Math.PI * 2;
-  return ((a % tau) + tau) % tau;
-}
-
-/** Forward distance from prev → next angle (assuming CCW motion). */
-function fwd(prev: number, next: number) {
-  const tau = Math.PI * 2;
-  return ((next - prev) % tau + tau) % tau;
-}
+const TAU = Math.PI * 2;
 
 export const radialSweepScene: Scene<RadialSweepState> = {
   id: "radialSweep",
 
-  init(_g) {
-    const targets = buildTargets(targetCount(_g.density ?? 5));
+  init(g) {
     return {
-      armAngle: 0,
-      trailAngles: [],
-      targets,
+      targets: buildTargets(targetCount(g.density ?? 5)),
       triggerCount: 0,
-      nebula: 0,
-      clock: 0,
+      lastNebulaT: -Infinity,
+      density: g.density ?? 5,
     };
   },
 
-  update(state, dt, g) {
+  /** Legacy shim — Phase-Zero scene. */
+  update(_state, _dt, _g) {
+    return [];
+  },
+
+  sample(state, _t, g) {
     const want = targetCount(g.density);
-    if (want !== state.targets.length) state.targets = buildTargets(want);
-    state.clock += dt;
-    state.nebula = Math.max(0, state.nebula - dt * 1.4);
-    for (const t of state.targets) t.flash = Math.max(0, t.flash - dt * 2.2);
+    if (want !== state.targets.length) {
+      state.targets = buildTargets(want);
+      state.triggerCount = 0;
+      state.lastNebulaT = -Infinity;
+      state.density = g.density;
+    }
+  },
 
-    const omega = armOmega(g.bpm) * g.speed;
-    const prev = norm(state.armAngle);
-    state.armAngle += omega * dt;
-    const next = norm(state.armAngle);
-    state.trailAngles.push(next);
-    if (state.trailAngles.length > 18) state.trailAngles.shift();
-
+  eventsIn(state, t0, t1, g) {
+    const events: TriggerEvent[] = [];
+    if (t1 <= t0) return events;
+    const want = targetCount(g.density);
+    if (want !== state.targets.length) {
+      state.targets = buildTargets(want);
+      state.triggerCount = 0;
+      state.lastNebulaT = -Infinity;
+      state.density = g.density;
+    }
+    const omega = armOmega(g.bpm);
+    if (omega <= 0) return events;
     const cx = g.W / 2;
     const cy = g.H / 2;
     const maxR = Math.min(g.W, g.H) * 0.42;
-    const arc = fwd(prev, next);
-
-    const events: TriggerEvent[] = [];
+    // armAngle(t) = ω·t.  Target i fires when ω·t = θ_i + n·2π
+    //   ⇒ t_n = (θ_i + n·2π)/ω,  n ≥ 0.
+    // Collect every (t, target) in [t0, t1), then sort by time so
+    // `triggerCount` increments in true chronological order.
+    const hits: { tEv: number; target: Target }[] = [];
     for (const tg of state.targets) {
-      const d = fwd(prev, tg.angle);
-      if (d > 0 && d <= arc) {
-        const r = tg.rNorm * maxR;
-        const x = cx + Math.cos(tg.angle) * r;
-        const y = cy + Math.sin(tg.angle) * r;
-        tg.flash = 1;
-        state.triggerCount++;
-        if (state.triggerCount % 4 === 0) {
-          // Nebula pulse on every 4th trigger.
-          state.nebula = 1;
-        }
-        events.push({
-          slot: tg.slot,
-          freq: freqOf(tg.pitchSemis + g.pitchSemis),
-          x,
-          y,
-          hue: tg.hue,
-          velocity: 0.7,
-        });
+      const lapPeriod = TAU / omega;
+      const tFirst = tg.angle / omega;
+      // Smallest n with tFirst + n·lapPeriod >= t0.
+      const nLo = Math.ceil((t0 - tFirst) / lapPeriod);
+      const nHi = Math.floor((t1 - tFirst) / lapPeriod);
+      for (let n = nLo; n <= nHi; n++) {
+        const tEv = tFirst + n * lapPeriod;
+        if (tEv < t0 || tEv >= t1) continue;
+        hits.push({ tEv, target: tg });
       }
+    }
+    hits.sort((a, b) => a.tEv - b.tEv);
+    for (const { tEv, target: tg } of hits) {
+      tg.lastFireT = tEv;
+      state.triggerCount++;
+      if (state.triggerCount % 4 === 0) state.lastNebulaT = tEv;
+      const r = tg.rNorm * maxR;
+      const x = cx + Math.cos(tg.angle) * r;
+      const y = cy + Math.sin(tg.angle) * r;
+      events.push({
+        slot: tg.slot,
+        freq: freqOf(tg.pitchSemis + g.pitchSemis),
+        x,
+        y,
+        hue: tg.hue,
+        velocity: 0.7,
+      });
     }
     return events;
   },
@@ -141,15 +150,19 @@ export const radialSweepScene: Scene<RadialSweepState> = {
     const cx = g.W / 2;
     const cy = g.H / 2;
     const maxR = Math.min(g.W, g.H) * 0.42;
+    const t = g.globalTime;
+    const omega = armOmega(g.bpm);
+    const armAngle = omega * t;
+    const nebula = Math.max(0, Math.min(1, Math.exp(-(t - state.lastNebulaT) * 1.4)));
 
     ctx.save();
     ctx.globalCompositeOperation = "screen";
 
-    // Nebula bloom (central radial gradient pulse).
-    if (state.nebula > 0.01) {
-      const nr = maxR * (1.0 + state.nebula * 0.4);
+    // Nebula bloom (central radial gradient pulse) — derived from lastNebulaT.
+    if (nebula > 0.01) {
+      const nr = maxR * (1.0 + nebula * 0.4);
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, nr);
-      const alpha = state.nebula * 0.35;
+      const alpha = nebula * 0.35;
       grad.addColorStop(0, `oklch(0.92 0.18 220 / ${alpha.toFixed(3)})`);
       grad.addColorStop(0.4, `oklch(0.7 0.2 280 / ${(alpha * 0.55).toFixed(3)})`);
       grad.addColorStop(1, "oklch(0.5 0.12 240 / 0)");
@@ -168,25 +181,24 @@ export const radialSweepScene: Scene<RadialSweepState> = {
       ctx.stroke();
     }
 
-    // Sweep wedge — fading trail of past arm positions.
-    const trail = state.trailAngles;
-    if (trail.length > 1) {
-      for (let i = 1; i < trail.length; i++) {
-        const a0 = trail[i - 1];
-        const a1 = trail[i];
-        const alpha = (i / trail.length) * 0.18;
-        ctx.fillStyle = `oklch(0.85 0.16 200 / ${alpha.toFixed(3)})`;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.arc(cx, cy, maxR, a0, a1);
-        ctx.closePath();
-        ctx.fill();
-      }
+    // Sweep wedge — derived trail by sampling armAngle backward in time.
+    const TRAIL_N = 18;
+    const TRAIL_DT = 0.035;
+    for (let i = 1; i < TRAIL_N; i++) {
+      const a0 = omega * (t - i * TRAIL_DT);
+      const a1 = omega * (t - (i - 1) * TRAIL_DT);
+      const alpha = ((TRAIL_N - i) / TRAIL_N) * 0.18;
+      ctx.fillStyle = `oklch(0.85 0.16 200 / ${alpha.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, maxR, a0, a1);
+      ctx.closePath();
+      ctx.fill();
     }
 
     // Arm line.
-    const tipX = cx + Math.cos(state.armAngle) * maxR;
-    const tipY = cy + Math.sin(state.armAngle) * maxR;
+    const tipX = cx + Math.cos(armAngle) * maxR;
+    const tipY = cy + Math.sin(armAngle) * maxR;
     ctx.lineWidth = 0.5;
     ctx.strokeStyle = "oklch(0.95 0.16 200 / 0.85)";
     ctx.beginPath();
@@ -200,20 +212,21 @@ export const radialSweepScene: Scene<RadialSweepState> = {
     ctx.lineTo(tipX, tipY);
     ctx.stroke();
 
-    // Targets.
-    for (const t of state.targets) {
-      const r = t.rNorm * maxR;
-      const x = cx + Math.cos(t.angle) * r;
-      const y = cy + Math.sin(t.angle) * r;
-      const hueDeg = (t.hue * 360) % 360;
-      ctx.strokeStyle = `oklch(0.92 0.16 ${hueDeg} / ${(0.2 + t.flash * 0.6).toFixed(3)})`;
-      ctx.lineWidth = 1.0 + t.flash * 1.5;
+    // Targets — flash decays from lastFireT.
+    for (const tg of state.targets) {
+      const r = tg.rNorm * maxR;
+      const x = cx + Math.cos(tg.angle) * r;
+      const y = cy + Math.sin(tg.angle) * r;
+      const hueDeg = (tg.hue * 360) % 360;
+      const flash = Math.max(0, Math.min(1, Math.exp(-(t - tg.lastFireT) * 2.2)));
+      ctx.strokeStyle = `oklch(0.92 0.16 ${hueDeg} / ${(0.2 + flash * 0.6).toFixed(3)})`;
+      ctx.lineWidth = 1.0 + flash * 1.5;
       ctx.beginPath();
-      ctx.arc(x, y, 5 + t.flash * 6, 0, Math.PI * 2);
+      ctx.arc(x, y, 5 + flash * 6, 0, Math.PI * 2);
       ctx.stroke();
-      if (t.flash > 0.05) {
+      if (flash > 0.05) {
         const grad = ctx.createRadialGradient(x, y, 0, x, y, 18);
-        grad.addColorStop(0, `oklch(0.95 0.2 ${hueDeg} / ${(t.flash * 0.65).toFixed(3)})`);
+        grad.addColorStop(0, `oklch(0.95 0.2 ${hueDeg} / ${(flash * 0.65).toFixed(3)})`);
         grad.addColorStop(1, `oklch(0.6 0.18 ${hueDeg} / 0)`);
         ctx.fillStyle = grad;
         ctx.beginPath();

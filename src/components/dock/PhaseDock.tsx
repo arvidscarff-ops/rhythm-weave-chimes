@@ -102,6 +102,18 @@ export function PhaseDock(p: Props) {
 
         <Divider />
 
+        <button
+          onClick={p.onShare}
+          aria-label="Share session"
+          title="Share session"
+          className={cn(
+            DOCK_BTN,
+            "h-9 w-9 px-0 justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.10]",
+          )}
+        >
+          <Share2 className="h-4 w-4" />
+        </button>
+
         <MoreMenu authed={p.authed} email={p.email} onSignOut={p.onSignOut} />
       </div>
     </div>

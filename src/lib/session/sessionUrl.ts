@@ -50,6 +50,19 @@ export type SessionState = {
   };
   pendulum: { bobs: [ratioIndex: number, slotIndex: number, pitchIndex: number, phase: number][] };
   bars: { lanes: [ratioIndex: number, slotIndex: number, pitchIndex: number, phase: number][] };
+  /**
+   * Engine-scene snapshots. All optional — the geometric scenes (stringNet,
+   * pendulumFan, spiralArp, radialSweep) reseed deterministically from
+   * `knobs.mu` (density) and `bpm`, so the share-URL only needs to record
+   * a handful of phase counters for visual continuity. Missing keys hydrate
+   * to a fresh scene init — old hashes keep working unchanged.
+   */
+  engine?: {
+    stringNet?: { clock: number };
+    pendulumFan?: { clock: number };
+    spiralArp?: { clock: number };
+    radialSweep?: { clock: number; arm: number; tc: number };
+  };
 };
 
 const VOICE_SLOT_ORDER: ("melo" | "bass" | "atmo")[] = ["melo", "bass", "atmo"];

@@ -901,6 +901,24 @@ function PhaseApp() {
       wheel: wheelToSession(engineRef.current.wheel),
       pendulum: pendulumToSession(engineRef.current.pendulum),
       bars: barsToSession(engineRef.current.bars),
+      engine: {
+        stringNet: engineRef.current.stringNet
+          ? { clock: engineRef.current.stringNet.clock }
+          : undefined,
+        pendulumFan: engineRef.current.pendulumFan
+          ? { clock: engineRef.current.pendulumFan.clock }
+          : undefined,
+        spiralArp: engineRef.current.spiralArp
+          ? { clock: engineRef.current.spiralArp.clock }
+          : undefined,
+        radialSweep: engineRef.current.radialSweep
+          ? {
+              clock: engineRef.current.radialSweep.clock,
+              arm: engineRef.current.radialSweep.armAngle,
+              tc: engineRef.current.radialSweep.triggerCount,
+            }
+          : undefined,
+      },
     }),
     [scene, bpm, knobs, fxState, selectedPack, neural, composer, topo],
   );
@@ -918,6 +936,28 @@ function PhaseApp() {
     engineRef.current.wheel = wheelFromSession(state.wheel);
     engineRef.current.pendulum = pendulumFromSession(state.pendulum);
     engineRef.current.bars = barsFromSession(state.bars);
+    // Engine scenes are deterministic from density+bpm: clear them so
+    // runScene re-inits on the next frame, then patch in saved phase
+    // counters once the new state object exists.
+    engineRef.current.stringNet = null;
+    engineRef.current.pendulumFan = null;
+    engineRef.current.spiralArp = null;
+    engineRef.current.radialSweep = null;
+    const eng = state.engine;
+    if (eng) {
+      // Defer until after first runScene init populates the state.
+      requestAnimationFrame(() => {
+        const ref = engineRef.current;
+        if (eng.stringNet && ref.stringNet) ref.stringNet.clock = eng.stringNet.clock;
+        if (eng.pendulumFan && ref.pendulumFan) ref.pendulumFan.clock = eng.pendulumFan.clock;
+        if (eng.spiralArp && ref.spiralArp) ref.spiralArp.clock = eng.spiralArp.clock;
+        if (eng.radialSweep && ref.radialSweep) {
+          ref.radialSweep.clock = eng.radialSweep.clock;
+          ref.radialSweep.armAngle = eng.radialSweep.arm;
+          ref.radialSweep.triggerCount = eng.radialSweep.tc;
+        }
+      });
+    }
     bumpTopo();
   }, []);
 

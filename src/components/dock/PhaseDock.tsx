@@ -1,4 +1,11 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
+import {
+  listMyPresets,
+  savePreset,
+} from "@/lib/studio/presets.functions";
 import { Link } from "@tanstack/react-router";
 import {
   Play,
@@ -14,6 +21,8 @@ import {
   LogIn,
   LogOut,
   Share2,
+  FolderOpen,
+  Save,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -864,8 +873,15 @@ function MoreMenu({
             </DropdownMenuItem>
           ) : (
             <DropdownMenuItem asChild>
-              <Link to="/auth" className="flex w-full items-center gap-2">
-                <LogIn className="h-4 w-4" /> Sign in
+          <Link to="/auth" className="flex w-full items-center gap-2">
+            <LogIn className="h-4 w-4" /> Sign in
+          </Link>
+        </DropdownMenuItem>
+          )}
+          {authed && (
+            <DropdownMenuItem asChild>
+              <Link to="/_authenticated/studio" className="flex w-full items-center gap-2">
+                <FolderOpen className="h-4 w-4" /> My Studio
               </Link>
             </DropdownMenuItem>
           )}

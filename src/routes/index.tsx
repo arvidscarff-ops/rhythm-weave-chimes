@@ -107,6 +107,7 @@ import {
   barsToSession,
   barsFromSession,
 } from "@/lib/session/sessionUrl";
+import { setSceneOverlay } from "@/lib/engine/sceneOverlay";
 
 export const Route = createFileRoute("/")({
   head: () => ({

@@ -959,13 +959,7 @@ function PhaseApp() {
         // doesn't need per-share state. Field omitted on purpose.
         // pendulumFan: Phase-Zero — derived from engineClock.
         // spiralArp: Phase-Zero — derived from engineClock.
-        radialSweep: engineRef.current.radialSweep
-          ? {
-              clock: engineRef.current.radialSweep.clock,
-              arm: engineRef.current.radialSweep.armAngle,
-              tc: engineRef.current.radialSweep.triggerCount,
-            }
-          : undefined,
+        // radialSweep: Phase-Zero — derived from engineClock.
       },
     }),
     [scene, bpm, knobs, fxState, selectedPack, neural, composer, topo],
@@ -1000,11 +994,8 @@ function PhaseApp() {
         // derive position from engineClock).
         // pendulumFan: legacy `clock` field ignored (Phase-Zero).
         // spiralArp: legacy `clock` field ignored (Phase-Zero).
-        if (eng.radialSweep && ref.radialSweep) {
-          ref.radialSweep.clock = eng.radialSweep.clock;
-          ref.radialSweep.armAngle = eng.radialSweep.arm;
-          ref.radialSweep.triggerCount = eng.radialSweep.tc;
-        }
+        // radialSweep: legacy fields ignored (Phase-Zero).
+        void ref;
       });
     }
     bumpTopo();

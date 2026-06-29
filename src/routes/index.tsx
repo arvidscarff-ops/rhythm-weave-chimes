@@ -1507,7 +1507,7 @@ function PhaseApp() {
    * to its rest formation and the next play click is a Big Bang.
    */
   const shapeSig =
-    `${scene}|${knobs.multiply}|${composer.scaleId}|${composer.root}|` +
+    `${scene}|${knobs.multiply}|${composer.scale}|${composer.root}|` +
     composer.slots
       .map((s) => `${s.k}/${s.n}/${s.rotation}/${s.noteMode}`)
       .join(",");

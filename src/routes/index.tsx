@@ -1075,6 +1075,23 @@ function PhaseApp() {
     }
   }, [restoreSessionState]);
 
+  // One-shot audition handshake from My Studio → Scenes.
+  // The Studio writes { scene, pack } into sessionStorage before navigating
+  // here; we apply it once and clear so a normal reload won't re-trigger.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.sessionStorage.getItem("phaseZeroAudition");
+    if (!raw) return;
+    window.sessionStorage.removeItem("phaseZeroAudition");
+    try {
+      const a = JSON.parse(raw) as { scene?: SceneKind; pack?: string };
+      if (a.scene) setScene(a.scene);
+      if (a.pack) setSelectedPack(a.pack);
+    } catch {
+      /* ignore malformed audition payload */
+    }
+  }, []);
+
   // Write hash when state changes (debounced).
   const hashDebounceRef = useRef<number | null>(null);
   const [shareToast, setShareToast] = useState<string | null>(null);

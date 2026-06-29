@@ -22,6 +22,14 @@ import type { Scene, SceneGlobals, TriggerEvent } from "./sceneTypes";
 const TICK_MS = 25;
 /** How far ahead each tick looks (s). Must exceed TICK_MS + jitter. */
 const HORIZON_S = 0.12;
+/**
+ * Unison-guard window: if two scheduled events would fire within this
+ * many seconds of each other, the second is nudged forward by
+ * `UNISON_NUDGE_S` to keep them rhythmically independent. The t=0
+ * Big Bang chord is intentionally exempt.
+ */
+const UNISON_GUARD_S = 0.05;
+const UNISON_NUDGE_S = 0.012;
 
 type ActiveBinding = {
   scene: Scene<unknown>;
@@ -64,10 +72,34 @@ function schedulerTick(): void {
   const events = scene.eventsIn(st, lastScheduledT, horizon, globals());
   const whenBigBang = audioCtx.currentTime;
   const whenHorizon = engineClock.sceneToAudioTime(horizon);
-  for (const ev of events) {
-    const when = isBigBangTick ? whenBigBang : whenHorizon;
+  // Compute each event's audio time, then apply the unison guard
+  // (skipped for the Big Bang tick — that chord is intentional).
+  const scheduled: { ev: TriggerEvent; when: number }[] = events.map((ev) => ({
+    ev,
+    when: isBigBangTick ? whenBigBang : whenHorizon,
+  }));
+  if (!isBigBangTick && scheduled.length > 1) {
+    scheduled.sort((a, b) => a.when - b.when || a.ev.slot - b.ev.slot);
+    for (let i = 1; i < scheduled.length; i++) {
+      const prev = scheduled[i - 1].when;
+      if (scheduled[i].when - prev < UNISON_GUARD_S) {
+        // Deterministic ± nudge by slot parity; forward only (never
+        // back into the past) so dispatch order is preserved.
+        const sign = scheduled[i].ev.slot % 2 === 0 ? 1 : 1; // forward
+        scheduled[i].when = prev + UNISON_GUARD_S + UNISON_NUDGE_S * sign;
+      }
+    }
+  }
+  for (const { ev, when } of scheduled) {
     triggerPackVoice(audioCtx, audioDest, pack(), ev.slot, ev.freq, when);
-    spawnInkBleed(ev.x, ev.y, { hue: ev.hue, energy: ev.velocity });
+    // Visual lands with the audio: delay ink-bleed by the nudge so
+    // the bloom stays glued to the sound, not the original event time.
+    const delayMs = Math.max(0, (when - audioCtx.currentTime) * 1000);
+    if (delayMs < 4) {
+      spawnInkBleed(ev.x, ev.y, { hue: ev.hue, energy: ev.velocity });
+    } else {
+      setTimeout(() => spawnInkBleed(ev.x, ev.y, { hue: ev.hue, energy: ev.velocity }), delayMs);
+    }
   }
   lastScheduledT = horizon;
 }

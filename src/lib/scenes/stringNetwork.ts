@@ -310,12 +310,12 @@ export const stringNetworkScene: Scene<StringNetState> = {
       const firstK = Math.floor(lo) + 1;
       const lastK = Math.floor(hi);
       for (let k = firstK; k <= lastK; k++) {
-        // Solve k = p.t0 + p.rate * tEv → tEv (kept for future per-event
-        // scheduling; right now the scheduler schedules at horizon).
-        // const tEv = (k - p.t0) / p.rate;
+        const tEv = (k - p.t0) / p.rate;
+        if (tEv - p.lastFireT < PARTICLE_COOLDOWN) continue;
+        p.lastFireT = tEv;
         const s = state.strings[p.stringIdx];
-        const A = anchorAt(state.anchors[s.a], (k - p.t0) / p.rate, g.W, g.H);
-        const B = anchorAt(state.anchors[s.b], (k - p.t0) / p.rate, g.W, g.H);
+        const A = anchorAt(state.anchors[s.a], tEv, g.W, g.H);
+        const B = anchorAt(state.anchors[s.b], tEv, g.W, g.H);
         // Wrap point is at u = integer → param 0 or 1 alternating.
         const u = k - Math.floor(k);
         const x = lerp(A.x, B.x, u);
@@ -326,7 +326,7 @@ export const stringNetworkScene: Scene<StringNetState> = {
           x,
           y,
           hue: p.hue,
-          velocity: 0.7,
+          velocity: 0.45 + p.speedNorm * 0.5,
         });
       }
     }

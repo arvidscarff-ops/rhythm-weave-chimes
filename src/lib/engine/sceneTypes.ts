@@ -96,15 +96,4 @@ export interface Scene<TState = unknown> {
    * same arguments must return identical results.
    */
   eventsIn?(state: TState, t0: number, t1: number, globals: SceneGlobals): TriggerEvent[];
-
-  /**
-   * Phase-Zero "Big Bang" chord. Returns one event per note positioned
-   * at that note's resting / trigger location. The scheduler dispatches
-   * this exactly once per play/reset, on the first tick where scene
-   * time crosses 0. From t > 0 onward `eventsIn` owns scheduling.
-   *
-   * Implementations MAY mutate per-note `lastFireT = 0` if needed to
-   * suppress double-firing inside refractory windows (see radialSweep).
-   */
-  bigBang?(state: TState, globals: SceneGlobals): TriggerEvent[];
 }

@@ -138,7 +138,8 @@ export const mandalaMatrixScene: Scene<MandalaMatrixState> = {
       // u(t) = 0.5 + 0.5·cos(2π·(t/T + φ))
       //   vertex  (u=1) → t/T + φ = k        ⇒ t = (k - φ)·T
       //   center  (u=0) → t/T + φ = k + 0.5  ⇒ t = (k + 0.5 - φ)·T
-      // Big Bang owns t=0 — the scheduler dispatches the vertex chord.
+      // t = 0 is included — every note rests on its outer vertex at
+      // play time and that emergent simultaneity IS the Big Bang.
       const hits: { tEv: number; outer: boolean }[] = [];
       const collect = (offset: number, outer: boolean) => {
         // Solve k·T + (offset - φ)·T ∈ [t0, t1).
@@ -155,7 +156,6 @@ export const mandalaMatrixScene: Scene<MandalaMatrixState> = {
       hits.sort((a, b) => a.tEv - b.tEv);
 
       for (const { tEv, outer } of hits) {
-        if (tEv <= 0) continue; // Big Bang owns t=0
         if (tEv - n.lastFireT < COOLDOWN) continue;
         n.lastFireT = tEv;
         const angle = (n.spoke / NUM_SPOKES) * Math.PI * 2 - Math.PI / 2;
@@ -175,26 +175,6 @@ export const mandalaMatrixScene: Scene<MandalaMatrixState> = {
       }
     }
     return events;
-  },
-
-  bigBang(state, g) {
-    const cx = g.W / 2;
-    const cy = g.H / 2;
-    const R = Math.min(g.W, g.H) * 0.36;
-    return state.notes.map((n) => {
-      const angle = (n.spoke / NUM_SPOKES) * Math.PI * 2 - Math.PI / 2;
-      const x = cx + Math.cos(angle) * R;
-      const y = cy + Math.sin(angle) * R;
-      n.lastFireT = 0;
-      return {
-        slot: n.slot,
-        freq: freqOf(n.pitchSemis + 12 + g.pitchSemis),
-        x,
-        y,
-        hue: n.hue,
-        velocity: n.velocityBase,
-      };
-    });
   },
 
   draw(state, ctx, g) {

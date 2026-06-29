@@ -935,6 +935,7 @@ function PhaseApp() {
     };
     if (scene === "stringNet") bind(stringNetworkScene, () => e.stringNet);
     else if (scene === "pendulumFan") bind(pendulumFanScene, () => e.pendulumFan);
+    else if (scene === "spiralArp") bind(spiralArpScene, () => e.spiralArp);
     else engineScheduler.setActive(null);
   }, [scene, playing, topo]);
 

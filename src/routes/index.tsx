@@ -64,7 +64,7 @@ export const Route = createFileRoute("/")({
  * ============================================================ */
 
 type VoiceKind = "chime" | "pluck" | "bell" | "pad" | "bass" | "none";
-type SceneKind = "wheel" | "pendulum" | "bars";
+export type SceneKind = "wheel" | "pendulum" | "bars";
 
 type Knobs = {
   mainVol: number;   // 0..1
@@ -155,7 +155,7 @@ type VoiceSlot = "melo" | "bass" | "atmo";
 const VOICE_SLOTS: VoiceSlot[] = ["melo", "bass", "atmo"];
 void VOICES;
 
-type WheelNote = {
+export type WheelNote = {
   id: string;
   angle: number;
   pitchIndex: number;
@@ -163,7 +163,7 @@ type WheelNote = {
   flash: number;
 };
 
-type WheelRing = {
+export type WheelRing = {
   id: string;
   radiusFactor: number;
   beats: number;
@@ -175,21 +175,21 @@ type WheelRing = {
   flash: number;
 };
 
-type WheelLine = {
+export type WheelLine = {
   id: string;
   angle: number;
   flash: number;
   sparks: { x: number; y: number; t: number }[];
 };
 
-type WheelState = {
+export type WheelState = {
   rings: WheelRing[];
   lines: WheelLine[];
   lastFire: Map<string, number>;
 };
 
 /* ---- Pendulum scene ---- */
-type PendulumBob = {
+export type PendulumBob = {
   id: string;
   ratioIndex: number;     // 0..N → picks ratio from PEND_RATIOS
   slotIndex: number;      // 0..5 → pack slot
@@ -198,12 +198,12 @@ type PendulumBob = {
   prevSign: -1 | 1;       // last side
   flash: number;          // 0..1 visual
 };
-type PendulumState = {
+export type PendulumState = {
   bobs: PendulumBob[];
 };
 
 /* ---- Bars scene ---- */
-type BarLane = {
+export type BarLane = {
   id: string;
   ratioIndex: number;     // 0..N → picks ratio from BAR_RATIOS
   slotIndex: number;
@@ -212,7 +212,7 @@ type BarLane = {
   flash: number;
   lastTriggerY: number;   // for zigzag connector
 };
-type BarsState = {
+export type BarsState = {
   lanes: BarLane[];
 };
 

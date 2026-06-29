@@ -1388,6 +1388,14 @@ function PhaseApp() {
           st = impl.init(globals);
           setState(st);
         }
+        // Phase-Zero path: scene exposes pure `sample`. Visuals derive
+        // from globalTime; audio is owned by the scheduler (bound below
+        // when `eventsIn` is also present).
+        if (impl.sample) {
+          impl.sample(st, gT, globals);
+          impl.draw(st, ctx2d, globals);
+          return;
+        }
         if (playing && a) {
           const events = impl.update(st, dt, globals);
           dispatchTriggers(events, {

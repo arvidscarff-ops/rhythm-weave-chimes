@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,16 +12,28 @@ import {
   duplicatePreset,
   type PresetRow,
 } from "@/lib/studio/presets.functions";
-import { ChevronLeft, Copy, Download, Pencil, Trash2 } from "lucide-react";
+import { ChevronLeft, Copy, Download, Pencil, Play, Plus, Trash2, Upload } from "lucide-react";
+import { z } from "zod";
+import { supabase } from "@/integrations/supabase/client";
+import { auditionSample } from "@/lib/dev/samplePlayer";
+
+const tabSchema = z.object({
+  tab: z.enum(["presets", "packs", "scenes"]).optional(),
+});
 
 export const Route = createFileRoute("/_authenticated/studio")({
+  validateSearch: tabSchema,
   component: StudioPage,
 });
 
 type Tab = "presets" | "packs" | "scenes";
 
 function StudioPage() {
-  const [tab, setTab] = useState<Tab>("presets");
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const tab: Tab = search.tab ?? "presets";
+  const setTab = (t: Tab) =>
+    navigate({ search: { tab: t === "presets" ? undefined : t }, replace: true });
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -52,9 +64,9 @@ function StudioPage() {
         </nav>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-8">
+      <main className="mx-auto max-w-6xl px-6 py-8">
         {tab === "presets" && <PresetsTab />}
-        {tab === "packs" && <ComingSoon kind="Sound Pack Studio" />}
+        {tab === "packs" && <PacksTab />}
         {tab === "scenes" && <ComingSoon kind="Scene Studio" />}
       </main>
     </div>

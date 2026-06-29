@@ -34,7 +34,6 @@ import { spiralArpScene, type SpiralArpState } from "@/lib/scenes/spiralArp";
 import { radialSweepScene, type RadialSweepState } from "@/lib/scenes/radialSweep";
 import { engineClock } from "@/lib/engine/clock";
 import { engineScheduler } from "@/lib/engine/scheduler";
-import { dispatchTriggers } from "@/lib/engine/triggerBus";
 import {
   composerAdvance,
   resetComposerSources,
@@ -1427,26 +1426,10 @@ function PhaseApp() {
           st = impl.init(globals);
           setState(st);
         }
-        // Phase-Zero path: scene exposes pure `sample`. Visuals derive
-        // from globalTime; audio is owned by the scheduler (bound below
-        // when `eventsIn` is also present).
-        if (impl.sample) {
-          impl.sample(st, gT, globals);
-          impl.draw(st, ctx2d, globals);
-          return;
-        }
-        if (playing && a) {
-          const events = impl.update(st, dt, globals);
-          dispatchTriggers(events, {
-            audioCtx: a.ctx,
-            audioDest: a.preFx,
-            pack: packRef.current,
-            audioNow: a.ctx.currentTime,
-          });
-        } else {
-          // keep visuals drifting even when paused (no audio events)
-          impl.update(st, dt * 0.25, { ...globals, speed: 0 });
-        }
+        // Phase-Zero render: visuals derive purely from globalTime, audio
+        // is owned by the scheduler. `sample` may hot-reseed on density
+        // changes — call it every frame before `draw`.
+        impl.sample?.(st, gT, globals);
         impl.draw(st, ctx2d, globals);
       };
       if (scene === "stringNet") {

@@ -45,6 +45,8 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let active: ActiveBinding | null = null;
 /** End of the last horizon we scheduled, in scene-time. */
 let lastScheduledT = 0;
+/** Whether the Big Bang chord has been dispatched for the current binding. */
+let bigBangFired = false;
 
 function schedulerTick(): void {
   if (!active) return;
@@ -65,20 +67,35 @@ function schedulerTick(): void {
   if (now - lastScheduledT > HORIZON_S * 2) lastScheduledT = now;
   if (lastScheduledT >= horizon) return;
 
-  // If the window includes t≈0 (first tick after a Phase-Zero reset),
-  // schedule the chord at the current audio time so it lands on the user's
-  // click instead of one horizon later.
-  const isBigBangTick = lastScheduledT <= 0;
-  const events = scene.eventsIn(st, lastScheduledT, horizon, globals());
-  const whenBigBang = audioCtx.currentTime;
+  const g = globals();
+
+  // One-shot Big Bang: every note strikes from its resting position the
+  // first time scene time crosses 0. Scheduled at audio currentTime so
+  // it lands on the user's click, never queued behind the look-ahead
+  // horizon. After this fires, eventsIn owns everything from t > 0.
+  if (!bigBangFired && now >= 0) {
+    const chord = scene.bigBang
+      ? scene.bigBang(st, g)
+      : (scene.eventsIn(st, -1e-6, 1e-6, g) ?? []);
+    const when = audioCtx.currentTime;
+    for (const ev of chord) {
+      triggerPackVoice(audioCtx, audioDest, pack(), ev.slot, ev.freq, when);
+      spawnInkBleed(ev.x, ev.y, { hue: ev.hue, energy: ev.velocity });
+    }
+    bigBangFired = true;
+    // Skip past the t=0 anchor so the analytic path starts clean.
+    lastScheduledT = Math.max(lastScheduledT, 1e-4);
+    if (lastScheduledT >= horizon) return;
+  }
+
+  const events = scene.eventsIn(st, lastScheduledT, horizon, g);
   const whenHorizon = engineClock.sceneToAudioTime(horizon);
-  // Compute each event's audio time, then apply the unison guard
-  // (skipped for the Big Bang tick — that chord is intentional).
+  // Compute each event's audio time, then apply the unison guard.
   const scheduled: { ev: TriggerEvent; when: number }[] = events.map((ev) => ({
     ev,
-    when: isBigBangTick ? whenBigBang : whenHorizon,
+    when: whenHorizon,
   }));
-  if (!isBigBangTick && scheduled.length > 1) {
+  if (scheduled.length > 1) {
     scheduled.sort((a, b) => a.when - b.when || a.ev.slot - b.ev.slot);
     for (let i = 1; i < scheduled.length; i++) {
       const prev = scheduled[i - 1].when;
@@ -109,6 +126,7 @@ export const engineScheduler = {
   setActive(binding: ActiveBinding | null): void {
     active = binding;
     lastScheduledT = engineClock.t();
+    bigBangFired = false;
   },
 
   /** Begin ticking. Safe to call repeatedly. */
@@ -133,6 +151,7 @@ export const engineScheduler = {
    */
   resync(): void {
     lastScheduledT = engineClock.t();
+    bigBangFired = false;
   },
 
   /** Whether the scheduler owns audio for the currently bound scene. */

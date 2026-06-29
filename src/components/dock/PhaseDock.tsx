@@ -880,7 +880,7 @@ function MoreMenu({
           )}
           {authed && (
             <DropdownMenuItem asChild>
-              <Link to="/_authenticated/studio" className="flex w-full items-center gap-2">
+              <Link to="/studio" className="flex w-full items-center gap-2">
                 <FolderOpen className="h-4 w-4" /> My Studio
               </Link>
             </DropdownMenuItem>

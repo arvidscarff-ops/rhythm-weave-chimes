@@ -4,8 +4,14 @@ import type { NeuralSettings } from "@/lib/neural/palette";
 import type { ComposerSettings, SlotSettings } from "@/lib/music/composer";
 import type { RootName, ScaleId } from "@/lib/music/scales";
 import type {
-  WheelState, WheelRing, WheelLine, WheelNote,
-  PendulumState, PendulumBob, BarsState, BarLane,
+  WheelState,
+  WheelRing,
+  WheelLine,
+  WheelNote,
+  PendulumState,
+  PendulumBob,
+  BarsState,
+  BarLane,
 } from "@/routes/index.tsx";
 
 export type SessionState = {
@@ -14,7 +20,7 @@ export type SessionState = {
   bpm: number;
   knobs: {
     mv: number; // mainVol
-    p: number;  // pitch
+    p: number; // pitch
     rm: number; // revMix
     rs: number; // revSize
     sp: number; // speed
@@ -33,7 +39,11 @@ export type SessionState = {
   composer: { e: boolean; r: RootName; sc: ScaleId; slots: SlotSettings[] };
   wheel: {
     rings: {
-      rf: number; b: number; sd: number; d: 1 | -1; vs: "melo" | "bass" | "atmo";
+      rf: number;
+      b: number;
+      sd: number;
+      d: 1 | -1;
+      vs: "melo" | "bass" | "atmo";
       n: [angle: number, pi: number][];
     }[];
     lines: { a: number }[];
@@ -54,7 +64,8 @@ function encodeBase64(str: string): string {
 
 function decodeBase64(input: string): string | null {
   try {
-    const base64 = input.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((input.length + 3) % 4);
+    const base64 =
+      input.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((input.length + 3) % 4);
     return atob(base64);
   } catch {
     return null;
@@ -96,8 +107,14 @@ export async function copyShareUrl(state: SessionState): Promise<boolean> {
 }
 
 export function knobsToSession(knobs: {
-  mainVol: number; pitch: number; revMix: number; revSize: number;
-  speed: number; multiply: number; fx1: number; fx2: number;
+  mainVol: number;
+  pitch: number;
+  revMix: number;
+  revSize: number;
+  speed: number;
+  multiply: number;
+  fx1: number;
+  fx2: number;
 }): SessionState["knobs"] {
   return {
     mv: knobs.mainVol,
@@ -195,54 +212,69 @@ export function wheelFromSession(w: SessionState["wheel"]): WheelState {
         })) as WheelNote[],
       } as WheelRing;
     }),
-    lines: w.lines.map((l) => ({
-      id: uid("ln"),
-      angle: l.a,
-      flash: 0,
-      sparks: [],
-    }) as WheelLine),
+    lines: w.lines.map(
+      (l) =>
+        ({
+          id: uid("ln"),
+          angle: l.a,
+          flash: 0,
+          sparks: [],
+        }) as WheelLine,
+    ),
     lastFire: new Map(),
   };
 }
 
 export function pendulumToSession(p: PendulumState): SessionState["pendulum"] {
   return {
-    bobs: p.bobs.map((b: PendulumBob) => [b.ratioIndex, b.slotIndex, b.pitchIndex, b.phase] as [number, number, number, number]),
+    bobs: p.bobs.map(
+      (b: PendulumBob) =>
+        [b.ratioIndex, b.slotIndex, b.pitchIndex, b.phase] as [number, number, number, number],
+    ),
   };
 }
 
 export function pendulumFromSession(p: SessionState["pendulum"]): PendulumState {
   let idCounter = 0;
   return {
-    bobs: p.bobs.map((b) => ({
-      id: `p_${++idCounter}`,
-      ratioIndex: b[0],
-      slotIndex: b[1],
-      pitchIndex: b[2],
-      phase: b[3],
-      prevSign: 1,
-      flash: 0,
-    }) as PendulumBob),
+    bobs: p.bobs.map(
+      (b) =>
+        ({
+          id: `p_${++idCounter}`,
+          ratioIndex: b[0],
+          slotIndex: b[1],
+          pitchIndex: b[2],
+          phase: b[3],
+          prevSign: 1,
+          flash: 0,
+        }) as PendulumBob,
+    ),
   };
 }
 
 export function barsToSession(b: BarsState): SessionState["bars"] {
   return {
-    lanes: b.lanes.map((l: BarLane) => [l.ratioIndex, l.slotIndex, l.pitchIndex, l.phase] as [number, number, number, number]),
+    lanes: b.lanes.map(
+      (l: BarLane) =>
+        [l.ratioIndex, l.slotIndex, l.pitchIndex, l.phase] as [number, number, number, number],
+    ),
   };
 }
 
 export function barsFromSession(b: SessionState["bars"]): BarsState {
   let idCounter = 0;
   return {
-    lanes: b.lanes.map((l) => ({
-      id: `b_${++idCounter}`,
-      ratioIndex: l[0],
-      slotIndex: l[1],
-      pitchIndex: l[2],
-      phase: l[3],
-      flash: 0,
-      lastTriggerY: 1,
-    }) as BarLane),
+    lanes: b.lanes.map(
+      (l) =>
+        ({
+          id: `b_${++idCounter}`,
+          ratioIndex: l[0],
+          slotIndex: l[1],
+          pitchIndex: l[2],
+          phase: l[3],
+          flash: 0,
+          lastTriggerY: 1,
+        }) as BarLane,
+    ),
   };
 }

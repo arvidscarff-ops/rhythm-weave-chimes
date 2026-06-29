@@ -141,10 +141,10 @@ export function drawShockwaves(ctx: CanvasRenderingContext2D, W: number, H: numb
     const t = r.age / r.maxAge;
     if (t >= 1) continue;
 
-    const radius = easeOutExpo(t) * minDim * (0.18 + r.energy * 0.22) * (r.echo ? 1.35 : 1);
+    const radius = easeOutExpo(t) * minDim * (0.07 + r.energy * 0.09) * (r.echo ? 1.2 : 1);
     // alpha: quick rise, long fade
-    const fade = Math.pow(1 - t, 1.8);
-    const baseA = (r.echo ? 0.18 : 0.34) * fade * globalMul;
+    const fade = Math.pow(1 - t, 2.2);
+    const baseA = (r.echo ? 0.10 : 0.18) * fade * globalMul;
     if (baseA < 0.003) continue;
 
     const [cr, cg, cb] = ringColor(r);

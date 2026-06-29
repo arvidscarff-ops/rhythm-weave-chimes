@@ -157,7 +157,7 @@ export function drawShockwaves(ctx: CanvasRenderingContext2D, W: number, H: numb
 
     // organic wobble: draw as a short stitched arc strip with tiny radius noise
     const segments = 36;
-    const lineW = (1.4 + r.energy * 2.2) * (1 - t * 0.6);
+    const lineW = (0.6 + r.energy * 0.9) * (1 - t * 0.5);
     ctx.lineWidth = Math.max(0.5, lineW);
     ctx.strokeStyle = `rgba(${R},${G},${B},${baseA})`;
     ctx.beginPath();

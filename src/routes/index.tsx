@@ -27,6 +27,9 @@ import { flashBus } from "@/lib/neural/flashBus";
 import { spawnBurst, updateBursts, drawBursts } from "@/lib/visuals/burstField";
 import { updateFlares, drawFlares } from "@/lib/visuals/lensFlare";
 import { updateShockwaves, drawShockwaves } from "@/lib/visuals/shockwave";
+import { updateInkBleeds, drawInkBleeds } from "@/lib/visuals/inkBleed";
+import { stringNetworkScene, type StringNetState } from "@/lib/scenes/stringNetwork";
+import { dispatchTriggers } from "@/lib/engine/triggerBus";
 import {
   composerAdvance,
   resetComposerSources,
@@ -88,7 +91,7 @@ export const Route = createFileRoute("/")({
  * ============================================================ */
 
 type VoiceKind = "chime" | "pluck" | "bell" | "pad" | "bass" | "none";
-export type SceneKind = "wheel" | "pendulum" | "bars";
+export type SceneKind = "wheel" | "pendulum" | "bars" | "stringNet";
 
 type Knobs = {
   mainVol: number; // 0..1
@@ -145,6 +148,8 @@ type EngineState = {
   pendulum: PendulumState;
   // bars
   bars: BarsState;
+  // engine scenes (lazy-initialized in render loop)
+  stringNet: StringNetState | null;
 };
 
 type AudioGraph = {
@@ -182,7 +187,7 @@ type AudioGraph = {
  * ============================================================ */
 
 const VOICES: VoiceKind[] = ["chime", "pluck", "bell", "pad", "bass", "none"];
-const SCENES: SceneKind[] = ["wheel", "pendulum", "bars"];
+const SCENES: SceneKind[] = ["wheel", "pendulum", "bars", "stringNet"];
 type VoiceSlot = "melo" | "bass" | "atmo";
 const VOICE_SLOTS: VoiceSlot[] = ["melo", "bass", "atmo"];
 void VOICES;
@@ -849,6 +854,7 @@ function PhaseApp() {
     wheel: makeSeedWheel(),
     pendulum: makeSeedPendulum(),
     bars: makeSeedBars(),
+    stringNet: null,
   });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const grainPatternRef = useRef<CanvasPattern | null>(null);

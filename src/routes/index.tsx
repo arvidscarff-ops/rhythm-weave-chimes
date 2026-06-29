@@ -48,6 +48,32 @@ import {
   subscribeNeuralSettings,
   type NeuralSettings,
 } from "@/lib/neural/palette";
+
+/**
+ * Resolve "how many notes will actually play" for the active scene from the
+ * dock's universal density (multiply) knob. Mirrors each scene's internal
+ * count formula so the dock can display an honest number.
+ */
+function resolveNotesCount(scene: SceneKind, density: number): number {
+  switch (scene) {
+    case "stringNet": {
+      const n = Math.max(3, Math.min(6, Math.round(3 + (density - 2) * 0.3)));
+      // C(n,2) strings × 2 particles each.
+      return (n * (n - 1)) / 2 * 2;
+    }
+    case "pendulumFan":
+      return Math.max(5, Math.min(14, Math.round(5 + (density - 2) * 0.9)));
+    case "spiralArp":
+      return 3;
+    case "radialSweep":
+      return Math.max(6, Math.min(16, Math.round(6 + (density - 2) * 1)));
+    case "wheel":
+    case "pendulum":
+    case "bars":
+    default:
+      return density;
+  }
+}
 import {
   buildShareUrl,
   copyShareUrl,
@@ -1461,7 +1487,12 @@ function PhaseApp() {
     if (a.ctx.state === "suspended") await a.ctx.resume();
     if (playingRef.current) resetComposerSources();
     if (playingRef.current) engineClock.pause();
-    else engineClock.resume();
+    else {
+      // Always start a play session from the Big Bang formation so every
+      // note rests on its trigger point and fires together on click.
+      engineClock.resetPhaseZero();
+      engineClock.resume();
+    }
     engineScheduler.resync();
     setPlaying((p) => !p);
   };
@@ -1469,6 +1500,22 @@ function PhaseApp() {
   const setKnob = (key: keyof Knobs, val: number) => setKnobs((k) => ({ ...k, [key]: val }));
 
   const isWheel = scene === "wheel";
+
+  /* ---- Universal Big Bang on shape change ----
+   * Whenever the composition shape changes (scene, note count, scale, root,
+   * or any composer slot), snap scene-time back to t=0 so every node returns
+   * to its rest formation and the next play click is a Big Bang.
+   */
+  const shapeSig =
+    `${scene}|${knobs.multiply}|${composer.scale}|${composer.root}|` +
+    composer.slots
+      .map((s) => `${s.k}/${s.n}/${s.rotation}/${s.noteMode}`)
+      .join(",");
+  useEffect(() => {
+    engineClock.resetPhaseZero();
+    engineScheduler.resync();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shapeSig]);
 
   /* ---- Wheel pointer interaction ---- */
   const onCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -1669,6 +1716,7 @@ function PhaseApp() {
         onScene={setScene}
         multiply={knobs.multiply}
         onMultiply={(n) => setKnobs((k) => ({ ...k, multiply: n }))}
+        notesCount={resolveNotesCount(scene, knobs.multiply)}
         bpm={bpm}
         onBpm={setBpm}
         speed={knobs.speed}

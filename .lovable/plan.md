@@ -1,69 +1,53 @@
-## Goal
 
-Two things in one pass:
+# Universal Big Bang + Notes Multiplier + Subtler Flash
 
-1. **Close feature-parity gaps** between the four scenes so every scene has the same baseline: per-trigger flash, per-trigger refractory cooldown, and velocity that scales with event energy.
-2. **Add a universal rule**: notes/voices that play or move fastest are placed toward the **left** of the canvas; slowest toward the **right**. Implemented with a shape-appropriate interpretation per scene so motion still feels native to each shape.
+Three connected changes that apply to every scene (`wheel`, `pendulum`, `bars`, `stringNet`, `pendulumFan`, `spiralArp`, `radialSweep`).
 
-## Part 1 — Parity fixes (small, surgical)
+## 1. "Notes" multiplier per scene
 
-`src/lib/scenes/stringNetwork.ts`
-- Add `lastFireT: number` to `Particle`; in `eventsIn` skip events where `tEv - p.lastFireT < PARTICLE_COOLDOWN` (≈ `0.09 s`); set `p.lastFireT = tEv` on fire.
-- In `draw`, decay particle head radius/alpha from `Math.exp(-(t - p.lastFireT) * 3.0)` (parallels pendulumFan + spiralArp).
-- Make `velocity` scale with `|p.rate|` (normalized 0..1 across particles) so fast particles ink-bleed harder.
+The dock already has a `multiply` (DEN) slider that scenes consume as `density`. We'll:
 
-`src/lib/scenes/radialSweep.ts`
-- Add `TARGET_COOLDOWN = 0.12` (mostly defensive — uniform ω + fixed angles means duplicates are rare, but the contract should match the others).
-- Make `velocity` scale with target's pitch rank (higher pitch → higher velocity) so the new left/right rule reinforces visual energy.
+- Rename the dock affordance from `Multiply / DEN·N` to **Notes** with a slider readout of *how many notes will actually play* in the active scene (so the user sees "9 notes" instead of "DEN·5"). The slider keeps the same 2..12 control range; we just label the result.
+- Add a `noteCount(scene, density)` helper that mirrors each scene's existing density→N math (`anchorCount` for stringNet → strings × 2 particles, `strandCount` for pendulumFan, `spiralTurns × playheads(3)` for spiralArp, `targetCount` for radialSweep, ring slot counts for wheel/pendulum/bars).
+- Show the resolved number in the dock chip and in the slider page.
 
-`src/lib/scenes/pendulumFan.ts`
-- Make `velocity` scale with `1/ratio` (faster strand → higher energy ink-bleed).
+No engine changes; this is a labeling + helper layer over the existing density knob.
 
-`src/lib/scenes/spiralArp.ts`
-- Already has variable velocity; no parity changes.
+## 2. Universal "Big Bang on commit" behaviour
 
-## Part 2 — Speed → left / slow → right
+Today `resetPhaseZero()` only fires when the user clicks the Big Bang button. We'll auto-fire it whenever the *composition shape* changes, so the user always starts a cycle from the rest formation:
 
-Universal rule: rank a scene's "voices" by their motion speed (or trigger cadence if static), then place rank 0 toward x ≈ left edge and rank N−1 toward x ≈ right edge, using the scene's native geometry.
+Trigger `engineClock.resetPhaseZero()` from `src/routes/index.tsx` when any of these change:
 
-### stringNetwork
-- Sort `state.particles` by `|rate|` **descending**.
-- Sort `state.strings` by the **average X** of their two anchors at t = 0 **ascending** (leftmost first).
-- Reassign so the fastest particle rides the leftmost string, second fastest → second-leftmost, etc. Two particles per string (opposite directions): leftmost string takes the two highest |rate| values, etc.
-- Anchors stay on their Lissajous orbits — only the rate→string mapping changes, so the visible effect is that the fastest blink/wrap activity lives on the left side of the canvas.
+- `scene` (scene switch)
+- `knobs.multiply` (notes count)
+- `composer.scaleId`, `composer.root`, or any slot's `k`/`n`/`rotation`/`noteMode`
+- The first time `togglePlay` transitions from paused → playing (so "click play" always restarts the universe from t=0; pause→resume from mid-cycle still keeps phase)
 
-### pendulumFan
-- Make the rate→strand mapping explicit and monotonic:
-  - `const RATIOS_SORTED = [...RATIOS].slice(0, N).sort((a,b)=>a-b);`
-  - strand `i` (left = 0) gets `RATIOS_SORTED[i]` (smallest ratio = fastest oscillation).
-- Mirror the same order onto `pitchSemis` so the leftmost strand is also the highest pitch (cleaner audio image of "left = fast/bright").
-- Drop the `i % RATIOS.length` wrap so the monotonic ramp is preserved at all densities.
+Implementation: a small `useEffect` keyed on a memoised "shape signature" string that calls `engineClock.resetPhaseZero()` + `engineScheduler.resync()`. In `togglePlay`, when starting from `playing=false` *and* scene-time has advanced past the previous phase-zero by more than a small epsilon since the last shape change, also call `resetPhaseZero()` before `resume()`.
 
-### spiralArp
-- Sort `state.playheads` by `speed` **descending**.
-- Assign each playhead an angular t=0 anchor: `targetTheta_i = π * (1 - i/(N-1))`, where i=0 is fastest (left, θ=π) and i=N−1 is slowest (right, θ=0).
-- Realize that anchor by setting `s0_i` so that `thetaForArc(s0_i)` ≈ `targetTheta_i` at t=0 (use the existing inverse via the cached `arcAtBucket` plus a one-shot bisection, or precompute by scanning `arcAtBucket` for the bucket angle closest to `targetTheta_i`).
-- All playheads still spiral inward; at the Big Bang they sit fanned across the canvas left → right by speed.
+Each scene's existing Phase-Zero contract already guarantees every node sits on its trigger position at t=0 and fires the Big Bang chord — no per-scene code change needed beyond what's already in place.
 
-### radialSweep
-- Targets are static and ω is global, so "speed" doesn't vary geometrically. Use pitch / "voice activity" as the proxy:
-  - Sort `state.targets` by `pitchSemis` **descending** (highest pitch first).
-  - Reassign each target's `angle` so high-pitch targets fall in the canvas-left arc `(π/2, 3π/2)` and low-pitch targets in the canvas-right arc.
-  - Concretely: split sorted targets into left-half and right-half halves; within each half distribute angles evenly so the arm still hits them in a smooth cadence as it sweeps.
-- Keep `rNorm` cycling 0.45/0.63/0.81 for visual variety.
+After N cycles the geometry naturally re-aligns: spiralArp at `lcm(arcAtBucket spacing) / speeds`, pendulumFan at `lcm(RATIOS)` periods, radialSweep at one full sweep, etc. No code needed — the cyclical re-alignment is emergent from the deterministic equations.
 
-## Big-Bang invariant
+## 3. Tame the Big Bang flash
 
-For all four scenes, the assignment happens during `init` / density-reseed, **not** per frame. That keeps the Phase-Zero contract intact: state is still a pure function of scene time after seeding, and `engineClock.resetPhaseZero()` continues to snap the canvas back to a coherent left→right speed gradient.
+Right now, when the Big Bang fires every node simultaneously each note calls `flashBus.flash(x, y, 0.8, hue)`, which accumulates into a near-full-screen white bloom. We'll:
 
-## Verification
+- **Cap simultaneous flash contributions.** In `src/lib/neural/flashBus.ts`, add a 60ms coalescing window: if multiple `flash()` calls arrive within the window, average their positions and only add `min(0.35, base + 0.05 * count)` to the neural target instead of stacking each one. This keeps individual-note flashes lively but turns 12 concurrent flashes into a single soft pulse.
+- **Soften shader response.** In `src/components/ui/neural-noise.tsx`, lower the per-flash contribution: change `state.flash.target + 0.25 + f.intensity * 0.35` to `+ 0.12 + f.intensity * 0.22`, and lower the final additive term `flash * 0.18 → * 0.10` and the alpha bonus `flash * 0.22 → * 0.12`. Shorten release from 1.4s to 0.9s so the haze clears faster.
+- **Skip the burst/shockwave layer on the synchronous Big Bang.** In `togglePlay` and the auto-reset effect, set a 120ms `bigBangSuppressVisualsUntil` timestamp; the `spawnBurst` / `spawnShockwave` calls in `index.tsx` (lines ~1826/2197/2309) check this and only emit a single shared shockwave at canvas-center with reduced amplitude instead of one per note.
 
-- `bun run tsgo` after edits.
-- Headless Playwright pass: load `/`, cycle through all four scenes (via the URL `#s=…` payload or scene button), screenshot each, sanity-check left-side density vs right-side density.
-- Confirm no regression in the existing parity matrix (sample / eventsIn / density reseed / flash decay still fire).
+Audio is unaffected — the chord still fires; only the visual saturation is reduced.
 
-## Out of scope (call out for follow-up)
+## Files touched
 
-- Mapping pitch to a shared `SCALE_SEMIS` across all scenes (currently stringNet + pendulumFan use ad-hoc semis tables).
-- Wiring `engineClock.resetPhaseZero()` to also clear `lastFireT` / `lastNebulaT` / `triggerCount` (open question from Step 5).
-- Trails on pendulumFan and spiralArp.
+- `src/routes/index.tsx` — shape-signature effect, togglePlay reset, big-bang-visual gate, dock prop wiring.
+- `src/components/dock/PhaseDock.tsx` — relabel `Multiply` → `Notes`, show resolved note count.
+- `src/lib/neural/flashBus.ts` — coalescing window.
+- `src/components/ui/neural-noise.tsx` — softer flash envelope.
+- (No scene file changes — Phase-Zero contract already covers Big Bang formation.)
+
+## Open question
+
+Should the **pause → resume** action also re-Big-Bang, or only the first play after a shape change? Default in the plan: only first play / shape change resets; mid-session pause keeps your place. Tell me if you want every play click to restart from t=0.

@@ -67,6 +67,8 @@ type Props = {
   onScene: (s: SceneKind) => void;
   multiply: number;
   onMultiply: (n: number) => void;
+  /** Resolved number of notes that will actually play in the current scene. */
+  notesCount: number;
 
   bpm: number;
   onBpm: (n: number) => void;
@@ -120,7 +122,7 @@ export function PhaseDock(p: Props) {
         <span aria-hidden>·</span>
         <span>{p.speed.toFixed(2)}×</span>
         <span aria-hidden>·</span>
-        <span>DEN·{p.multiply}</span>
+        <span>{p.notesCount} NOTES</span>
       </div>
       <div
         className={cn(
@@ -156,6 +158,7 @@ export function PhaseDock(p: Props) {
           onScene={p.onScene}
           multiply={p.multiply}
           onMultiply={p.onMultiply}
+          notesCount={p.notesCount}
         />
         <SceneChips scene={p.scene} onScene={p.onScene} />
         <FxMenu fx={p.fx} onFx={p.onFx} />
@@ -305,11 +308,13 @@ function SceneMenu({
   onScene,
   multiply,
   onMultiply,
+  notesCount,
 }: {
   scene: SceneKind;
   onScene: (s: SceneKind) => void;
   multiply: number;
   onMultiply: (n: number) => void;
+  notesCount: number;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -335,12 +340,12 @@ function SceneMenu({
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
           <DropdownMenuPageTrigger targetId="multiply">
-            Multiply <span className="ml-auto text-foreground/50">{multiply}</span>
+            Notes <span className="ml-auto text-foreground/50">{notesCount}</span>
           </DropdownMenuPageTrigger>
         </DropdownMenuPage>
 
         <DropdownMenuPage id="multiply">
-          <DropdownMenuLabel>Vertex count</DropdownMenuLabel>
+          <DropdownMenuLabel>Notes ({notesCount} playing)</DropdownMenuLabel>
           <DropdownMenuRadioGroup
             value={String(multiply)}
             onValueChange={(v) => onMultiply(Number(v))}

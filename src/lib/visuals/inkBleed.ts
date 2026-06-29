@@ -22,6 +22,16 @@ type Bleed = {
 const POOL: Bleed[] = [];
 const MAX = 64;
 
+/**
+ * Per-window simultaneous-spawn tracker. When many ink-bleeds spawn within
+ * COALESCE_MS (e.g. a Big Bang chord on an engine scene), each new bleed's
+ * starting alpha is attenuated by 1/sqrt(1+recent) so the additive `screen`
+ * blend does not flood the canvas with one solid color.
+ */
+const COALESCE_MS = 60;
+let recentCount = 0;
+let recentStartMs = 0;
+
 export function spawnInkBleed(
   x: number,
   y: number,
@@ -29,12 +39,19 @@ export function spawnInkBleed(
 ) {
   const energy = Math.max(0.05, Math.min(1, opts.energy ?? 0.6));
   if (POOL.length >= MAX) POOL.shift();
+  const now = typeof performance !== "undefined" ? performance.now() : 0;
+  if (now - recentStartMs > COALESCE_MS) {
+    recentStartMs = now;
+    recentCount = 0;
+  }
+  recentCount += 1;
+  const burstDamp = 1 / Math.sqrt(recentCount);
   POOL.push({
     x,
     y,
-    r0: 8 + energy * 18,
+    r0: 8 + energy * 18 * burstDamp,
     growth: 80 + energy * 220,    // px/s, but multiplied by t below
-    alpha0: 0.18 + energy * 0.42,
+    alpha0: (0.18 + energy * 0.42) * burstDamp,
     decay: 1.6 + (1 - energy) * 1.4,
     t: 0,
     life: 1.6,

@@ -6,6 +6,14 @@
  * (accelerando). Triggers fire when a playhead crosses one of K polar
  * grid lines (θ = k · 2π / K). Pitch derived from radius (smaller r →
  * higher).
+ *
+ * Phase-Zero contract: arc position is a pure function of scene time:
+ *     s_i(t) = (s0_i + v_i · t) mod Ltotal
+ * All playheads start at the outer end (s0 = 0) so at t = 0 they sit
+ * exactly on the outermost polar grid line and fire the universal Big
+ * Bang chord. Audio triggers are enumerated analytically inside
+ * `eventsIn` from a precomputed `arcAtBucket` table — no per-frame
+ * mutation.
  */
 
 import type { Scene, SceneGlobals, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
@@ -13,18 +21,17 @@ import type { Scene, SceneGlobals, TriggerEvent, VoiceSlotIndex } from "@/lib/en
 const ROOT_HZ = 220;
 const freqOf = (s: number) => ROOT_HZ * Math.pow(2, s / 12);
 const SCALE_SEMIS = [0, 2, 3, 5, 7, 10, 12, 14, 15, 17, 19, 22];
+const COOLDOWN = 0.06;
 
 type Playhead = {
-  /** Arc length traveled from outer end, in spiral-units. */
-  s: number;
-  /** Linear speed along arc (spiral-units/sec). */
+  /** Phase-Zero arc offset (spiral-units). s(t) = (s0 + speed·t) mod Ltotal. */
+  s0: number;
+  /** Linear speed along arc (spiral-units / scene-second). */
   speed: number;
-  /** Last θ in radians (for grid-crossing detection). */
-  prevTheta: number;
   slot: VoiceSlotIndex;
   hue: number;
-  /** Refractory clock. */
-  cool: number;
+  /** Scene-time of most recent trigger; refractory + flash derivation. */
+  lastFireT: number;
 };
 
 export type SpiralArpState = {
@@ -36,7 +43,16 @@ export type SpiralArpState = {
   /** Polar grid divisions (K). */
   gridK: number;
   playheads: Playhead[];
-  clock: number;
+  /** Cached density so we can hot-reseed on dock changes. */
+  density: number;
+  /** Cached total arc length (recomputed on geometry change). */
+  Ltotal: number;
+  /**
+   * Cached crossing arcs for each polar-grid boundary in one lap.
+   * Length = gridK · turns; entry [0] is 0 (outer start, also the
+   * t = 0 Big Bang anchor).
+   */
+  arcAtBucket: number[];
 };
 
 /** Map dock density (2..12) → spiral turns (3..10). */
@@ -50,6 +66,11 @@ const thetaMax = (turns: number) => turns * Math.PI * 2;
 /** r at a given θ. */
 const radiusAt = (state: SpiralArpState, theta: number) => state.a + state.b * theta;
 
+/** Closed-form arc length of Archimedean spiral from θ=0 to θ. */
+function arcLen(b: number, theta: number): number {
+  return (b / 2) * (theta * Math.sqrt(1 + theta * theta) + Math.log(theta + Math.sqrt(1 + theta * theta)));
+}
+
 /**
  * Convert arc length `s` (from outer end θ=θmax going inward) to current
  * θ. Uses the closed form for Archimedean arc length:
@@ -60,83 +81,114 @@ const radiusAt = (state: SpiralArpState, theta: number) => state.a + state.b * t
  */
 function thetaForArc(state: SpiralArpState, arcFromOuter: number): number {
   const tMax = thetaMax(state.turns);
-  const L = (t: number) =>
-    (state.b / 2) * (t * Math.sqrt(1 + t * t) + Math.log(t + Math.sqrt(1 + t * t)));
-  const Ltotal = L(tMax);
-  const target = Math.max(0, Math.min(Ltotal, Ltotal - arcFromOuter));
+  const target = Math.max(0, Math.min(state.Ltotal, state.Ltotal - arcFromOuter));
   let lo = 0,
     hi = tMax;
   for (let i = 0; i < 24; i++) {
     const mid = (lo + hi) / 2;
-    if (L(mid) < target) lo = mid;
+    if (arcLen(state.b, mid) < target) lo = mid;
     else hi = mid;
   }
   return (lo + hi) / 2;
+}
+
+/** Recompute geometry caches in-place. */
+function reseedGeometry(state: SpiralArpState, g: SceneGlobals) {
+  const turns = spiralTurns(g.density ?? 5);
+  const maxR = Math.min(g.W, g.H) * 0.42;
+  const tMax = thetaMax(turns);
+  const b = maxR / tMax;
+  state.turns = turns;
+  state.b = b;
+  state.density = g.density ?? 5;
+  state.Ltotal = arcLen(b, tMax);
+  const K = state.gridK;
+  const step = (Math.PI * 2) / K;
+  const N = K * turns;
+  const arr = new Array<number>(N);
+  // k = 0 is the outer start (θ = tMax ≡ 0 mod step) — the Big Bang anchor.
+  arr[0] = 0;
+  for (let k = 1; k < N; k++) {
+    arr[k] = state.Ltotal - arcLen(b, k * step);
+  }
+  state.arcAtBucket = arr;
 }
 
 export const spiralArpScene: Scene<SpiralArpState> = {
   id: "spiralArp",
 
   init(g) {
-    const turns = spiralTurns(g.density ?? 5);
-    const maxR = Math.min(g.W, g.H) * 0.42;
-    const tMax = thetaMax(turns);
-    const b = maxR / tMax;
-    return {
+    const state: SpiralArpState = {
       a: 6,
-      b,
-      turns,
+      b: 1,
+      turns: 3,
       gridK: 8,
+      density: g.density ?? 5,
+      Ltotal: 1,
+      arcAtBucket: [0],
+      // Phase Zero: all playheads at s0 = 0 (outer end, on a grid line)
+      // → universal Big Bang at t = 0.
       playheads: [
-        { s: 0, speed: 22, prevTheta: tMax, slot: 0, hue: 0.55, cool: 0 },
-        { s: 30, speed: 28, prevTheta: tMax, slot: 2, hue: 0.78, cool: 0 },
-        { s: 60, speed: 18, prevTheta: tMax, slot: 4, hue: 0.18, cool: 0 },
+        { s0: 0, speed: 22, slot: 0, hue: 0.55, lastFireT: -Infinity },
+        { s0: 0, speed: 28, slot: 2, hue: 0.78, lastFireT: -Infinity },
+        { s0: 0, speed: 18, slot: 4, hue: 0.18, lastFireT: -Infinity },
       ],
-      clock: 0,
     };
+    reseedGeometry(state, g);
+    return state;
   },
 
-  update(state, dt, g) {
-    // Reseed spiral geometry if turns changed.
-    const want = spiralTurns(g.density);
-    if (want !== state.turns) {
-      const maxR = Math.min(g.W, g.H) * 0.42;
-      const tMax = thetaMax(want);
-      state.b = maxR / tMax;
-      state.turns = want;
-      for (const p of state.playheads) {
-        p.s = 0;
-        p.prevTheta = tMax;
-      }
+  /** Legacy shim — Phase-Zero scene. */
+  update(_state, _dt, _g) {
+    return [];
+  },
+
+  sample(state, _t, g) {
+    if (spiralTurns(g.density) !== state.turns) {
+      reseedGeometry(state, g);
+      for (const p of state.playheads) p.lastFireT = -Infinity;
     }
-    state.clock += dt;
+  },
+
+  eventsIn(state, t0, t1, g) {
     const events: TriggerEvent[] = [];
-    const tMax = thetaMax(state.turns);
-    const Ltotal = (() => {
-      const L = (t: number) =>
-        (state.b / 2) * (t * Math.sqrt(1 + t * t) + Math.log(t + Math.sqrt(1 + t * t)));
-      return L(tMax);
-    })();
+    if (t1 <= t0) return events;
+    if (spiralTurns(g.density) !== state.turns) {
+      reseedGeometry(state, g);
+      for (const p of state.playheads) p.lastFireT = -Infinity;
+    }
     const cx = g.W / 2;
     const cy = g.H / 2;
+    const { Ltotal, arcAtBucket } = state;
+    const tMaxR = radiusAt(state, thetaMax(state.turns));
 
     for (const p of state.playheads) {
-      p.cool = Math.max(0, p.cool - dt);
-      p.s += p.speed * dt * g.speed;
-      // Wrap when we've traversed the whole arc — re-spawn at outer end.
-      if (p.s >= Ltotal) p.s = p.s - Ltotal;
-      const theta = thetaForArc(state, p.s);
-      // Detect polar grid crossings: floor(theta / step) changed.
-      const step = (Math.PI * 2) / state.gridK;
-      const prevBucket = Math.floor(p.prevTheta / step);
-      const curBucket = Math.floor(theta / step);
-      if (curBucket !== prevBucket && p.cool <= 0) {
-        p.cool = 0.06;
+      const v = p.speed;
+      if (v <= 0) continue;
+      const sLo = p.s0 + v * t0;
+      const sHi = p.s0 + v * t1;
+      // Enumerate every bucket-boundary crossing in [sLo, sHi).
+      const hits: number[] = [];
+      for (let k = 0; k < arcAtBucket.length; k++) {
+        const arc = arcAtBucket[k];
+        const nLo = Math.ceil((sLo - arc) / Ltotal);
+        const nHi = Math.floor((sHi - arc) / Ltotal);
+        for (let n = nLo; n <= nHi; n++) {
+          const sEv = n * Ltotal + arc;
+          if (sEv < sLo || sEv >= sHi) continue;
+          hits.push((sEv - p.s0) / v);
+        }
+      }
+      hits.sort((a, b) => a - b);
+      for (const tEv of hits) {
+        if (tEv - p.lastFireT < COOLDOWN) continue;
+        p.lastFireT = tEv;
+        const sMod = ((p.s0 + v * tEv) % Ltotal + Ltotal) % Ltotal;
+        const theta = thetaForArc(state, sMod);
         const r = radiusAt(state, theta);
         const x = cx + Math.cos(theta) * r;
         const y = cy + Math.sin(theta) * r;
-        // Pitch: smaller r → higher index. Map r∈[a, a+b·tMax] → semis.
-        const rNorm = 1 - r / radiusAt(state, tMax);
+        const rNorm = Math.max(0, Math.min(1, 1 - r / tMaxR));
         const semIdx = Math.floor(rNorm * (SCALE_SEMIS.length - 1));
         events.push({
           slot: p.slot,
@@ -147,7 +199,6 @@ export const spiralArpScene: Scene<SpiralArpState> = {
           velocity: 0.5 + rNorm * 0.45,
         });
       }
-      p.prevTheta = theta;
     }
     return events;
   },
@@ -156,6 +207,7 @@ export const spiralArpScene: Scene<SpiralArpState> = {
     const cx = g.W / 2;
     const cy = g.H / 2;
     const tMax = thetaMax(state.turns);
+    const t = g.globalTime;
 
     ctx.save();
     ctx.globalCompositeOperation = "screen";
@@ -197,17 +249,20 @@ export const spiralArpScene: Scene<SpiralArpState> = {
 
     // Playheads.
     for (const p of state.playheads) {
-      const theta = thetaForArc(state, p.s);
+      const sMod = ((p.s0 + p.speed * t) % state.Ltotal + state.Ltotal) % state.Ltotal;
+      const theta = thetaForArc(state, sMod);
       const r = radiusAt(state, theta);
       const x = cx + Math.cos(theta) * r;
       const y = cy + Math.sin(theta) * r;
       const hueDeg = (p.hue * 360) % 360;
-      const grad = ctx.createRadialGradient(x, y, 0, x, y, 14);
-      grad.addColorStop(0, `oklch(0.95 0.2 ${hueDeg} / 0.95)`);
+      const flash = Math.max(0, Math.exp(-(t - p.lastFireT) * 3.2));
+      const radius = 14 + flash * 8;
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      grad.addColorStop(0, `oklch(0.95 0.2 ${hueDeg} / ${(0.85 + flash * 0.1).toFixed(3)})`);
       grad.addColorStop(1, `oklch(0.6 0.18 ${hueDeg} / 0)`);
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(x, y, 14, 0, Math.PI * 2);
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
       ctx.fill();
     }
 

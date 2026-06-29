@@ -175,7 +175,7 @@ export function PhaseDock(p: Props) {
         />
         <SceneChips scene={p.scene} onScene={p.onScene} />
         <FxMenu fx={p.fx} onFx={p.onFx} />
-        <ComposeMenu composer={p.composer} onComposer={p.onComposer} />
+        <ComposeMenu composer={p.composer} onComposer={p.onComposer} authed={p.authed} />
         <PacksMenu packs={p.packs} packId={p.packId} onPackId={p.onPackId} />
         <VisualsMenu neural={p.neural} onNeural={p.onNeural} />
 
@@ -593,12 +593,14 @@ function ComposeMenu({
       save({
         data: {
           name,
-          preset_json: {
-            e: composer.enabled,
-            r: composer.root,
-            sc: composer.scale,
-            slots: composer.slots as unknown as Record<string, unknown>[],
-          } as unknown as Record<string, unknown>,
+          preset_json: JSON.parse(
+            JSON.stringify({
+              e: composer.enabled,
+              r: composer.root,
+              sc: composer.scale,
+              slots: composer.slots,
+            }),
+          ),
         },
       }),
     onSuccess: () => {

@@ -32,6 +32,7 @@ import { stringNetworkScene, type StringNetState } from "@/lib/scenes/stringNetw
 import { pendulumFanScene, type PendulumFanState } from "@/lib/scenes/pendulumFan";
 import { spiralArpScene, type SpiralArpState } from "@/lib/scenes/spiralArp";
 import { radialSweepScene, type RadialSweepState } from "@/lib/scenes/radialSweep";
+import { engineClock } from "@/lib/engine/clock";
 import { dispatchTriggers } from "@/lib/engine/triggerBus";
 import {
   composerAdvance,
@@ -1363,6 +1364,7 @@ function PhaseApp() {
     } else {
       // Engine scenes (Scene interface). New scenes share one dispatch path.
       const k = knobsRef.current;
+      const gT = engineClock.t();
       const globals = {
         W,
         H,
@@ -1371,6 +1373,7 @@ function PhaseApp() {
         density: k.multiply,
         pitchSemis: k.pitch,
         audioNow: a ? a.ctx.currentTime : 0,
+        globalTime: gT,
       };
       const runScene = <S,>(
         impl: typeof stringNetworkScene extends import("@/lib/engine/sceneTypes").Scene<infer _>
@@ -1422,9 +1425,12 @@ function PhaseApp() {
   /* ---- Transport ---- */
   const togglePlay = async () => {
     const a = ensureAudio();
+    engineClock.attachAudio(a.ctx);
     applyFxState(a, fxState);
     if (a.ctx.state === "suspended") await a.ctx.resume();
     if (playingRef.current) resetComposerSources();
+    if (playingRef.current) engineClock.pause();
+    else engineClock.resume();
     setPlaying((p) => !p);
   };
 
@@ -1634,7 +1640,10 @@ function PhaseApp() {
         bpm={bpm}
         onBpm={setBpm}
         speed={knobs.speed}
-        onSpeed={(n) => setKnobs((k) => ({ ...k, speed: n }))}
+        onSpeed={(n) => {
+          engineClock.setSpeed(n);
+          setKnobs((k) => ({ ...k, speed: n }));
+        }}
         fx={fxState}
         onFx={setFxState}
         packs={allPacks}

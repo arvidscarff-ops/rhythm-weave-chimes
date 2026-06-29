@@ -1,63 +1,180 @@
-# Where we are vs. the master plan
+# Phase-Zero Global Clock Refactor
 
-Done so far:
-- ✅ **Step 1** — Engine skeleton (`sceneTypes`, `triggerBus`)
-- ✅ **Step 2** — Visual primitive (`inkBleed`); grain + backdrop already existed
-- ✅ **Step 3** — Scene A: String Network
-- ✅ **Step 4** — Scene B: Pendulum Fan
-- ✅ **Step 5** — Scene C: Spiral Arpeggiator
-- ✅ **Step 6** — Scene D: Radial Sweep & Nebula
+Acknowledged. Every scene becomes a deterministic, stateless function of one
+shared `globalTime` (seconds, monotonic, modulated by `speed`). Nothing else
+advances on its own.
 
-Remaining:
-- ⏳ **Step 7** — Dock + global controls + visual polish
-- ⏳ **Step 8** — Share-URL extension for engine scenes
-- ⏳ **Step 9** — Cleanup pass (retire legacy `wheel`/`pendulum`/`bars`)
+## Audit findings (what violates the mandate today)
 
-# Next slice — Step 7: Dock & globals (recommended now)
+Every per-frame `+= dt` mutation across the engine. From the audit:
 
-This is where the four new scenes go from "hidden in a menu" to feeling like the actual product. Three concrete changes:
+- `index.tsx`: `ring.phase += omega*dt`, `bob.phase += dt/period`,
+  `lane.phase += dt/period`, plus flash decays, sparks, bursts, flares,
+  shockwaves, ink-bleeds.
+- `stringNetwork.clock`, `pendulumFan.clock + strand.phase`,
+  `spiralArp.clock`, `radialSweep.clock` — every scene increments its own
+  local clock.
+- `SceneGlobals` exposes `bpm/speed/density/pitchSemis/audioNow` but **no
+  `globalTime`** — scenes have no choice today but to track time locally.
+- Audio scheduler is imperative: triggers fire at `ctx.currentTime + 0.01`
+  from inside the render loop. No lookahead.
+- `SessionState` partially saves phase (pendulum/bars/engine scene clocks)
+  but wheel ring phase isn't stored — proof that phase isn't currently
+  treated as canonical state.
 
-### 7a. SceneSwitcher chips
-Replace the dropdown-menu radio list with 4 inline chips in the dock pill — one per engine scene (String Net / Pendulum Fan / Spiral / Radial). Monospace labels at `text-xs tracking-widest opacity-60`, active chip gets a 1px gradient border + slight bloom. Legacy scenes move to a "Classic" submenu so they're still accessible but out of the way.
+## Target architecture
 
-### 7b. Per-scene Density knob
-The dock already has a `multiply` knob. Wire it to each scene's variable element count:
-- String Net → number of anchors (3–6)
-- Pendulum Fan → number of strands (5–14)
-- Spiral → number of turns (3–10)
-- Radial Sweep → number of targets (6–16)
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  engineClock (singleton, src/lib/engine/clock.ts)               │
+│    audioCtx.currentTime  →  rawT                                │
+│    rawT × speed (integrated) → globalTime                       │
+│    phaseZeroAt: number   (last "Big Bang" reset, in globalTime) │
+│    t(): number = globalTime - phaseZeroAt                       │
+└───────────────┬──────────────────────────────┬──────────────────┘
+                │                              │
+                ▼                              ▼
+   render loop (rAF)               audio scheduler (25 ms tick)
+   for each visible scene:         look ahead t..t+0.12 s,
+     positions = scene.sample(t)   call scene.eventsIn(t0,t1),
+     draw(positions)               schedule voices at
+                                     ctx.currentTime + (eventT - t)
+```
 
-`scene.update` already receives `globals.density`; scenes need a small hot-reseed when density changes.
+**Scene contract becomes pure:**
 
-### 7c. Visual polish per spec
-- Pull `bg-neutral-950/40 backdrop-blur-xl` and a 1px masked-gradient border into a shared `dockSurface` class so the dock matches the spec exactly.
-- Add a `text-xs tracking-widest` metadata strip above the dock showing the active scene's live stats (BPM, speed, density, current pulse count) at 8–10% opacity, illuminating to ~40% on hover.
+```ts
+interface Scene<S> {
+  init(g): S                                  // geometry only — no clock
+  sample(state, t, g): RenderFrame            // positions at time t
+  eventsIn(state, t0, t1, g): TriggerEvent[]  // triggers in [t0, t1)
+  // no update() that mutates a clock
+}
+```
 
-# Step 8 — Share-URL (small)
+`t = 0` is the universal Phase-Zero: every `sample(state, 0)` returns each
+node/particle at its origin/trigger position, and `eventsIn(state, 0, ε)`
+fires the "Big Bang" chord (every voice in the active scene triggers at
+t=0 simultaneously). A new `Reset to Phase Zero` control sets
+`phaseZeroAt = globalTime`.
 
-`sessionUrl.ts` currently encodes `wheel/pendulum/bars` state. Add a thin per-scene `serialize/hydrate` on each Scene module (the interface already declares it conceptually) and store under `state.engine = { stringNet?, pendulumFan?, spiralArp?, radialSweep? }`. Old hashes keep working — missing engine block just means "use fresh init".
+## Implementation steps
 
-# Step 9 — Cleanup
+1. **`src/lib/engine/clock.ts` (new).** Singleton with:
+   `start(audioCtx)`, `pause()`, `resume()`, `setSpeed(x)`, `resetPhaseZero()`,
+   `t()` (scene time, seconds), `audioToSceneTime(audioNow)`,
+   `sceneToAudioTime(t)`. Speed changes integrate so `t` stays continuous.
 
-Decide the fate of the three legacy scenes:
-- **Option A — Keep them under "Classic"** (no code removed). Lowest risk, dock stays cluttered.
-- **Option B — Migrate Wheel's interactive ring/note editing onto Radial Sweep** (which is its spiritual successor) and delete the legacy wheel/pendulum/bars code + overlays. This drops `index.tsx` from ~3.4k → ~1.2k lines and finally pays off the refactor.
+2. **`src/lib/engine/sceneTypes.ts`.** Add `globalTime: number` to
+   `SceneGlobals` (kept for back-compat reads). Add the new pure-function
+   methods `sample` and `eventsIn` to the `Scene` interface. Keep `update`
+   temporarily as a deprecated no-op shim so the refactor can land
+   scene-by-scene without breaking the build.
 
-I recommend **B** but it's the biggest single edit in this whole arc.
+3. **Engine scenes — convert one at a time** (stringNetwork → pendulumFan →
+   spiralArp → radialSweep). For each:
+   - Move every `clock`/`phase` field out of state. State now holds only
+     immutable geometry (anchors, strand base periods, spiral params,
+     target angles).
+   - `sample(state, t)` computes positions from `t` with `%` modulo on the
+     scene's period — so the loop is truly infinite and deterministic.
+   - `eventsIn(state, t0, t1)` solves crossings analytically (root-find
+     where a sine/linear sweep equals the threshold inside the window)
+     instead of comparing this-frame vs last-frame signs.
+   - At `t = 0` every node sits on its origin and every analytical
+     crossing solver emits a trigger — Phase-Zero "Big Bang" falls out
+     for free.
 
-# Credit estimate for the remaining slice
+4. **Legacy scenes (wheel / pendulum / bars).** Same treatment, scoped to
+   the same file (`src/routes/index.tsx`):
+   - Wheel: `ring.phase = (ring.startPhase + sign * omega * t) % 2π`.
+     Note triggers via analytical line-crossings in
+     `eventsIn(t0, t1)`.
+   - Pendulum bobs / bar lanes: `phase = (startPhase + t/period) % 1`.
+   - Remove ring/bob/lane `phase` fields from runtime state; keep
+     `startPhase` (constant per element) so layouts are still editable.
 
-| Step | Est. credits |
-|------|-------------:|
-| 7a Scene chips | 2–3 |
-| 7b Density wiring (4 scenes) | 2–3 |
-| 7c Dock polish + metadata strip | 2 |
-| 8  Share-URL engine block | 1–2 |
-| 9A Keep-classic cleanup | 1 |
-| 9B Full cleanup (delete legacy) | 4–6 |
-| **Total (with 9A)** | **8–11** |
-| **Total (with 9B)** | **11–16** |
+5. **Audio scheduler (`src/lib/engine/scheduler.ts`, new).** 25 ms
+   `setInterval`. Each tick:
+   - Read `now = engineClock.t()`, `horizon = now + 0.12`.
+   - Call `activeScene.eventsIn(state, lastScheduledT, horizon)`.
+   - For each event at scene-time `eT`, schedule via
+     `triggerPackVoice(ctx, dest, pack, slot, freq, sceneToAudioTime(eT))`.
+   - Advance `lastScheduledT = horizon`. On Phase-Zero reset or scene
+     switch, flush any pending Web Audio nodes scheduled past `now` and
+     reset `lastScheduledT = 0`.
+   This replaces the imperative `dispatchTriggers` path. `triggerBus`
+   stays as a UI-only event channel for visuals (flashes/bursts).
 
-# Recommended order
+6. **Visual decays (flash, sparks, bursts, flares, shockwaves, ink-bleeds).**
+   Each particle stores `bornAt` (scene-time). Brightness/lifetime is
+   derived: `alpha = decay(t - bornAt)`. Particles whose `t - bornAt`
+   exceeds `lifetime` are culled. No per-frame `-= dt` anywhere.
 
-Approve **Step 7** as the next single slice (~6–8 credits). That's the highest-impact visible change and validates the architecture is paying for itself. Steps 8 and 9 can follow once you've lived with the new scenes for a bit.
+7. **Render loop.** Becomes a thin shell:
+   ```ts
+   function frame() {
+     const t = engineClock.t();
+     const positions = activeScene.sample(state, t, g);
+     draw(ctx, positions, t);
+     raf = requestAnimationFrame(frame);
+   }
+   ```
+   No `dt` parameter passed anywhere except into the optional visual
+   easing for hover opacity (UI-only, not engine state).
+
+8. **Scene switching.** `engineClock.t()` keeps running; switching scenes
+   just swaps the `activeScene` pointer. Because both old and new scenes
+   are pure functions of `t`, there's no visible discontinuity — the new
+   geometry appears already in motion at the current phase.
+
+9. **`SessionState`.** Replace the scattered phase fields with a single
+   `clock: { t: number; speed: number }` at the top level, captured at
+   share-time. On hydrate, set `engineClock` to that `t` and call
+   `resetPhaseZero` only if the user asks. Remove
+   `engine.{...}.clock/arm/tc` and the pendulum/bars per-element phases —
+   they're no longer state. Old hashes that include those fields are
+   read tolerantly (ignored) so existing share links keep loading.
+
+10. **Dock additions.**
+    - `⏮ Phase Zero` button next to play/pause — calls
+      `engineClock.resetPhaseZero()` (instant Big Bang chord, all
+      voices fire at t=0).
+    - Metadata strip gets a `T+mm:ss.ss` readout next to BPM / SPD /
+      DEN, so the global clock is visible.
+
+## Sequencing & risk
+
+Land in this order to keep the app runnable every step:
+
+1. Clock singleton + `globalTime` in `SceneGlobals` (additive, zero risk).
+2. Scheduler module, wired in parallel with the existing imperative path
+   behind a feature flag; flip per-scene as each one converts.
+3. Convert engine scenes one at a time (stringNet first — simplest
+   geometry, cleanest analytical crossings).
+4. Convert legacy wheel/pendulum/bars.
+5. Delete the deprecated `update()` shim and the old `dispatchTriggers`
+   render-loop call site. Migrate `SessionState`.
+6. Add Phase Zero button + T+ readout.
+
+Each step is independently shippable and reversible. The mandate ends up
+enforced by the type system: `Scene` no longer has a mutable-clock
+escape hatch.
+
+## Out of scope (call out)
+
+- Tempo automation / curves — `speed` stays a scalar for now.
+- Swing / micro-timing — would attach to `eventsIn` later as a phase
+  offset per element.
+- Non-Lovable scene plugins — the new contract is plugin-ready but no
+  plugin loader is built here.
+
+## Credit estimate
+
+- Steps 1–2 (clock + scheduler skeleton, feature-flagged): ~3
+- Step 3 (4 engine scenes × ~1.5): ~6
+- Step 4 (legacy wheel + pendulum + bars): ~4
+- Step 5 (cleanup, session migration): ~2
+- Step 6 (UI: Phase Zero button + T+ readout): ~1
+
+**Total: ~14–18 credits**, spread across 6 shippable slices.

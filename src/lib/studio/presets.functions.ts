@@ -4,15 +4,32 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const SCHEMA_VERSION = 1;
 
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | Json[]
+  | { [k: string]: Json };
+
 /** Shape mirrors SessionState["composer"] — { e, r, sc, slots }. We do not
  *  re-validate the inner shape here; the client converts via
  *  composerFromSession on load. */
-const presetJsonSchema = z.object({}).passthrough();
+const presetJsonSchema: z.ZodType<Json> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(presetJsonSchema),
+    z.record(z.string(), presetJsonSchema),
+  ]),
+);
 
 export type PresetRow = {
   id: string;
   name: string;
-  preset_json: unknown;
+  preset_json: Json;
   schema_version: number;
   is_builtin: boolean;
   updated_at: string;
@@ -31,7 +48,7 @@ export const listMyPresets = createServerFn({ method: "GET" })
 
 export const savePreset = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { name: string; preset_json: unknown }) =>
+  .inputValidator((input: { name: string; preset_json: Json }) =>
     z
       .object({ name: z.string().min(1).max(80), preset_json: presetJsonSchema })
       .parse(input),

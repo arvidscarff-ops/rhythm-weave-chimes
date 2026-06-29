@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Play, Pause, Layers, Sliders, Music3, Eye, MoreHorizontal, Sparkles,
-  Info, Wrench, LogIn, LogOut,
+  Info, Wrench, LogIn, LogOut, Share2,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
@@ -56,6 +56,7 @@ type Props = {
   authed: boolean;
   email?: string | null;
   onSignOut: () => void;
+  onShare: () => void;
 };
 
 const DOCK_BTN =

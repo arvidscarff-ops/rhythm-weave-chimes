@@ -47,6 +47,18 @@ export type SceneGlobals = {
   pitchSemis: number;
   /** Audio context time, for refractory windows. */
   audioNow: number;
+  /**
+   * Phase-Zero global scene time in seconds, monotonic, modulated by
+   * `speed`. The single source of truth for all motion: every scene's
+   * geometry must be a deterministic function of `globalTime`. At
+   * `globalTime === 0` every node/particle sits on its origin/trigger
+   * position — the universal "Big Bang" chord.
+   *
+   * During the in-flight refactor this is provided to scenes that have
+   * been migrated; legacy scenes still using their own local `clock`
+   * field may ignore it until they're converted.
+   */
+  globalTime: number;
 };
 
 export interface Scene<TState = unknown> {

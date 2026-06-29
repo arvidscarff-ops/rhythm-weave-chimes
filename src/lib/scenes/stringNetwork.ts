@@ -194,11 +194,6 @@ export const stringNetworkScene: Scene<StringNetState> = {
     };
   },
 
-  /** Legacy shim — pure-time scenes don't use this. */
-  update(_state, _dt, _g) {
-    return [];
-  },
-
   sample(state, t, g) {
     // Hot-reseed when dock density changes.
     const targetN = anchorCount(g.density);

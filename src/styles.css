@@ -323,3 +323,9 @@ button.pr-rail-link { background: transparent; border: 0; cursor: pointer; }
     color: var(--color-foreground);
   }
 }
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar { display: none; }
+}

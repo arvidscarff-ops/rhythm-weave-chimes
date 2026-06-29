@@ -13,6 +13,10 @@
 import type { Scene, SceneGlobals, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
 
 const RATIOS = [1.0, 1.06, 1.13, 1.21, 1.3, 1.4, 1.51, 1.63, 1.76, 1.9, 2.05, 2.21];
+/** Map dock density (2..12) → strand count (5..14). */
+function strandCount(density: number) {
+  return Math.max(5, Math.min(14, Math.round(5 + (density - 2) * 0.9)));
+}
 const ROOT_HZ = 220;
 const freqOf = (s: number) => ROOT_HZ * Math.pow(2, s / 12);
 
@@ -46,7 +50,7 @@ export const pendulumFanScene: Scene<PendulumFanState> = {
   id: "pendulumFan",
 
   init(_g) {
-    const N = 9;
+    const N = strandCount(_g.density ?? 5);
     const strands: Strand[] = [];
     for (let i = 0; i < N; i++) {
       const angle = ((i - (N - 1) / 2) / (N - 1)) * (Math.PI * 0.55);
@@ -66,6 +70,10 @@ export const pendulumFanScene: Scene<PendulumFanState> = {
   },
 
   update(state, dt, g) {
+    const want = strandCount(g.density);
+    if (want !== state.strands.length) {
+      state.strands = pendulumFanScene.init({ ...g, density: g.density }).strands;
+    }
     state.clock += dt;
     const events: TriggerEvent[] = [];
     const period = basePeriod(g.bpm);

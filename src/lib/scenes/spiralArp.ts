@@ -39,6 +39,11 @@ export type SpiralArpState = {
   clock: number;
 };
 
+/** Map dock density (2..12) → spiral turns (3..10). */
+function spiralTurns(density: number) {
+  return Math.max(3, Math.min(10, Math.round(3 + (density - 2) * 0.7)));
+}
+
 /** Total θ for `turns` revolutions. */
 const thetaMax = (turns: number) => turns * Math.PI * 2;
 
@@ -73,7 +78,7 @@ export const spiralArpScene: Scene<SpiralArpState> = {
   id: "spiralArp",
 
   init(g) {
-    const turns = 6;
+    const turns = spiralTurns(g.density ?? 5);
     const maxR = Math.min(g.W, g.H) * 0.42;
     const tMax = thetaMax(turns);
     const b = maxR / tMax;
@@ -92,6 +97,18 @@ export const spiralArpScene: Scene<SpiralArpState> = {
   },
 
   update(state, dt, g) {
+    // Reseed spiral geometry if turns changed.
+    const want = spiralTurns(g.density);
+    if (want !== state.turns) {
+      const maxR = Math.min(g.W, g.H) * 0.42;
+      const tMax = thetaMax(want);
+      state.b = maxR / tMax;
+      state.turns = want;
+      for (const p of state.playheads) {
+        p.s = 0;
+        p.prevTheta = tMax;
+      }
+    }
     state.clock += dt;
     const events: TriggerEvent[] = [];
     const tMax = thetaMax(state.turns);

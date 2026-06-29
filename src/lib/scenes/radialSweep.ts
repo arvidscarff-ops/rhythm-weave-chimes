@@ -162,6 +162,7 @@ export const radialSweepScene: Scene<RadialSweepState> = {
     }
     hits.sort((a, b) => a.tEv - b.tEv);
     for (const { tEv, target: tg } of hits) {
+      if (tEv <= 0) continue; // Big Bang owns t=0
       if (tEv - tg.lastFireT < TARGET_COOLDOWN) continue;
       tg.lastFireT = tEv;
       state.triggerCount++;
@@ -179,6 +180,28 @@ export const radialSweepScene: Scene<RadialSweepState> = {
       });
     }
     return events;
+  },
+
+  bigBang(state, g) {
+    const cx = g.W / 2;
+    const cy = g.H / 2;
+    const maxR = Math.min(g.W, g.H) * 0.42;
+    state.triggerCount = 0;
+    state.lastNebulaT = 0;
+    return state.targets.map((tg) => {
+      const r = tg.rNorm * maxR;
+      const x = cx + Math.cos(tg.angle) * r;
+      const y = cy + Math.sin(tg.angle) * r;
+      tg.lastFireT = 0;
+      return {
+        slot: tg.slot,
+        freq: freqOf(tg.pitchSemis + g.pitchSemis),
+        x,
+        y,
+        hue: tg.hue,
+        velocity: tg.velocityBase,
+      };
+    });
   },
 
   draw(state, ctx, g) {

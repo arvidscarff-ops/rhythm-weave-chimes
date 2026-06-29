@@ -32,6 +32,7 @@ import { stringNetworkScene, type StringNetState } from "@/lib/scenes/stringNetw
 import { pendulumFanScene, type PendulumFanState } from "@/lib/scenes/pendulumFan";
 import { spiralArpScene, type SpiralArpState } from "@/lib/scenes/spiralArp";
 import { radialSweepScene, type RadialSweepState } from "@/lib/scenes/radialSweep";
+import { engineClock } from "@/lib/engine/clock";
 import { dispatchTriggers } from "@/lib/engine/triggerBus";
 import {
   composerAdvance,

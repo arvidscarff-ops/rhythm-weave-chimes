@@ -1293,7 +1293,15 @@ function PhaseApp() {
         authed={!!auth.user}
         email={auth.user?.email ?? null}
         onSignOut={() => { supabase.auth.signOut(); }}
+        onShare={handleShare}
       />
+      {shareToast && (
+        <div className="fixed top-6 left-1/2 z-50 -translate-x-1/2 pointer-events-none">
+          <div className="px-4 py-2 rounded-full border border-white/10 bg-[hsl(220_22%_7%/0.88)] backdrop-blur-2xl text-[11px] uppercase tracking-[0.16em] text-white/80 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.65)]">
+            {shareToast}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

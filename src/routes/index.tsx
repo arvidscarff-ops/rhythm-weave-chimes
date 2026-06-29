@@ -1289,13 +1289,38 @@ function PhaseApp() {
         decayPendulumFlashes(e.pendulum, dt);
       }
       drawPendulumScene(ctx2d, W, H, e.pendulum, hoverRingIdRef.current);
-    } else {
+    } else if (scene === "bars") {
       if (playing) {
         updateBars(e.bars, dt, a!, bpmRef.current, knobsRef.current, packRef.current, W, H);
       } else {
         decayBarsFlashes(e.bars, dt);
       }
       drawBarsScene(ctx2d, W, H, e.bars, hoverRingIdRef.current);
+    } else if (scene === "stringNet") {
+      const k = knobsRef.current;
+      const globals = {
+        W,
+        H,
+        bpm: bpmRef.current,
+        speed: k.speed,
+        density: k.multiply,
+        pitchSemis: k.pitch,
+        audioNow: a ? a.ctx.currentTime : 0,
+      };
+      if (!e.stringNet) e.stringNet = stringNetworkScene.init(globals);
+      if (playing && a) {
+        const events = stringNetworkScene.update(e.stringNet, dt, globals);
+        dispatchTriggers(events, {
+          audioCtx: a.ctx,
+          audioDest: a.preFx,
+          pack: packRef.current,
+          audioNow: a.ctx.currentTime,
+        });
+      } else if (e.stringNet) {
+        // keep visuals drifting even when paused
+        stringNetworkScene.update(e.stringNet, dt * 0.25, { ...globals, speed: 0 });
+      }
+      stringNetworkScene.draw(e.stringNet, ctx2d, globals);
     }
     updateBursts(dt);
     drawBursts(ctx2d);
@@ -1303,6 +1328,8 @@ function PhaseApp() {
     drawFlares(ctx2d, W, H);
     updateShockwaves(dt);
     drawShockwaves(ctx2d, W, H);
+    updateInkBleeds(dt);
+    drawInkBleeds(ctx2d);
     ctx2d.globalCompositeOperation = "source-over";
   };
 

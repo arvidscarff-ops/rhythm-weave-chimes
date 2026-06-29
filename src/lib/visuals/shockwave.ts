@@ -87,11 +87,11 @@ function spawn(f: NeuralFlash) {
   r.alive = true;
   r.x = f.x; r.y = f.y;
   r.age = 0;
-  r.maxAge = 0.85 + energy * 0.45;
+  r.maxAge = 1.6 + energy * 1.2;          // slower, longer life
   r.energy = energy;
   r.hue = typeof f.hue === "number" ? f.hue : null;
   r.echo = false;
-  r.wobble = 0.04 + (energy - 0.55) * 0.06;
+  r.wobble = 0.02 + (energy - 0.55) * 0.03; // gentler wobble
   r.seed = seed;
 
   // Echo ring for big hits
@@ -141,10 +141,10 @@ export function drawShockwaves(ctx: CanvasRenderingContext2D, W: number, H: numb
     const t = r.age / r.maxAge;
     if (t >= 1) continue;
 
-    const radius = easeOutExpo(t) * minDim * (0.18 + r.energy * 0.22) * (r.echo ? 1.35 : 1);
+    const radius = easeOutExpo(t) * minDim * (0.07 + r.energy * 0.09) * (r.echo ? 1.2 : 1);
     // alpha: quick rise, long fade
-    const fade = Math.pow(1 - t, 1.8);
-    const baseA = (r.echo ? 0.18 : 0.34) * fade * globalMul;
+    const fade = Math.pow(1 - t, 2.2);
+    const baseA = (r.echo ? 0.10 : 0.18) * fade * globalMul;
     if (baseA < 0.003) continue;
 
     const [cr, cg, cb] = ringColor(r);
@@ -157,7 +157,7 @@ export function drawShockwaves(ctx: CanvasRenderingContext2D, W: number, H: numb
 
     // organic wobble: draw as a short stitched arc strip with tiny radius noise
     const segments = 36;
-    const lineW = (1.4 + r.energy * 2.2) * (1 - t * 0.6);
+    const lineW = (0.6 + r.energy * 0.9) * (1 - t * 0.5);
     ctx.lineWidth = Math.max(0.5, lineW);
     ctx.strokeStyle = `rgba(${R},${G},${B},${baseA})`;
     ctx.beginPath();
@@ -173,16 +173,17 @@ export function drawShockwaves(ctx: CanvasRenderingContext2D, W: number, H: numb
     }
     ctx.stroke();
 
-    // Inner soft glow ring (radial gradient halo along the ring band)
-    if (!r.echo && fade > 0.25) {
-      const grad = ctx.createRadialGradient(cx, cy, radius * 0.82, cx, cy, radius * 1.18);
-      const ga = baseA * 0.5;
-      grad.addColorStop(0, `rgba(${R},${G},${B},0)`);
-      grad.addColorStop(0.5, `rgba(${R},${G},${B},${ga})`);
+    // Soft outer glow halo (wider, stronger for light bloom)
+    if (fade > 0.12) {
+      const glowR = radius * (r.echo ? 2.0 : 2.6);
+      const grad = ctx.createRadialGradient(cx, cy, radius * 0.7, cx, cy, glowR);
+      const ga = baseA * 1.6; // stronger glow alpha
+      grad.addColorStop(0, `rgba(${R},${G},${B},${ga * 0.9})`);
+      grad.addColorStop(0.35, `rgba(${R},${G},${B},${ga * 0.45})`);
       grad.addColorStop(1, `rgba(${R},${G},${B},0)`);
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(cx, cy, radius * 1.18, 0, Math.PI * 2);
+      ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
       ctx.fill();
     }
   }

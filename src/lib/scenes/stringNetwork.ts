@@ -375,7 +375,7 @@ export const stringNetworkScene: Scene<StringNetState> = {
     return events;
   },
 
-  draw(state, ctx, _g) {
+  draw(state, ctx, g) {
     ctx.save();
     ctx.globalCompositeOperation = "screen";
     // Strings — 0.5px additive lines (compounding glow where they cross).
@@ -417,6 +417,8 @@ export const stringNetworkScene: Scene<StringNetState> = {
       const trail = sc.trail;
       if (trail.length < 2) continue;
       const hueDeg = (p.hue * 360) % 360;
+      // Flash decay from most recent wrap (parity with other scenes).
+      const flash = Math.max(0, Math.min(1, Math.exp(-(g.globalTime - p.lastFireT) * 3.0)));
       // Trail: fading polyline.
       for (let i = 1; i < trail.length; i++) {
         const a = i / trail.length;
@@ -429,12 +431,13 @@ export const stringNetworkScene: Scene<StringNetState> = {
       }
       // Head.
       const last = trail[trail.length - 1];
-      const grad = ctx.createRadialGradient(last.x, last.y, 0, last.x, last.y, 6);
-      grad.addColorStop(0, `oklch(0.95 0.2 ${hueDeg} / 0.9)`);
+      const radius = 6 + flash * 6;
+      const grad = ctx.createRadialGradient(last.x, last.y, 0, last.x, last.y, radius);
+      grad.addColorStop(0, `oklch(0.95 0.2 ${hueDeg} / ${(0.85 + flash * 0.1).toFixed(3)})`);
       grad.addColorStop(1, `oklch(0.7 0.18 ${hueDeg} / 0)`);
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(last.x, last.y, 6, 0, Math.PI * 2);
+      ctx.arc(last.x, last.y, radius, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();

@@ -173,16 +173,17 @@ export function drawShockwaves(ctx: CanvasRenderingContext2D, W: number, H: numb
     }
     ctx.stroke();
 
-    // Inner soft glow ring (radial gradient halo along the ring band)
-    if (!r.echo && fade > 0.25) {
-      const grad = ctx.createRadialGradient(cx, cy, radius * 0.82, cx, cy, radius * 1.18);
-      const ga = baseA * 0.5;
-      grad.addColorStop(0, `rgba(${R},${G},${B},0)`);
-      grad.addColorStop(0.5, `rgba(${R},${G},${B},${ga})`);
+    // Soft outer glow halo (wider, stronger for light bloom)
+    if (fade > 0.12) {
+      const glowR = radius * (r.echo ? 2.0 : 2.6);
+      const grad = ctx.createRadialGradient(cx, cy, radius * 0.7, cx, cy, glowR);
+      const ga = baseA * 1.6; // stronger glow alpha
+      grad.addColorStop(0, `rgba(${R},${G},${B},${ga * 0.9})`);
+      grad.addColorStop(0.35, `rgba(${R},${G},${B},${ga * 0.45})`);
       grad.addColorStop(1, `rgba(${R},${G},${B},0)`);
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(cx, cy, radius * 1.18, 0, Math.PI * 2);
+      ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
       ctx.fill();
     }
   }

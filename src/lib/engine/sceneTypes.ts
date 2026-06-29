@@ -68,8 +68,34 @@ export interface Scene<TState = unknown> {
   /**
    * Advance physics by `dt` seconds. Return any audio events to fire
    * THIS frame. The render loop dispatches them via `triggerBus`.
+   *
+   * @deprecated Phase-Zero contract: scenes should expose `sample(t)` +
+   * `eventsIn(t0, t1)` instead and let the global scheduler own time.
+   * `update` is kept while individual scenes are migrated.
    */
   update(state: TState, dt: number, globals: SceneGlobals): TriggerEvent[];
   /** Paint the scene. Additive blending owned per-scene (set + reset). */
   draw(state: TState, ctx: CanvasRenderingContext2D, globals: SceneGlobals): void;
+
+  /**
+   * Phase-Zero render contract (preferred). Pure function of scene time
+   * — no internal `clock` mutation, no `dt`. When a scene implements
+   * `sample`, the render loop calls it instead of `update` for draw
+   * positions; the global scheduler (see {@link Scene.eventsIn}) owns
+   * audio triggers.
+   *
+   * Returning `void` (or omitting `sample` entirely) means the scene is
+   * still on the legacy `update` + `draw` path.
+   */
+  sample?(state: TState, t: number, globals: SceneGlobals): void;
+
+  /**
+   * Phase-Zero scheduler contract (preferred). Return every trigger
+   * whose scene-time falls in `[t0, t1)`, in order. Called by the audio
+   * scheduler from a look-ahead window — NOT from the render loop.
+   *
+   * Must be deterministic: `eventsIn(state, a, b)` called twice with the
+   * same arguments must return identical results.
+   */
+  eventsIn?(state: TState, t0: number, t1: number, globals: SceneGlobals): TriggerEvent[];
 }

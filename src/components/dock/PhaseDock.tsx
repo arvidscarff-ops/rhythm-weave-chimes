@@ -60,7 +60,8 @@ export type SceneKind =
   | "radialSweep"
   | "mandalaMatrix"
   | "metatronLattice"
-  | "fractalNebula";
+  | "fractalNebula"
+  | "radialResonator";
 
 type Props = {
   playing: boolean;
@@ -236,6 +237,7 @@ const ENGINE_SCENES: { id: SceneKind; label: string; short: string }[] = [
   { id: "mandalaMatrix", label: "Mandala Matrix", short: "MND" },
   { id: "metatronLattice", label: "Metatron Lattice", short: "MTN" },
   { id: "fractalNebula", label: "Fractal Nebula", short: "NEB" },
+  { id: "radialResonator", label: "Radial Resonator", short: "RES" },
 ];
 
 function SceneChips({
@@ -339,6 +341,7 @@ function SceneMenu({
             <DropdownMenuRadioItem value="mandalaMatrix">Mandala Matrix</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="metatronLattice">Metatron Lattice</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="fractalNebula">Fractal Nebula</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="radialResonator">Radial Resonator</DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-foreground/40">Classic</DropdownMenuLabel>

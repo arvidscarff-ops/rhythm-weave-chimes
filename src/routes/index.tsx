@@ -712,6 +712,74 @@ function PhaseApp() {
   const lastHoverRef = useRef<string | null>(null);
   const [hoverRing, setHoverRing] = useState<string | null>(null);
 
+  /* ---- Session URL: share + restore ---- */
+  const buildSessionState = useCallback((): SessionState => ({
+    v: 1,
+    s: scene,
+    bpm,
+    knobs: knobsToSession(knobs),
+    fx: fxToSession(fxState),
+    pack: selectedPack,
+    neural: neuralToSession(neural),
+    composer: composerToSession(composer),
+    wheel: wheelToSession(engineRef.current.wheel),
+    pendulum: pendulumToSession(engineRef.current.pendulum),
+    bars: barsToSession(engineRef.current.bars),
+  }), [scene, bpm, knobs, fxState, selectedPack, neural, composer]);
+
+  const restoreSessionState = useCallback((state: SessionState) => {
+    setScene(state.s);
+    setBpm(state.bpm);
+    setKnobs(knobsFromSession(state.knobs));
+    setFxState(fxFromSession(state.fx));
+    setSelectedPack(state.pack);
+    setNeural(neuralFromSession(state.neural));
+    saveNeuralSettings(neuralFromSession(state.neural));
+    setComposer(composerFromSession(state.composer));
+    saveComposerSettings(composerFromSession(state.composer));
+    engineRef.current.wheel = wheelFromSession(state.wheel);
+    engineRef.current.pendulum = pendulumFromSession(state.pendulum);
+    engineRef.current.bars = barsFromSession(state.bars);
+    bumpTopo();
+  }, []);
+
+  // Read hash on mount and restore session if present.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (!hash.startsWith("#s=")) return;
+    const encoded = hash.slice(3);
+    const state = decodeSession(encoded);
+    if (state) {
+      restoreSessionState(state);
+    }
+  }, [restoreSessionState]);
+
+  // Write hash when state changes (debounced).
+  const hashDebounceRef = useRef<number | null>(null);
+  const [shareToast, setShareToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (hashDebounceRef.current) window.clearTimeout(hashDebounceRef.current);
+    hashDebounceRef.current = window.setTimeout(() => {
+      const state = buildSessionState();
+      const encoded = encodeSession(state);
+      const url = new URL(window.location.href);
+      url.hash = `#s=${encoded}`;
+      window.history.replaceState(null, "", url.toString());
+    }, 600);
+    return () => {
+      if (hashDebounceRef.current) window.clearTimeout(hashDebounceRef.current);
+    };
+  }, [buildSessionState]);
+
+  const handleShare = useCallback(async () => {
+    const state = buildSessionState();
+    const ok = await copyShareUrl(state);
+    setShareToast(ok ? "Session link copied to clipboard" : "Could not copy link");
+    window.setTimeout(() => setShareToast(null), 2200);
+  }, [buildSessionState]);
+
   /* ---- Audio graph init ---- */
   const ensureAudio = useCallback((): AudioGraph => {
     if (audioRef.current) return audioRef.current;

@@ -1363,6 +1363,7 @@ function PhaseApp() {
     } else {
       // Engine scenes (Scene interface). New scenes share one dispatch path.
       const k = knobsRef.current;
+      const gT = engineClock.t();
       const globals = {
         W,
         H,
@@ -1371,6 +1372,7 @@ function PhaseApp() {
         density: k.multiply,
         pitchSemis: k.pitch,
         audioNow: a ? a.ctx.currentTime : 0,
+        globalTime: gT,
       };
       const runScene = <S,>(
         impl: typeof stringNetworkScene extends import("@/lib/engine/sceneTypes").Scene<infer _>

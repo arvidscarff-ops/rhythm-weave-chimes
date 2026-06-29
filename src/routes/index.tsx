@@ -1697,6 +1697,7 @@ function PhaseApp() {
           supabase.auth.signOut();
         }}
         onShare={handleShare}
+        onBigBang={() => engineClock.resetPhaseZero()}
       />
       {shareToast && (
         <div className="fixed top-6 left-1/2 z-50 -translate-x-1/2 pointer-events-none">

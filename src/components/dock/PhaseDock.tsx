@@ -50,7 +50,14 @@ import {
 } from "@/lib/music/composer";
 import { cn } from "@/lib/utils";
 
-export type SceneKind = "wheel" | "pendulum" | "bars" | "stringNet";
+export type SceneKind =
+  | "wheel"
+  | "pendulum"
+  | "bars"
+  | "stringNet"
+  | "pendulumFan"
+  | "spiralArp"
+  | "radialSweep";
 
 type Props = {
   playing: boolean;
@@ -241,6 +248,9 @@ function SceneMenu({
             <DropdownMenuRadioItem value="pendulum">Pendulum</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="bars">Bars</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="stringNet">String Network</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="pendulumFan">Pendulum Fan</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="spiralArp">Spiral Arpeggiator</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="radialSweep">Radial Sweep</DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
           <DropdownMenuPageTrigger targetId="multiply">

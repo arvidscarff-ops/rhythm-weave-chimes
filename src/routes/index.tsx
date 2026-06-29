@@ -29,6 +29,9 @@ import { updateFlares, drawFlares } from "@/lib/visuals/lensFlare";
 import { updateShockwaves, drawShockwaves } from "@/lib/visuals/shockwave";
 import { updateInkBleeds, drawInkBleeds } from "@/lib/visuals/inkBleed";
 import { stringNetworkScene, type StringNetState } from "@/lib/scenes/stringNetwork";
+import { pendulumFanScene, type PendulumFanState } from "@/lib/scenes/pendulumFan";
+import { spiralArpScene, type SpiralArpState } from "@/lib/scenes/spiralArp";
+import { radialSweepScene, type RadialSweepState } from "@/lib/scenes/radialSweep";
 import { dispatchTriggers } from "@/lib/engine/triggerBus";
 import {
   composerAdvance,
@@ -91,7 +94,14 @@ export const Route = createFileRoute("/")({
  * ============================================================ */
 
 type VoiceKind = "chime" | "pluck" | "bell" | "pad" | "bass" | "none";
-export type SceneKind = "wheel" | "pendulum" | "bars" | "stringNet";
+export type SceneKind =
+  | "wheel"
+  | "pendulum"
+  | "bars"
+  | "stringNet"
+  | "pendulumFan"
+  | "spiralArp"
+  | "radialSweep";
 
 type Knobs = {
   mainVol: number; // 0..1
@@ -150,6 +160,9 @@ type EngineState = {
   bars: BarsState;
   // engine scenes (lazy-initialized in render loop)
   stringNet: StringNetState | null;
+  pendulumFan: PendulumFanState | null;
+  spiralArp: SpiralArpState | null;
+  radialSweep: RadialSweepState | null;
 };
 
 type AudioGraph = {
@@ -187,7 +200,15 @@ type AudioGraph = {
  * ============================================================ */
 
 const VOICES: VoiceKind[] = ["chime", "pluck", "bell", "pad", "bass", "none"];
-const SCENES: SceneKind[] = ["wheel", "pendulum", "bars", "stringNet"];
+const SCENES: SceneKind[] = [
+  "wheel",
+  "pendulum",
+  "bars",
+  "stringNet",
+  "pendulumFan",
+  "spiralArp",
+  "radialSweep",
+];
 type VoiceSlot = "melo" | "bass" | "atmo";
 const VOICE_SLOTS: VoiceSlot[] = ["melo", "bass", "atmo"];
 void VOICES;
@@ -855,6 +876,9 @@ function PhaseApp() {
     pendulum: makeSeedPendulum(),
     bars: makeSeedBars(),
     stringNet: null,
+    pendulumFan: null,
+    spiralArp: null,
+    radialSweep: null,
   });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const grainPatternRef = useRef<CanvasPattern | null>(null);

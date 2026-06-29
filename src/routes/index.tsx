@@ -1640,7 +1640,10 @@ function PhaseApp() {
         bpm={bpm}
         onBpm={setBpm}
         speed={knobs.speed}
-        onSpeed={(n) => setKnobs((k) => ({ ...k, speed: n }))}
+        onSpeed={(n) => {
+          engineClock.setSpeed(n);
+          setKnobs((k) => ({ ...k, speed: n }));
+        }}
         fx={fxState}
         onFx={setFxState}
         packs={allPacks}

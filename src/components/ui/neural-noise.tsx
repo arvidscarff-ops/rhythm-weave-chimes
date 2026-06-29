@@ -128,9 +128,9 @@ export function NeuralNoise({ settings, zIndex = 0, blendMode = "plus-lighter" }
         vec3 col  = mix(lit, vec3(1.0), hot * 0.55) * noise;
 
         // gentle additive bloom (light only)
-        col += lit * flash * 0.18;
+        col += lit * flash * 0.10;
 
-        float a = noise * u_opacity + flash * 0.22 * u_opacity;
+        float a = noise * u_opacity + flash * 0.12 * u_opacity;
         gl_FragColor = vec4(col, clamp(a, 0.0, 0.6));
       }
     `;
@@ -228,7 +228,7 @@ export function NeuralNoise({ settings, zIndex = 0, blendMode = "plus-lighter" }
       state.flash.x = f.x;
       state.flash.y = 1 - f.y; // shader uses gl-style y-up
       // raise the *target* — actual level eases toward it (no snap)
-      state.flash.target = Math.min(1, state.flash.target + 0.25 + f.intensity * 0.35);
+      state.flash.target = Math.min(0.7, state.flash.target + 0.12 + f.intensity * 0.22);
     });
 
     let raf = 0;
@@ -249,7 +249,7 @@ export function NeuralNoise({ settings, zIndex = 0, blendMode = "plus-lighter" }
       state.ptr.y += (state.ptr.ty - state.ptr.y) * 0.04;
       // flash envelope: soft attack (~250ms), long release (~1.4s)
       const attack = 1 - Math.exp(-dt / 0.25);
-      const release = 1 - Math.exp(-dt / 1.4);
+      const release = 1 - Math.exp(-dt / 0.9);
       state.flash.level += (state.flash.target - state.flash.level) * attack;
       state.flash.target += (0 - state.flash.target) * release;
 

@@ -173,6 +173,72 @@ export type Database = {
         }
         Relationships: []
       }
+      user_composer_presets: {
+        Row: {
+          created_at: string
+          id: string
+          is_builtin: boolean
+          name: string
+          owner_id: string | null
+          preset_json: Json
+          schema_version: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_builtin?: boolean
+          name: string
+          owner_id?: string | null
+          preset_json: Json
+          schema_version?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_builtin?: boolean
+          name?: string
+          owner_id?: string | null
+          preset_json?: Json
+          schema_version?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_packs: {
+        Row: {
+          created_at: string
+          id: string
+          is_builtin: boolean
+          name: string
+          owner_id: string | null
+          pack_json: Json
+          schema_version: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_builtin?: boolean
+          name: string
+          owner_id?: string | null
+          pack_json: Json
+          schema_version?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_builtin?: boolean
+          name?: string
+          owner_id?: string | null
+          pack_json?: Json
+          schema_version?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -191,6 +257,39 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      user_scenes: {
+        Row: {
+          created_at: string
+          graph_json: Json
+          id: string
+          is_builtin: boolean
+          name: string
+          owner_id: string | null
+          schema_version: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          graph_json: Json
+          id?: string
+          is_builtin?: boolean
+          name: string
+          owner_id?: string | null
+          schema_version?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          graph_json?: Json
+          id?: string
+          is_builtin?: boolean
+          name?: string
+          owner_id?: string | null
+          schema_version?: number
+          updated_at?: string
         }
         Relationships: []
       }

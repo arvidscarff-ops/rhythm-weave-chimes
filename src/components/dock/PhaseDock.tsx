@@ -1,4 +1,11 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
+import {
+  listMyPresets,
+  savePreset,
+} from "@/lib/studio/presets.functions";
 import { Link } from "@tanstack/react-router";
 import {
   Play,
@@ -14,6 +21,8 @@ import {
   LogIn,
   LogOut,
   Share2,
+  FolderOpen,
+  Save,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -166,7 +175,7 @@ export function PhaseDock(p: Props) {
         />
         <SceneChips scene={p.scene} onScene={p.onScene} />
         <FxMenu fx={p.fx} onFx={p.onFx} />
-        <ComposeMenu composer={p.composer} onComposer={p.onComposer} />
+        <ComposeMenu composer={p.composer} onComposer={p.onComposer} authed={p.authed} />
         <PacksMenu packs={p.packs} packId={p.packId} onPackId={p.onPackId} />
         <VisualsMenu neural={p.neural} onNeural={p.onNeural} />
 
@@ -564,11 +573,58 @@ function MixRow({
 function ComposeMenu({
   composer,
   onComposer,
+  authed,
 }: {
   composer: ComposerSettings;
   onComposer: (s: ComposerSettings) => void;
+  authed: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const qc = useQueryClient();
+  const list = useServerFn(listMyPresets);
+  const save = useServerFn(savePreset);
+  const presetsQ = useQuery({
+    queryKey: ["my-presets"],
+    queryFn: () => list(),
+    enabled: authed && open,
+  });
+  const saveM = useMutation({
+    mutationFn: (name: string) =>
+      save({
+        data: {
+          name,
+          preset_json: JSON.parse(
+            JSON.stringify({
+              e: composer.enabled,
+              r: composer.root,
+              sc: composer.scale,
+              slots: composer.slots,
+            }),
+          ),
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Preset saved to your library");
+      qc.invalidateQueries({ queryKey: ["my-presets"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const loadPreset = (raw: unknown) => {
+    const p = raw as {
+      e?: boolean;
+      r?: RootName;
+      sc?: ScaleId;
+      slots?: SlotSettings[];
+    };
+    onComposer({
+      enabled: p.e ?? composer.enabled,
+      root: p.r ?? composer.root,
+      scale: p.sc ?? composer.scale,
+      slots: Array.isArray(p.slots) ? p.slots : composer.slots,
+    });
+    toast.success("Preset loaded");
+  };
 
   const setSlot = (i: number, patch: Partial<SlotSettings>) => {
     const slots = composer.slots.map((s, idx) => (idx === i ? { ...s, ...patch } : s));
@@ -590,6 +646,13 @@ function ComposeMenu({
             Enabled
           </DropdownMenuCheckboxItem>
           <DropdownMenuSeparator />
+          <DropdownMenuPageTrigger targetId="presets">
+            <FolderOpen className="h-4 w-4" /> Presets
+            <span className="ml-auto text-foreground/50">
+              {authed ? "cloud" : "sign in"}
+            </span>
+          </DropdownMenuPageTrigger>
+          <DropdownMenuSeparator />
           <DropdownMenuPageTrigger targetId="key">
             Key{" "}
             <span className="ml-auto text-foreground/50">
@@ -606,6 +669,62 @@ function ComposeMenu({
               </span>
             </DropdownMenuPageTrigger>
           ))}
+        </DropdownMenuPage>
+
+        <DropdownMenuPage id="presets">
+          <DropdownMenuLabel>Composer Presets</DropdownMenuLabel>
+          {!authed ? (
+            <DropdownMenuItem asChild>
+              <Link to="/auth" className="flex w-full items-center gap-2">
+                <LogIn className="h-4 w-4" /> Sign in to save presets
+              </Link>
+            </DropdownMenuItem>
+          ) : (
+            <>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  const name = window.prompt(
+                    "Name this preset",
+                    `${composer.root} ${SCALES[composer.scale].label}`,
+                  );
+                  if (name?.trim()) saveM.mutate(name.trim());
+                }}
+              >
+                <Save className="h-4 w-4" /> Save current as preset
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Library</DropdownMenuLabel>
+              {presetsQ.isLoading && (
+                <div className="px-4 py-2 text-[11px] uppercase tracking-[0.16em] text-foreground/50">
+                  Loading…
+                </div>
+              )}
+              {presetsQ.data && presetsQ.data.length === 0 && (
+                <div className="px-4 py-2 text-[11px] uppercase tracking-[0.16em] text-foreground/50">
+                  No presets yet
+                </div>
+              )}
+              {presetsQ.data?.map((row) => (
+                <DropdownMenuItem
+                  key={row.id}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    loadPreset(row.preset_json);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="flex-1 truncate">{row.name}</span>
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to="/studio" className="flex w-full items-center gap-2">
+                  <FolderOpen className="h-4 w-4" /> Manage in My Studio
+                </Link>
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuPage>
 
         <DropdownMenuPage id="key">
@@ -864,8 +983,15 @@ function MoreMenu({
             </DropdownMenuItem>
           ) : (
             <DropdownMenuItem asChild>
-              <Link to="/auth" className="flex w-full items-center gap-2">
-                <LogIn className="h-4 w-4" /> Sign in
+          <Link to="/auth" className="flex w-full items-center gap-2">
+            <LogIn className="h-4 w-4" /> Sign in
+          </Link>
+        </DropdownMenuItem>
+          )}
+          {authed && (
+            <DropdownMenuItem asChild>
+              <Link to="/studio" className="flex w-full items-center gap-2">
+                <FolderOpen className="h-4 w-4" /> My Studio
               </Link>
             </DropdownMenuItem>
           )}

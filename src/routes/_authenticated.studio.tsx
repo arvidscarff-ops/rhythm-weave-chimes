@@ -953,3 +953,451 @@ function SamplesList({
     </ul>
   );
 }
+/* ============================================================
+ * Scenes Tab — pick a template, shape it, save it as your own.
+ * v1: parametric remixer over the 8 built-in engine scenes.
+ *   - Pack lock + voice slot remap + density / speed / pitch overlays
+ *   - Audition jumps to the wheel with scene + pack pre-applied via
+ *     a one-shot sessionStorage handshake (see index.tsx).
+ * ============================================================ */
+
+const TEMPLATES: { id: SceneDefinition["templateId"]; label: string }[] = [
+  { id: "stringNet", label: "String Network" },
+  { id: "pendulumFan", label: "Pendulum Fan" },
+  { id: "spiralArp", label: "Spiral Arp" },
+  { id: "radialSweep", label: "Radial Sweep" },
+  { id: "mandalaMatrix", label: "Mandala Matrix" },
+  { id: "metatronLattice", label: "Metatron Lattice" },
+  { id: "fractalNebula", label: "Fractal Nebula" },
+  { id: "radialResonator", label: "Radial Resonator" },
+];
+
+const BUILTIN_PACKS = [
+  { id: "moss", label: "Moss" },
+  { id: "prism", label: "Prism" },
+  { id: "obsidian", label: "Obsidian" },
+];
+
+function ScenesTab() {
+  const qc = useQueryClient();
+  const list = useServerFn(listMyScenes);
+  const create = useServerFn(createScene);
+  const update = useServerFn(updateScene);
+  const rename = useServerFn(renameScene);
+  const del = useServerFn(deleteScene);
+  const dup = useServerFn(duplicateScene);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const scenesQ = useQuery({
+    queryKey: ["studio", "scenes"],
+    queryFn: () => list(),
+  });
+
+  const createM = useMutation({
+    mutationFn: (name: string) =>
+      create({ data: { name, graph_json: defaultSceneDefinition() } }),
+    onSuccess: (row) => {
+      toast.success(`Created "${row.name}"`);
+      qc.invalidateQueries({ queryKey: ["studio", "scenes"] });
+      setSelectedId(row.id);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Create failed"),
+  });
+
+  const renameM = useMutation({
+    mutationFn: (v: { id: string; name: string }) => rename({ data: v }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["studio", "scenes"] }),
+  });
+
+  const deleteM = useMutation({
+    mutationFn: (id: string) => del({ data: { id } }),
+    onSuccess: (_d, id) => {
+      toast.success("Scene deleted");
+      if (selectedId === id) setSelectedId(null);
+      qc.invalidateQueries({ queryKey: ["studio", "scenes"] });
+    },
+  });
+
+  const dupM = useMutation({
+    mutationFn: (id: string) => dup({ data: { id } }),
+    onSuccess: (row) => {
+      toast.success("Scene duplicated");
+      qc.invalidateQueries({ queryKey: ["studio", "scenes"] });
+      setSelectedId(row.id);
+    },
+  });
+
+  const updateM = useMutation({
+    mutationFn: (v: { id: string; graph_json: SceneDefinition }) =>
+      update({ data: v }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["studio", "scenes"] }),
+  });
+
+  const scenes = scenesQ.data ?? [];
+  const selected = scenes.find((s) => s.id === selectedId) ?? null;
+
+  useEffect(() => {
+    if (!selectedId && scenes.length) setSelectedId(scenes[0].id);
+  }, [scenes, selectedId]);
+
+  return (
+    <section className="grid gap-4 lg:grid-cols-[240px_1fr_240px]">
+      <Panel
+        title="My Scenes"
+        action={
+          <button
+            onClick={() => {
+              const name = window.prompt("Scene name?")?.trim();
+              if (name) createM.mutate(name);
+            }}
+            disabled={createM.isPending}
+            className="flex items-center gap-1 text-[11px] uppercase tracking-[0.18em] text-foreground/60 hover:text-foreground disabled:opacity-50"
+          >
+            <Plus className="h-3 w-3" /> New
+          </button>
+        }
+      >
+        {scenesQ.isLoading ? (
+          <p className="px-3 py-6 text-xs text-foreground/45">Loading…</p>
+        ) : scenes.length === 0 ? (
+          <p className="px-3 py-8 text-center text-xs text-foreground/45">
+            No scenes yet. Click + New.
+          </p>
+        ) : (
+          <ul className="space-y-1">
+            {scenes.map((s) => (
+              <li key={s.id}>
+                <button
+                  onClick={() => setSelectedId(s.id)}
+                  className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+                    selectedId === s.id
+                      ? "bg-white/10 text-foreground"
+                      : "text-foreground/70 hover:bg-white/5"
+                  }`}
+                >
+                  <div className="truncate">{s.name}</div>
+                  <div className="mt-0.5 truncate text-[10px] uppercase tracking-[0.18em] text-foreground/40">
+                    {(s.graph_json as SceneDefinition).templateId}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+
+      <div>
+        {selected ? (
+          <SceneEditor
+            key={selected.id}
+            row={selected}
+            onSave={(def) =>
+              updateM.mutate(
+                { id: selected.id, graph_json: def },
+                { onSuccess: () => toast.success("Saved") },
+              )
+            }
+            onRename={(name) => renameM.mutate({ id: selected.id, name })}
+            onDelete={() => {
+              if (confirm(`Delete "${selected.name}"?`)) deleteM.mutate(selected.id);
+            }}
+            onDuplicate={() => dupM.mutate(selected.id)}
+          />
+        ) : (
+          <Panel title="Editor">
+            <p className="px-3 py-12 text-center text-xs text-foreground/45">
+              Pick a scene on the left, or create a new one.
+            </p>
+          </Panel>
+        )}
+      </div>
+
+      <Panel title="About">
+        <div className="space-y-3 px-1 text-xs text-foreground/60 leading-relaxed">
+          <p>
+            Each scene is a remix of one built-in physics template. Tune the
+            geometry, lock a pack, remap voices, and ship.
+          </p>
+          <p>
+            <span className="text-foreground/80">Audition</span> opens the
+            main view with your scene + pack pre-applied. Your settings stay
+            saved here until you change them.
+          </p>
+          <p className="text-foreground/45">
+            Want a saved scene shipped as a built-in for everyone? Export the
+            JSON and send it over.
+          </p>
+        </div>
+      </Panel>
+    </section>
+  );
+}
+
+function SceneEditor({
+  row,
+  onSave,
+  onRename,
+  onDelete,
+  onDuplicate,
+}: {
+  row: SceneRow;
+  onSave: (def: SceneDefinition) => void;
+  onRename: (name: string) => void;
+  onDelete: () => void;
+  onDuplicate: () => void;
+}) {
+  const [def, setDef] = useState<SceneDefinition>(row.graph_json);
+  const [editingName, setEditingName] = useState(false);
+  const [name, setName] = useState(row.name);
+  const set = <K extends keyof SceneDefinition>(k: K, v: SceneDefinition[K]) =>
+    setDef((d) => ({ ...d, [k]: v }));
+
+  const audition = () => {
+    window.sessionStorage.setItem(
+      "phaseZeroAudition",
+      JSON.stringify({ scene: def.templateId, pack: def.pack ?? undefined }),
+    );
+    window.location.href = "/";
+  };
+
+  const exportJson = () => {
+    const blob = new Blob([JSON.stringify({ name: row.name, ...def }, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${row.name.replace(/[^\w-]+/g, "_")}.scene.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <Panel
+      title="Edit"
+      action={
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" onClick={onDuplicate} title="Duplicate">
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={exportJson} title="Export JSON">
+            <Download className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={onDelete} title="Delete">
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-5 px-1">
+        {/* Name */}
+        <div className="flex items-center justify-between gap-2">
+          {editingName ? (
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => {
+                setEditingName(false);
+                if (name.trim() && name !== row.name) onRename(name.trim());
+                else setName(row.name);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") {
+                  setName(row.name);
+                  setEditingName(false);
+                }
+              }}
+              className="flex-1 rounded bg-white/5 px-2 py-1 text-base outline-none"
+            />
+          ) : (
+            <button
+              onClick={() => setEditingName(true)}
+              className="flex items-center gap-2 text-base"
+              title="Rename"
+            >
+              {row.name}
+              <Pencil className="h-3.5 w-3.5 text-foreground/40" />
+            </button>
+          )}
+        </div>
+
+        {/* Template */}
+        <Section title="Template">
+          <select
+            value={def.templateId}
+            onChange={(e) =>
+              set("templateId", e.target.value as SceneDefinition["templateId"])
+            }
+            className="w-full rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-sm"
+          >
+            {TEMPLATES.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </Section>
+
+        {/* Audio */}
+        <Section title="Audio">
+          <label className="block text-[11px] uppercase tracking-[0.15em] text-foreground/55">
+            Pack lock
+          </label>
+          <select
+            value={def.pack ?? ""}
+            onChange={(e) => set("pack", e.target.value || null)}
+            className="mt-1 w-full rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-sm"
+          >
+            <option value="">— follow dock —</option>
+            {BUILTIN_PACKS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+
+          <KnobSlider
+            label="Density override"
+            min={0}
+            max={12}
+            step={1}
+            value={def.densityOverride ?? 0}
+            onChange={(v) => set("densityOverride", v === 0 ? null : v)}
+            format={(v) => (v === 0 ? "follow dock" : String(v))}
+          />
+          <KnobSlider
+            label="Speed multiplier"
+            min={0.25}
+            max={2}
+            step={0.05}
+            value={def.speedMultiplier}
+            onChange={(v) => set("speedMultiplier", v)}
+            format={(v) => `${v.toFixed(2)}×`}
+          />
+          <KnobSlider
+            label="Pitch offset (semitones)"
+            min={-24}
+            max={24}
+            step={1}
+            value={def.pitchOffset}
+            onChange={(v) => set("pitchOffset", v)}
+            format={(v) => (v > 0 ? `+${v}` : String(v))}
+          />
+
+          <label className="mt-3 block text-[11px] uppercase tracking-[0.15em] text-foreground/55">
+            Voice slot remap
+          </label>
+          <div className="mt-1 grid grid-cols-6 gap-1">
+            {def.slotMap.map((target, i) => (
+              <div key={i} className="text-center">
+                <div className="text-[10px] text-foreground/45">{i}</div>
+                <select
+                  value={target}
+                  onChange={(e) => {
+                    const next = [...def.slotMap] as SceneDefinition["slotMap"];
+                    next[i] = Number(e.target.value);
+                    set("slotMap", next);
+                  }}
+                  className="w-full rounded bg-white/5 px-1 py-1 text-xs"
+                >
+                  {[0, 1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>
+                      → {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* Visuals */}
+        <Section title="Visuals">
+          <KnobSlider
+            label="Ink bleed"
+            min={0}
+            max={1}
+            step={0.05}
+            value={def.ink}
+            onChange={(v) => set("ink", v)}
+            format={(v) => v.toFixed(2)}
+          />
+        </Section>
+
+        {/* Notes */}
+        <Section title="Notes">
+          <textarea
+            value={def.notes}
+            onChange={(e) => set("notes", e.target.value.slice(0, 500))}
+            rows={3}
+            placeholder="Creative notes — vibe, intent, anything you want to remember."
+            className="w-full rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-sm"
+          />
+          <div className="mt-1 text-right text-[10px] text-foreground/40">
+            {def.notes.length}/500
+          </div>
+        </Section>
+
+        {/* Actions */}
+        <div className="flex items-center justify-between gap-2 border-t border-white/10 pt-4">
+          <Button variant="outline" size="sm" onClick={audition}>
+            <Play className="mr-2 h-3.5 w-3.5" /> Audition on wheel
+          </Button>
+          <Button size="sm" onClick={() => onSave(def)}>
+            Save scene
+          </Button>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <div className="text-[10px] uppercase tracking-[0.2em] text-foreground/40">
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function KnobSlider({
+  label,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+  format,
+}: {
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (v: number) => void;
+  format?: (v: number) => string;
+}) {
+  return (
+    <div className="mt-3">
+      <div className="flex items-center justify-between text-[11px] text-foreground/60">
+        <span>{label}</span>
+        <span className="tabular-nums text-foreground/80">
+          {format ? format(value) : value}
+        </span>
+      </div>
+      <Slider
+        className="mt-1.5"
+        min={min}
+        max={max}
+        step={step}
+        value={[value]}
+        onValueChange={(v) => onChange(v[0])}
+      />
+    </div>
+  );
+}

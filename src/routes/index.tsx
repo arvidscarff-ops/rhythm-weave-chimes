@@ -26,6 +26,7 @@ import {
 import { flashBus } from "@/lib/neural/flashBus";
 import { spawnBurst, updateBursts, drawBursts } from "@/lib/visuals/burstField";
 import { updateFlares, drawFlares } from "@/lib/visuals/lensFlare";
+import { updateShockwaves, drawShockwaves } from "@/lib/visuals/shockwave";
 import {
   composerAdvance, resetComposerSources, loadComposerSettings,
   saveComposerSettings, type ComposerSettings,
@@ -1004,6 +1005,8 @@ function PhaseApp() {
     drawBursts(ctx2d);
     updateFlares(dt);
     drawFlares(ctx2d, W, H);
+    updateShockwaves(dt);
+    drawShockwaves(ctx2d, W, H);
     ctx2d.globalCompositeOperation = "source-over";
   };
 

@@ -48,6 +48,32 @@ import {
   subscribeNeuralSettings,
   type NeuralSettings,
 } from "@/lib/neural/palette";
+
+/**
+ * Resolve "how many notes will actually play" for the active scene from the
+ * dock's universal density (multiply) knob. Mirrors each scene's internal
+ * count formula so the dock can display an honest number.
+ */
+function resolveNotesCount(scene: SceneKind, density: number): number {
+  switch (scene) {
+    case "stringNet": {
+      const n = Math.max(3, Math.min(6, Math.round(3 + (density - 2) * 0.3)));
+      // C(n,2) strings × 2 particles each.
+      return (n * (n - 1)) / 2 * 2;
+    }
+    case "pendulumFan":
+      return Math.max(5, Math.min(14, Math.round(5 + (density - 2) * 0.9)));
+    case "spiralArp":
+      return 3;
+    case "radialSweep":
+      return Math.max(6, Math.min(16, Math.round(6 + (density - 2) * 1)));
+    case "wheel":
+    case "pendulum":
+    case "bars":
+    default:
+      return density;
+  }
+}
 import {
   buildShareUrl,
   copyShareUrl,

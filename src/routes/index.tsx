@@ -107,6 +107,7 @@ import {
   barsToSession,
   barsFromSession,
 } from "@/lib/session/sessionUrl";
+import { setSceneOverlay } from "@/lib/engine/sceneOverlay";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -1084,9 +1085,41 @@ function PhaseApp() {
     if (!raw) return;
     window.sessionStorage.removeItem("phaseZeroAudition");
     try {
-      const a = JSON.parse(raw) as { scene?: SceneKind; pack?: string };
+      const a = JSON.parse(raw) as {
+        scene?: SceneKind;
+        pack?: string;
+        densityOverride?: number | null;
+        speedMultiplier?: number;
+        pitchOffset?: number;
+        slotMap?: number[];
+        ink?: number;
+      };
       if (a.scene) setScene(a.scene);
       if (a.pack) setSelectedPack(a.pack);
+      setKnobs((k) => {
+        const next = { ...k };
+        if (typeof a.densityOverride === "number" && a.densityOverride >= 2) {
+          next.multiply = a.densityOverride;
+        }
+        if (typeof a.speedMultiplier === "number") next.speed = a.speedMultiplier;
+        if (typeof a.pitchOffset === "number") next.pitch = a.pitchOffset;
+        return next;
+      });
+      // Apply the per-event overlay (slot remap + ink). Pitch already
+      // goes through knobs.pitch above, so leave overlay.pitchSemis at 0.
+      if (a.slotMap || typeof a.ink === "number") {
+        const slotMap =
+          a.slotMap && a.slotMap.length === 6
+            ? (a.slotMap as [number, number, number, number, number, number])
+            : undefined;
+        setSceneOverlay({
+          ...(slotMap ? { slotMap } : {}),
+          ink: typeof a.ink === "number" ? a.ink : 1,
+          pitchSemis: 0,
+        });
+      } else {
+        setSceneOverlay(null);
+      }
     } catch {
       /* ignore malformed audition payload */
     }

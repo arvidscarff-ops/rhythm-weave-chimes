@@ -9,6 +9,7 @@
 import { triggerPackVoice, type RuntimePack } from "@/lib/sound/runtimePacks";
 import { spawnInkBleed } from "@/lib/visuals/inkBleed";
 import type { TriggerEvent } from "./sceneTypes";
+import { applyOverlay } from "./sceneOverlay";
 
 export type DispatchCtx = {
   audioCtx: AudioContext;
@@ -19,7 +20,8 @@ export type DispatchCtx = {
 
 export function dispatchTriggers(events: TriggerEvent[], ctx: DispatchCtx) {
   if (events.length === 0) return;
-  for (const ev of events) {
+  for (const raw of events) {
+    const ev = applyOverlay(raw);
     // Audio first — zero scheduling delay relative to the collision frame.
     triggerPackVoice(ctx.audioCtx, ctx.audioDest, ctx.pack, ev.slot, ev.freq, ctx.audioNow);
     // Visual ink-bleed in the same tick. No hard flashes.

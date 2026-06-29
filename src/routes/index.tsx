@@ -1425,9 +1425,12 @@ function PhaseApp() {
   /* ---- Transport ---- */
   const togglePlay = async () => {
     const a = ensureAudio();
+    engineClock.attachAudio(a.ctx);
     applyFxState(a, fxState);
     if (a.ctx.state === "suspended") await a.ctx.resume();
     if (playingRef.current) resetComposerSources();
+    if (playingRef.current) engineClock.pause();
+    else engineClock.resume();
     setPlaying((p) => !p);
   };
 

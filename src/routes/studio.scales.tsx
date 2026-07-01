@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Waves } from "lucide-react";
+import { Plus, Trash2, Waves, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -288,6 +288,7 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
         </div>
         <Filmstrip
           steps={steps}
+          pitches={pitches}
           activeStepId={activeStepId}
           onSelect={setActiveStepId}
           onAdd={() => addStepMut.mutate()}

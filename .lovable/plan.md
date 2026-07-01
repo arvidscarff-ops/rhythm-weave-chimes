@@ -1,25 +1,25 @@
 ## Problem
 
-Visiting `/admin/packs` mounts `AdminBootstrap`, which immediately opens the passcode keypad. If the user cancels the keypad (clicks the backdrop, presses Escape, or closes it), the promise rejects, `ready` stays `false`, and the component returns `null` — the page becomes a blank screen with no navigation controls. The header (with the Home link) only renders inside `AdminUI` after unlock, so the user has no in-app way out and appears "stuck at the passcode screen."
+Published packs never show up in the app (home page and Studio). The Supabase query fails at RLS-evaluation time with:
 
-Also: the top-right `X` in the keypad and the backdrop click both call `onCancel`, but `PasscodeProvider`'s `onCancel` only closes the modal — it doesn't navigate anywhere, so the blank page remains.
+`permission denied for function has_role`
 
-## Fix (scope: admin gate UX only)
+The RLS policies added by the CMS migration reference `public.has_role(auth.uid(), 'admin')` in their `USING` clauses on `packs`, `pack_slots`, and `pack_slot_samples`. When PostgREST evaluates any SELECT as the `anon` or `authenticated` role, Postgres has to call `has_role` — but `EXECUTE` on that function was never granted to those roles, so the query aborts before the permissive "published packs readable by all" branch is even considered.
 
-1. `src/routes/admin.packs.tsx` — `AdminBootstrap`:
-   - Track three states: `pending`, `ready`, `cancelled`.
-   - When `ensure()` rejects (user cancelled), render a small fallback screen with:
-     - "Passcode required to access admin" message
-     - "Enter passcode" button → calls `ensure()` again
-     - "Back to home" `<Link to="/">` button
-   - No more silent `null` render.
+## Fix
 
-2. `src/lib/admin/passcode-context.tsx` — no behavior change needed, but confirm `onCancel` still rejects the pending promise (it does) so the fallback triggers reliably.
+One tiny migration granting execute on the security-definer role checker:
 
-3. Optional polish: in `PasscodeKeypad`, when the user hits `Escape` on the `/admin/packs` route, the same cancel path runs — the new fallback covers it.
+```sql
+GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO anon, authenticated;
+```
 
-No changes to `/admin/unlock`, no changes to the auth or Sound Pack CMS logic, no schema or server-function changes.
+This is safe: `has_role` is `SECURITY DEFINER` and only reads `public.user_roles`; granting EXECUTE lets policies call it but does not widen row visibility.
 
-## Why this fixes "can't access other places of the app"
+## Verify
 
-The preview iframe is currently rendering `null` on `/admin/packs` after cancel. The user has no visible link to leave. Adding a fallback with a Home link restores navigation. The rest of the app (`/`, `/studio`, `/dev`, `/auth`) is not gated by the passcode — only the admin CMS is — so once they can click Home they're free.
+- Re-run the published-packs select from the browser (anon) — should return the `OZUM01` pack with its slots and samples.
+- Reload the home page — the pack appears in the packs list, samples decode, audition works.
+- Admin CMS still functions unchanged.
+
+No app-code, schema, or grant-shape changes beyond that one GRANT.

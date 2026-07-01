@@ -52,8 +52,8 @@ async function gate(passcode: string) {
 
 export const listAdminPacks = createServerFn({ method: "POST" })
   .inputValidator((data: { passcode: string }) => data)
-  .handler(async ({ data }): Promise<AdminPack[]> => {
-    await gate(data.passcode);
+  .handler(async ({ data: input }): Promise<AdminPack[]> => {
+    await gate(input.passcode);
     const supa = await admin();
     const { data, error } = await supa
       .from("packs")

@@ -1,58 +1,37 @@
-# Plan: "My Studio" — the unified dev console
+## Problem
 
-Replace the current authenticated `/studio` route and the separate `/admin/packs` + `/admin/scales` pages with one passcode-gated hub at **`/studio`**. One passcode prompt on entry unlocks every tool for the session.
+The dock's overflow menu still shows two separate entries:
 
-## What the user sees
+- **"Developer console"** → links to `/dev` (the legacy email/password-gated `dev.tsx` page). This is what shows up in the Lovable in-app preview because the account there isn't signed in — so the dock never renders the second, auth-only "My Studio" item.
+- **"My Studio"** → links to `/studio`, but the item is wrapped in an `authed` check and only appears when a Supabase user is signed in. In a fresh preview window you happen to be signed in, so it shows there — hence the split behaviour you're seeing.
 
-- Visit `/studio` → passcode keypad. Enter correct code → land in My Studio.
-- My Studio is a tabbed workspace:
-  - **Packs** — the existing Sound Packs CMS (moved from `/admin/packs`).
-  - **Scales** — the Scale & Progression composer (moved from `/admin/scales`).
-  - Room to add more dev tools later (presets, scenes, diagnostics).
-- Sidebar/top-nav lets the user switch tabs without re-entering the passcode.
-- A small "Lock" button clears the session and returns to the keypad.
-- The bottom-right admin dot and `⌘/Ctrl + .` shortcut now open `/studio` (keypad if locked, hub if unlocked).
+The old `/dev` route also exists as a full page and is linked from `src/routes/index.tsx` (a "pr-rail-link" pointing at `/dev`).
 
-## Routing changes
+## Fix — retire the old Developer Console entirely
 
-```text
-src/routes/
-  studio.tsx              → passcode gate + shell with <Outlet />
-  studio.index.tsx        → default landing (overview / tool picker)
-  studio.packs.tsx        → moved from admin.packs.tsx
-  studio.scales.tsx       → moved from admin.scales.tsx
-```
+Everything the old `/dev` page did (pack CRUD, sample upload, slot editor) already lives inside `/studio/packs` behind the passcode. Remove the legacy surface so the passcode-gated My Studio is the only creator hub, visible to everyone (signed in or not).
 
-Old routes stay as thin redirects for one release:
-- `/admin/packs` → `/studio/packs`
-- `/admin/scales` → `/studio/scales`
-- `/admin/unlock` → `/studio`
-- Authenticated `_authenticated/studio` → removed (its preset UI, if still used, folds into a future Studio tab; not in scope this pass).
+### Changes
 
-## Passcode gate
+1. **`src/components/dock/PhaseDock.tsx`**
+   - Delete the "Developer console" menu item (the `<Link to="/dev">` block).
+   - Unwrap "My Studio" from the `authed` conditional so it shows for every user. Keep it above the Sign-in/Sign-out separator (dev tool, not account action).
+   - The "Admin" item (`phase:admin-open` event) stays — it already routes to `/studio` via `AdminTrigger`.
 
-- Reuse existing `verifyAdminPasscode` server fn and `PasscodeProvider`/`usePasscode` context — no new backend surface.
-- `studio.tsx` mounts `PasscodeProvider` and, on mount, calls `ensure()`. Until the passcode is verified, the route renders the full-screen keypad (same visual as `/admin/unlock` today) instead of `<Outlet />`.
-- Once unlocked, the passcode lives in the in-memory context for the tab session. Server functions that need it (pack/scale writes) read it from the context, unchanged.
-- "Lock" button calls `passcode.clear()` and rerenders the gate.
+2. **`src/routes/index.tsx`**
+   - Remove the `<Link to="/dev">` rail link (single occurrence around line 3068).
 
-## Component moves (no logic changes)
+3. **`src/routes/dev.tsx`** — delete the file. `auditionSample` stays in `src/lib/dev/samplePlayer.ts` because `studio.packs.tsx` and `runtimePacks.ts` still import it.
 
-- `admin.packs.tsx` body → `studio.packs.tsx` component, wrapped in the Studio shell instead of its own page chrome.
-- `admin.scales.tsx` body → `studio.scales.tsx` same treatment.
-- Existing "back to app" buttons inside those pages become the Studio nav.
+4. **Route tree regen** — run the same `regen.mjs` used previously so `routeTree.gen.ts` no longer references `/dev`.
 
-## Entry points
+### Result
 
-- `AdminTrigger` (corner dot + shortcut) navigates to `/studio` instead of `/admin/packs`.
-- Any in-app links pointing to `/admin/*` are updated to `/studio/*`.
+- In-app preview and standalone window both show the same overflow menu with a single "My Studio" entry.
+- Clicking it navigates to `/studio`, which prompts the passcode keypad regardless of Supabase auth state.
+- The "Developer console" label and the email/password gated page are gone.
 
-## Out of scope
+### Out of scope
 
-- No DB schema changes.
-- No changes to pack/scale editor internals — only their location and page chrome.
-- Merging the authenticated presets studio into My Studio is a follow-up.
-
-## Open question
-
-The current authenticated `/studio` (login-gated user presets) will be removed by this refactor. Confirm that's fine — presets today are per-user (Supabase auth), and folding them under a shared passcode means every studio visitor sees the same preset list. If presets should stay per-user, we'd instead keep `_authenticated/studio` and only move admin tools into My Studio.
+- No changes to the passcode flow itself, no DB changes, no changes to `/studio/packs` internals.
+- The authenticated `/auth` page and Sign-in/Sign-out remain (used for per-user presets in the future).

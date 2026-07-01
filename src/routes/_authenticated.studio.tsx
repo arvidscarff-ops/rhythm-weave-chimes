@@ -275,7 +275,7 @@ type SlotRow = {
   id: string;
   pack_id: string;
   slot_index: number;
-  sample_id: string | null;
+  sample_id: string | null; // derived from pack_slot_samples[position=0]
   label: string | null;
   gain_db: number;
   pan: number;

@@ -358,24 +358,37 @@ function HandpanField({
               <button
                 type="button"
                 onClick={() => strike(i, p)}
-                className={`relative flex items-center justify-center rounded-full border transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 ${
-                  isDing
-                    ? "border-amber-300/40 bg-gradient-to-br from-amber-200/20 via-amber-500/10 to-black/60"
-                    : "border-white/15 bg-gradient-to-br from-white/[0.08] via-white/[0.02] to-black/50"
-                } ${isRinging ? "scale-[1.06] brightness-150 shadow-[0_0_28px_rgba(251,191,36,0.5)]" : "hover:brightness-125"}`}
-                style={{ width: slotSize, height: slotSize }}
+                title={`${p} · ${color.name}`}
+                className={`relative flex items-center justify-center rounded-full border transition-all duration-150 focus:outline-none focus-visible:ring-2 ${
+                  isRinging ? "scale-[1.06] brightness-125" : "hover:brightness-110"
+                }`}
+                style={{
+                  width: slotSize,
+                  height: slotSize,
+                  borderColor: `color-mix(in oklab, ${c} ${isDing ? 70 : 55}%, transparent)`,
+                  background: `radial-gradient(circle at 32% 28%, color-mix(in oklab, ${c} ${isDing ? 55 : 42}%, transparent) 0%, color-mix(in oklab, ${c} ${isDing ? 25 : 18}%, transparent) 45%, rgba(0,0,0,0.55) 100%)`,
+                  boxShadow: isRinging
+                    ? `0 0 32px color-mix(in oklab, ${c} 70%, transparent), inset 0 1px 0 rgba(255,255,255,0.15)`
+                    : `inset 0 1px 0 rgba(255,255,255,0.10), 0 6px 18px rgba(0,0,0,0.35)`,
+                }}
               >
-                <span className="pointer-events-none select-none font-mono text-lg tracking-tight text-foreground/90">
+                <span className="pointer-events-none select-none font-mono text-lg tracking-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]">
                   {p}
                 </span>
                 {isRinging && (
                   <span
                     key={ringing[i]}
-                    className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-amber-300/50 animate-ping"
+                    className="pointer-events-none absolute inset-0 rounded-full animate-ping"
+                    style={{ boxShadow: `0 0 0 2px color-mix(in oklab, ${c} 55%, transparent)` }}
                   />
                 )}
               </button>
-              <div className="w-full">
+              <div className="w-full flex items-center gap-1">
+                <span
+                  aria-hidden
+                  className="h-2 w-2 flex-shrink-0 rounded-full ring-1 ring-black/40"
+                  style={{ background: c }}
+                />
                 <Select value={p} onValueChange={(v) => setPitch(i, v)}>
                   <SelectTrigger className="h-6 border-white/10 bg-black/40 px-2 text-[10px]">
                     <SelectValue />

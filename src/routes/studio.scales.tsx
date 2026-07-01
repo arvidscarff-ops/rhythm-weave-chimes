@@ -21,7 +21,7 @@ import {
   type AdminProgressionStep,
 } from "@/lib/admin/scales.functions";
 
-export const Route = createFileRoute("/admin/scales")({
+export const Route = createFileRoute("/studio/scales")({
   ssr: false,
   component: AdminScalesPage,
   head: () => ({

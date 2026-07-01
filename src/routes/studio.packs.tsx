@@ -33,7 +33,7 @@ import {
   type Humanization,
 } from "@/lib/admin/humanization";
 
-export const Route = createFileRoute("/admin/packs")({
+export const Route = createFileRoute("/studio/packs")({
   ssr: false,
   component: AdminPacksPage,
 });

@@ -41,20 +41,14 @@ function AdminPacksPage() {
 }
 
 function AdminBootstrap() {
-  const { ensure, get } = usePasscode();
+  const { ensure, get, set } = usePasscode();
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    // Prefer passcode handed over from /admin/unlock (in-memory window stash),
-    // otherwise prompt via the glass keypad.
-    const stashed = (window as unknown as { __phaseAdminPass?: string }).__phaseAdminPass;
-    if (stashed) {
-      // Prime the context cache by calling ensure() after seeding.
-      // We do this by triggering ensure() only if get() is empty; seed via a fake path:
-      // simplest: verify via a lightweight call — instead, just accept it (verify happens on first server call).
-      (window as unknown as { __phaseAdminPass?: string }).__phaseAdminPass = undefined;
-      // Directly write to the ref through ensure by resolving with the stashed value:
-      // Simpler: just call ensure() which will open keypad if empty. To avoid re-prompt,
-      // we call a private setter — instead, expose set:
+    // Accept passcode handed off from /admin/unlock via in-memory window stash.
+    const w = window as unknown as { __phaseAdminPass?: string };
+    if (w.__phaseAdminPass) {
+      set(w.__phaseAdminPass);
+      w.__phaseAdminPass = undefined;
     }
     if (get()) {
       setReady(true);
@@ -63,7 +57,7 @@ function AdminBootstrap() {
     ensure()
       .then(() => setReady(true))
       .catch(() => setReady(false));
-  }, [ensure, get]);
+  }, [ensure, get, set]);
 
   if (!ready) return null;
   return <AdminUI />;

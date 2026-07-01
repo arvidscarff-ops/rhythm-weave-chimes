@@ -46,6 +46,8 @@ import {
   saveComposerSettings,
   type ComposerSettings,
 } from "@/lib/music/composer";
+import { setRegistry, setTempo as setProgressionTempo } from "@/lib/music/progression";
+import { fetchPublishedScales } from "@/lib/music/scales.functions";
 import {
   NEURAL_PRESETS,
   loadNeuralSettings,

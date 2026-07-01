@@ -18,6 +18,7 @@ import {
 import { usePasscode } from "@/lib/admin/passcode-context";
 import { allPitchOptions, DEFAULT_PITCH, pitchToMidi } from "@/lib/music/pitch";
 import { noteColor } from "@/lib/music/noteColors";
+import { pitchRegister, type Register } from "@/lib/music/register";
 import { playPitch, primeAudio } from "@/lib/studio/handpanAudio";
 import {
   listAdminScales,

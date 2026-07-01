@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           created_at: string
           gain_db: number
+          humanization: Json | null
           id: string
           label: string | null
           pack_id: string
@@ -29,6 +30,7 @@ export type Database = {
         Insert: {
           created_at?: string
           gain_db?: number
+          humanization?: Json | null
           id?: string
           label?: string | null
           pack_id: string
@@ -40,6 +42,7 @@ export type Database = {
         Update: {
           created_at?: string
           gain_db?: number
+          humanization?: Json | null
           id?: string
           label?: string | null
           pack_id?: string
@@ -67,33 +70,42 @@ export type Database = {
       }
       packs: {
         Row: {
+          cover_image_url: string | null
           created_at: string
           description: string | null
+          humanization: Json | null
           id: string
           is_builtin: boolean
           is_public: boolean
+          is_published: boolean
           name: string
           owner_id: string | null
           slug: string
           updated_at: string
         }
         Insert: {
+          cover_image_url?: string | null
           created_at?: string
           description?: string | null
+          humanization?: Json | null
           id?: string
           is_builtin?: boolean
           is_public?: boolean
+          is_published?: boolean
           name: string
           owner_id?: string | null
           slug: string
           updated_at?: string
         }
         Update: {
+          cover_image_url?: string | null
           created_at?: string
           description?: string | null
+          humanization?: Json | null
           id?: string
           is_builtin?: boolean
           is_public?: boolean
+          is_published?: boolean
           name?: string
           owner_id?: string | null
           slug?: string

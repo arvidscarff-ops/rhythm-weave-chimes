@@ -736,4 +736,3 @@ function SlotEditor({
     </div>
   );
 }
-}

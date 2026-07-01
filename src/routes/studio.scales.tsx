@@ -31,6 +31,29 @@ import {
   type AdminProgressionStep,
 } from "@/lib/admin/scales.functions";
 
+type ToneState = "off" | "chord" | "accent";
+function toneStateOf(step: AdminProgressionStep, idx: number): ToneState {
+  if (step.chord_tones.includes(idx)) return "chord";
+  if (step.accent_tones.includes(idx)) return "accent";
+  return "off";
+}
+function nextToneState(s: ToneState): ToneState {
+  return s === "off" ? "chord" : s === "chord" ? "accent" : "off";
+}
+function applyToneCycle(
+  step: AdminProgressionStep,
+  idx: number,
+): { chord_tones: number[]; accent_tones: number[] } {
+  const next = nextToneState(toneStateOf(step, idx));
+  const chord = step.chord_tones.filter((n) => n !== idx);
+  const accent = step.accent_tones.filter((n) => n !== idx);
+  if (next === "chord") chord.push(idx);
+  if (next === "accent") accent.push(idx);
+  chord.sort((a, b) => a - b);
+  accent.sort((a, b) => a - b);
+  return { chord_tones: chord, accent_tones: accent };
+}
+
 export const Route = createFileRoute("/studio/scales")({
   ssr: false,
   component: AdminUI,

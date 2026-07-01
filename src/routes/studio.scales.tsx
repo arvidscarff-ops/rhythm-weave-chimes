@@ -343,6 +343,8 @@ function HandpanField({
           const isDing = i === 0;
           const slotSize = isDing ? 108 : 88;
           const isRinging = ringing[i] !== undefined;
+          const color = noteColor(p);
+          const c = color.cssVar;
           return (
             <div
               key={i}

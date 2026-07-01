@@ -76,27 +76,7 @@ function AdminUI() {
   });
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
-        <div className="flex items-center gap-3">
-          <Link to="/" className="flex items-center gap-1 text-xs uppercase tracking-[0.18em] text-foreground/60 hover:text-foreground">
-            <ChevronLeft className="h-4 w-4" /> Home
-          </Link>
-          <h1 className="text-base font-medium tracking-wide">Admin · Sound Packs CMS</h1>
-        </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            clearPass();
-            router.navigate({ to: "/admin/unlock" });
-          }}
-        >
-          <Lock className="h-3 w-3 mr-2" /> Lock
-        </Button>
-      </header>
-
-      <main className="mx-auto grid max-w-7xl grid-cols-[260px_1fr] gap-6 px-6 py-6">
+    <div className="grid grid-cols-[260px_1fr] gap-6">
         {/* Left: pack list */}
         <aside className="space-y-2">
           <div className="flex items-center justify-between">
@@ -153,7 +133,6 @@ function AdminUI() {
             Create a pack to get started.
           </div>
         )}
-      </main>
     </div>
   );
 }

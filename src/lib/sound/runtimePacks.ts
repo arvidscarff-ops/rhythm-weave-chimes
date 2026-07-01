@@ -48,26 +48,21 @@ type SlotRow = {
   samples: { storage_path: string } | null;
 };
 
-async function fetchPacksBy(
-  filter: (
-    q: ReturnType<typeof supabase.from<"packs">>,
-  ) => ReturnType<typeof supabase.from<"packs">>,
-): Promise<RuntimePack[]> {
-  const base = supabase
-    .from("packs")
-    .select(
-      "id,name,description,is_builtin,cover_image_url,humanization,pack_slots(slot_index,sample_id,label,pitch_offset_semitones,gain_db,pan,humanization,samples(storage_path))",
-    )
-    .order("created_at", { ascending: false });
-  const { data: packs, error } = await filter(base as never);
-  if (error) {
-    console.warn("[runtimePacks] fetch failed", error.message);
-    return [];
-  }
-  return (packs ?? []).map((p): RuntimePack => {
+type PackRowLite = {
+  id: string;
+  name: string;
+  description: string | null;
+  is_builtin: boolean;
+  cover_image_url: string | null;
+  humanization: unknown;
+  pack_slots: SlotRow[] | null;
+};
+
+function mapPacks(rows: PackRowLite[]): RuntimePack[] {
+  return rows.map((p): RuntimePack => {
     const slots: (CustomSlot | null)[] = new Array(6).fill(null);
-    const rows = (p.pack_slots ?? []) as SlotRow[];
-    for (const s of rows) {
+    const srows = (p.pack_slots ?? []) as SlotRow[];
+    for (const s of srows) {
       if (!s.sample_id || !s.samples?.storage_path) continue;
       if (s.slot_index < 0 || s.slot_index > 5) continue;
       slots[s.slot_index] = {
@@ -82,23 +77,43 @@ async function fetchPacksBy(
     }
     return {
       kind: "custom",
-      id: p.id as string,
+      id: p.id,
       name: p.name,
       blurb: p.description ?? "Custom pack",
-      coverUrl: (p as { cover_image_url?: string | null }).cover_image_url ?? null,
-      humanization: parseHumanization((p as { humanization?: unknown }).humanization),
+      coverUrl: p.cover_image_url ?? null,
+      humanization: parseHumanization(p.humanization),
       slots,
     };
   });
 }
 
-export function fetchCustomPacks(): Promise<RuntimePack[]> {
-  // My own custom packs (auth'd user in Studio)
-  return fetchPacksBy((q) => q.eq("is_builtin", false) as never);
+const PACK_SELECT =
+  "id,name,description,is_builtin,cover_image_url,humanization,pack_slots(slot_index,sample_id,label,pitch_offset_semitones,gain_db,pan,humanization,samples(storage_path))";
+
+export async function fetchCustomPacks(): Promise<RuntimePack[]> {
+  const { data, error } = await supabase
+    .from("packs")
+    .select(PACK_SELECT)
+    .eq("is_builtin", false)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.warn("[runtimePacks] fetch failed", error.message);
+    return [];
+  }
+  return mapPacks((data ?? []) as unknown as PackRowLite[]);
 }
 
-export function fetchPublishedPacks(): Promise<RuntimePack[]> {
-  return fetchPacksBy((q) => q.eq("is_published", true) as never);
+export async function fetchPublishedPacks(): Promise<RuntimePack[]> {
+  const { data, error } = await supabase
+    .from("packs")
+    .select(PACK_SELECT)
+    .eq("is_published", true)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.warn("[runtimePacks] fetch failed", error.message);
+    return [];
+  }
+  return mapPacks((data ?? []) as unknown as PackRowLite[]);
 }
 
 export async function warmCustomPack(ctx: AudioContext, pack: RuntimePack) {

@@ -910,6 +910,29 @@ function PhaseApp() {
   knobsRef.current = knobs;
   const bpmRef = useRef(bpm);
   bpmRef.current = bpm;
+
+  // ---- Chord Progression Engine wiring ----
+  // Push tempo into the progression module whenever it changes so bar math
+  // matches the audio scheduler.
+  useEffect(() => { setProgressionTempo(bpm); }, [bpm]);
+
+  // Load published scales into the in-memory registry.
+  const fetchScalesFn = useServerFn(fetchPublishedScales);
+  const scalesQ = useQuery({
+    queryKey: ["published-scales"],
+    queryFn: () => fetchScalesFn(),
+    staleTime: 30_000,
+  });
+  useEffect(() => {
+    if (!scalesQ.data) return;
+    setRegistry(scalesQ.data);
+    // If the stored composer scale id no longer exists, fall back to first.
+    setComposer((c) => {
+      const exists = scalesQ.data!.some((s) => s.id === c.scale);
+      if (exists || scalesQ.data!.length === 0) return c;
+      return { ...c, scale: scalesQ.data![0].id };
+    });
+  }, [scalesQ.data]);
   // Resolve currently-selected pack into a RuntimePack (built-in or custom).
   const allPacks: RuntimePack[] = [...BUILTIN_RUNTIME_PACKS, ...customPacks];
   const activePack: RuntimePack =

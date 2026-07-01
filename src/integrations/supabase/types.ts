@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      custom_scales: {
+        Row: {
+          created_at: string
+          id: string
+          intervals: number[]
+          is_published: boolean
+          name: string
+          pool_size: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          intervals?: number[]
+          is_published?: boolean
+          name: string
+          pool_size?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          intervals?: number[]
+          is_published?: boolean
+          name?: string
+          pool_size?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pack_slot_samples: {
         Row: {
           created_at: string
@@ -213,6 +243,47 @@ export type Database = {
           storage_path?: string
         }
         Relationships: []
+      }
+      scale_progressions: {
+        Row: {
+          accent_tones: number[]
+          chord_tones: number[]
+          created_at: string
+          duration_bars: number
+          id: string
+          scale_id: string
+          step_order: number
+          updated_at: string
+        }
+        Insert: {
+          accent_tones?: number[]
+          chord_tones?: number[]
+          created_at?: string
+          duration_bars?: number
+          id?: string
+          scale_id: string
+          step_order: number
+          updated_at?: string
+        }
+        Update: {
+          accent_tones?: number[]
+          chord_tones?: number[]
+          created_at?: string
+          duration_bars?: number
+          id?: string
+          scale_id?: string
+          step_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scale_progressions_scale_id_fkey"
+            columns: ["scale_id"]
+            isOneToOne: false
+            referencedRelation: "custom_scales"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_composer_presets: {
         Row: {

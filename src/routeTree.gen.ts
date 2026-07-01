@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminUnlockRouteImport } from './routes/admin.unlock'
+import { Route as AdminScalesRouteImport } from './routes/admin.scales'
 import { Route as AdminPacksRouteImport } from './routes/admin.packs'
 import { Route as AuthenticatedStudioRouteImport } from './routes/_authenticated.studio'
 
@@ -41,6 +42,11 @@ const AdminUnlockRoute = AdminUnlockRouteImport.update({
   path: '/admin/unlock',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminScalesRoute = AdminScalesRouteImport.update({
+  id: '/admin/scales',
+  path: '/admin/scales',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminPacksRoute = AdminPacksRouteImport.update({
   id: '/admin/packs',
   path: '/admin/packs',
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/dev': typeof DevRoute
   '/studio': typeof AuthenticatedStudioRoute
   '/admin/packs': typeof AdminPacksRoute
+  '/admin/scales': typeof AdminScalesRoute
   '/admin/unlock': typeof AdminUnlockRoute
 }
 export interface FileRoutesByTo {
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/dev': typeof DevRoute
   '/studio': typeof AuthenticatedStudioRoute
   '/admin/packs': typeof AdminPacksRoute
+  '/admin/scales': typeof AdminScalesRoute
   '/admin/unlock': typeof AdminUnlockRoute
 }
 export interface FileRoutesById {
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/dev': typeof DevRoute
   '/_authenticated/studio': typeof AuthenticatedStudioRoute
   '/admin/packs': typeof AdminPacksRoute
+  '/admin/scales': typeof AdminScalesRoute
   '/admin/unlock': typeof AdminUnlockRoute
 }
 export interface FileRouteTypes {
@@ -86,9 +95,17 @@ export interface FileRouteTypes {
     | '/dev'
     | '/studio'
     | '/admin/packs'
+    | '/admin/scales'
     | '/admin/unlock'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/dev' | '/studio' | '/admin/packs' | '/admin/unlock'
+  to:
+    | '/'
+    | '/auth'
+    | '/dev'
+    | '/studio'
+    | '/admin/packs'
+    | '/admin/scales'
+    | '/admin/unlock'
   id:
     | '__root__'
     | '/'
@@ -97,6 +114,7 @@ export interface FileRouteTypes {
     | '/dev'
     | '/_authenticated/studio'
     | '/admin/packs'
+    | '/admin/scales'
     | '/admin/unlock'
   fileRoutesById: FileRoutesById
 }
@@ -106,6 +124,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   DevRoute: typeof DevRoute
   AdminPacksRoute: typeof AdminPacksRoute
+  AdminScalesRoute: typeof AdminScalesRoute
   AdminUnlockRoute: typeof AdminUnlockRoute
 }
 
@@ -146,6 +165,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUnlockRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/scales': {
+      id: '/admin/scales'
+      path: '/admin/scales'
+      fullPath: '/admin/scales'
+      preLoaderRoute: typeof AdminScalesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/packs': {
       id: '/admin/packs'
       path: '/admin/packs'
@@ -181,18 +207,9 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   DevRoute: DevRoute,
   AdminPacksRoute: AdminPacksRoute,
+  AdminScalesRoute: AdminScalesRoute,
   AdminUnlockRoute: AdminUnlockRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

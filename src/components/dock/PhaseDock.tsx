@@ -51,7 +51,8 @@ import {
 } from "@/lib/fx/fxState";
 import { NEURAL_PRESETS, type NeuralSettings } from "@/lib/neural/palette";
 import type { RuntimePack } from "@/lib/sound/runtimePacks";
-import { SCALES, ROOT_NAMES, type ScaleId, type RootName } from "@/lib/music/scales";
+import { ROOT_NAMES, type RootName } from "@/lib/music/scales";
+import { fetchPublishedScales } from "@/lib/music/scales.functions";
 import {
   type ComposerSettings,
   type SlotSettings,
@@ -584,6 +585,16 @@ function ComposeMenu({
   const qc = useQueryClient();
   const list = useServerFn(listMyPresets);
   const save = useServerFn(savePreset);
+  const fetchScales = useServerFn(fetchPublishedScales);
+  const scalesQ = useQuery({
+    queryKey: ["published-scales"],
+    queryFn: () => fetchScales(),
+    staleTime: 30_000,
+  });
+  const scales = scalesQ.data ?? [];
+  const currentScale =
+    scales.find((s) => s.id === composer.scale) ?? scales[0];
+  const currentScaleLabel = currentScale?.name ?? "—";
   const presetsQ = useQuery({
     queryKey: ["my-presets"],
     queryFn: () => list(),
@@ -615,7 +626,7 @@ function ComposeMenu({
     const p = raw as {
       e?: boolean;
       r?: RootName;
-      sc?: ScaleId;
+      sc?: string;
       slots?: SlotSettings[];
     };
     onComposer({
@@ -657,7 +668,7 @@ function ComposeMenu({
           <DropdownMenuPageTrigger targetId="key">
             Key{" "}
             <span className="ml-auto text-foreground/50">
-              {composer.root} {SCALES[composer.scale].label}
+              {composer.root} {currentScaleLabel}
             </span>
           </DropdownMenuPageTrigger>
           <DropdownMenuSeparator />
@@ -687,7 +698,7 @@ function ComposeMenu({
                   e.preventDefault();
                   const name = window.prompt(
                     "Name this preset",
-                    `${composer.root} ${SCALES[composer.scale].label}`,
+                    `${composer.root} ${currentScaleLabel}`,
                   );
                   if (name?.trim()) saveM.mutate(name.trim());
                 }}
@@ -743,12 +754,17 @@ function ComposeMenu({
           <DropdownMenuSeparator />
           <DropdownMenuLabel>Scale</DropdownMenuLabel>
           <DropdownMenuRadioGroup
-            value={composer.scale}
-            onValueChange={(v) => onComposer({ ...composer, scale: v as ScaleId })}
+            value={currentScale?.id ?? ""}
+            onValueChange={(v) => onComposer({ ...composer, scale: v })}
           >
-            {(Object.keys(SCALES) as ScaleId[]).map((k) => (
-              <DropdownMenuRadioItem key={k} value={k}>
-                {SCALES[k].label}
+            {scales.length === 0 && (
+              <div className="px-4 py-2 text-[11px] uppercase tracking-[0.16em] text-foreground/50">
+                No published scales
+              </div>
+            )}
+            {scales.map((s) => (
+              <DropdownMenuRadioItem key={s.id} value={s.id}>
+                {s.name}
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>

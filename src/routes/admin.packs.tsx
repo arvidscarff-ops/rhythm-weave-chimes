@@ -478,48 +478,107 @@ function SliderRow({
   );
 }
 
-function SlotEditor({ packId, slot }: { packId: string; slot: AdminSlot }) {
+function SlotEditor({
+  packId,
+  slot,
+  canRemove,
+  onRemove,
+}: {
+  packId: string;
+  slot: AdminSlot;
+  canRemove: boolean;
+  onRemove: () => void;
+}) {
   const qc = useQueryClient();
   const { get: getPass } = usePasscode();
   const update = useServerFn(updateAdminSlot);
   const register = useServerFn(registerAdminSample);
   const createUploadUrl = useServerFn(createAdminUploadUrl);
+  const setSamples = useServerFn(setAdminSlotSamples);
   const [busy, setBusy] = useState(false);
+  const [name, setName] = useState(slot.label ?? "");
   const [overrideOn, setOverrideOn] = useState(slot.humanization !== null);
   const [hum, setHum] = useState<Humanization>(slot.humanization ?? DEFAULT_HUMANIZATION);
 
+  useEffect(() => {
+    setName(slot.label ?? "");
+    setOverrideOn(slot.humanization !== null);
+    setHum(slot.humanization ?? DEFAULT_HUMANIZATION);
+  }, [slot.id, slot.label, slot.humanization]);
+
   const invalidate = () => qc.invalidateQueries({ queryKey: ["admin", "packs"] });
 
-  const uploadSample = async (file: File) => {
+  const currentIds = useMemo(() => slot.samples.map((s) => s.id), [slot.samples]);
+  const remaining = MAX_SAMPLES_PER_SLOT - slot.samples.length;
+
+  const uploadFiles = async (files: File[]) => {
+    const wavs = files.filter((f) => /\.wav$/i.test(f.name) || f.type === "audio/wav");
+    if (wavs.length === 0) {
+      toast.error("Only .wav files are accepted");
+      return;
+    }
+    if (wavs.length > remaining) {
+      toast.error(`Max ${MAX_SAMPLES_PER_SLOT} samples per slot (${remaining} left)`);
+      return;
+    }
     setBusy(true);
     try {
-      const ext = file.name.split(".").pop() ?? "wav";
-      const path = `admin-packs/${packId}/${slot.slot_index}-${Date.now()}.${ext}`;
-      const signed = await createUploadUrl({
-        data: { passcode: getPass(), bucket: "samples", path, upsert: true },
-      });
-      const { error } = await supabase.storage
-        .from("samples")
-        .uploadToSignedUrl(signed.path, signed.token, file, {
-          contentType: file.type || "audio/wav",
+      const newIds: string[] = [];
+      for (const file of wavs) {
+        const path = `admin-packs/${packId}/${slot.slot_index}-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 6)}.wav`;
+        const signed = await createUploadUrl({
+          data: { passcode: getPass(), bucket: "samples", path, upsert: true },
         });
-      if (error) throw error;
-      const { id } = await register({
-        data: {
-          passcode: getPass(),
-          name: file.name,
-          storage_path: signed.path,
-          mime_type: file.type || "audio/wav",
-        },
+        const { error } = await supabase.storage
+          .from("samples")
+          .uploadToSignedUrl(signed.path, signed.token, file, {
+            contentType: file.type || "audio/wav",
+          });
+        if (error) throw error;
+        const { id } = await register({
+          data: {
+            passcode: getPass(),
+            name: file.name,
+            storage_path: signed.path,
+            mime_type: file.type || "audio/wav",
+          },
+        });
+        newIds.push(id);
+      }
+      await setSamples({
+        data: { passcode: getPass(), slot_id: slot.id, sample_ids: [...currentIds, ...newIds] },
       });
-      await update({ data: { passcode: getPass(), id: slot.id, sample_id: id, label: file.name } });
-      toast.success(`Slot ${slot.slot_index + 1} uploaded`);
+      toast.success(`Added ${newIds.length} variation${newIds.length === 1 ? "" : "s"}`);
       invalidate();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setBusy(false);
     }
+  };
+
+  const removeSampleAt = async (idx: number) => {
+    const next = currentIds.slice();
+    next.splice(idx, 1);
+    await setSamples({ data: { passcode: getPass(), slot_id: slot.id, sample_ids: next } });
+    invalidate();
+  };
+
+  const moveSample = async (idx: number, dir: -1 | 1) => {
+    const j = idx + dir;
+    if (j < 0 || j >= currentIds.length) return;
+    const next = currentIds.slice();
+    [next[idx], next[j]] = [next[j], next[idx]];
+    await setSamples({ data: { passcode: getPass(), slot_id: slot.id, sample_ids: next } });
+    invalidate();
+  };
+
+  const saveName = async () => {
+    if ((slot.label ?? "") === name) return;
+    await update({ data: { passcode: getPass(), id: slot.id, label: name || null } });
+    invalidate();
   };
 
   const saveOverride = async () => {
@@ -530,53 +589,126 @@ function SlotEditor({ packId, slot }: { packId: string; slot: AdminSlot }) {
     invalidate();
   };
 
-  const clearSample = async () => {
-    await update({ data: { passcode: getPass(), id: slot.id, sample_id: null, label: null } });
-    invalidate();
-  };
+  const [dragOver, setDragOver] = useState(false);
 
   return (
-    <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+    <div className="rounded-lg border border-white/10 bg-black/20 p-4">
       <div className="flex items-center gap-3">
         <span className="w-8 text-center text-xs font-mono text-foreground/60">
           #{slot.slot_index + 1}
         </span>
-        <div className="flex-1 truncate text-sm">
-          {slot.sample?.name ?? slot.label ?? (
-            <span className="text-foreground/40">empty</span>
-          )}
-        </div>
-        <label className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs hover:bg-white/5">
-          <Upload className="h-3 w-3" />
-          <span>{busy ? "…" : "Upload .wav"}</span>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={saveName}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+          placeholder="Slot name (e.g. Pluck A, Kick)"
+          className="flex-1 text-sm"
+        />
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={!canRemove}
+          onClick={onRemove}
+          className="text-red-400"
+          title={canRemove ? "Remove slot" : "At least one slot required"}
+        >
+          <Trash2 className="h-3 w-3" />
+        </Button>
+      </div>
+
+      {/* Multi-file dropzone */}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const files = Array.from(e.dataTransfer.files);
+          if (files.length) uploadFiles(files);
+        }}
+        className={`mt-3 rounded-md border border-dashed p-3 text-center text-xs transition ${
+          dragOver ? "border-emerald-400/60 bg-emerald-500/5" : "border-white/15 bg-black/20"
+        }`}
+      >
+        <label className="inline-flex cursor-pointer flex-col items-center gap-1">
+          <Upload className="h-4 w-4 text-foreground/60" />
+          <span className="text-foreground/70">
+            {busy ? "Uploading…" : `Drop .wav files or click to browse`}
+          </span>
+          <span className="text-[10px] text-foreground/45">
+            Drop 3–4 variations of the same sound for organic round-robin playback. More variations =
+            less machine-gun repetition. ({slot.samples.length}/{MAX_SAMPLES_PER_SLOT})
+          </span>
           <input
             type="file"
-            accept="audio/wav,audio/*"
+            accept="audio/wav"
+            multiple
             className="hidden"
-            disabled={busy}
+            disabled={busy || remaining <= 0}
             onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) uploadSample(f);
+              const files = Array.from(e.target.files ?? []);
+              if (files.length) uploadFiles(files);
+              e.target.value = "";
             }}
           />
         </label>
-        {slot.sample && (
-          <>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() =>
-                slot.sample && auditionSample(slot.sample.storage_path)
-              }
-            >
-              <Play className="h-3 w-3" />
-            </Button>
-            <Button size="sm" variant="ghost" onClick={clearSample} className="text-red-400">
-              <Trash2 className="h-3 w-3" />
-            </Button>
-          </>
-        )}
       </div>
+
+      {/* Current variation list */}
+      {slot.samples.length > 0 && (
+        <ul className="mt-3 space-y-1">
+          {slot.samples.map((s, idx) => (
+            <li
+              key={s.id}
+              className="flex items-center gap-2 rounded border border-white/5 bg-white/[0.02] px-2 py-1 text-xs"
+            >
+              <span className="w-5 text-foreground/45 font-mono">{idx + 1}</span>
+              <span className="flex-1 truncate">{s.name}</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => auditionSample(s.storage_path)}
+                title="Preview"
+              >
+                <Play className="h-3 w-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={idx === 0}
+                onClick={() => moveSample(idx, -1)}
+                title="Move up"
+              >
+                <ArrowUp className="h-3 w-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={idx === slot.samples.length - 1}
+                onClick={() => moveSample(idx, 1)}
+                title="Move down"
+              >
+                <ArrowDown className="h-3 w-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => removeSampleAt(idx)}
+                className="text-red-400"
+                title="Remove"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="mt-3 flex items-center gap-2">
         <input
@@ -603,4 +735,5 @@ function SlotEditor({ packId, slot }: { packId: string; slot: AdminSlot }) {
       )}
     </div>
   );
+}
 }

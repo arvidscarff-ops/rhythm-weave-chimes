@@ -9,5 +9,5 @@ export const verifyAdminPasscode = createServerFn({ method: "POST" })
     if (typeof data.passcode !== "string" || data.passcode.length === 0) {
       return { ok: false as const };
     }
-    return { ok: matches(data.passcode, expected) as const };
+    return { ok: matches(data.passcode, expected) };
   });

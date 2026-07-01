@@ -48,13 +48,17 @@ function AdminPacksPage() {
 
 function AdminBootstrap() {
   const { ensure, get, set } = usePasscode();
+  const router = useRouter();
   const [status, setStatus] = useState<"pending" | "ready" | "cancelled">("pending");
 
   const tryUnlock = () => {
     setStatus("pending");
     ensure()
       .then(() => setStatus("ready"))
-      .catch(() => setStatus("cancelled"));
+      .catch(() => {
+        setStatus("cancelled");
+        void router.navigate({ to: "/" });
+      });
   };
 
   useEffect(() => {
@@ -70,8 +74,11 @@ function AdminBootstrap() {
     }
     ensure()
       .then(() => setStatus("ready"))
-      .catch(() => setStatus("cancelled"));
-  }, [ensure, get, set]);
+      .catch(() => {
+        setStatus("cancelled");
+        void router.navigate({ to: "/" });
+      });
+  }, [ensure, get, router, set]);
 
   if (status === "cancelled") {
     return (

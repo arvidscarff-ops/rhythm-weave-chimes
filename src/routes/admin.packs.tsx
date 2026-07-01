@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ChevronLeft, Plus, Trash2, Upload, Play, Lock, Save } from "lucide-react";
+import { ChevronLeft, Plus, Trash2, Upload, Play, Lock, Save, X, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +20,11 @@ import {
   registerAdminSample,
   signedCoverUrl,
   createAdminUploadUrl,
+  addAdminSlot,
+  removeAdminSlot,
+  setAdminSlotSamples,
+  MAX_SLOTS_PER_PACK,
+  MAX_SAMPLES_PER_SLOT,
   type AdminPack,
   type AdminSlot,
 } from "@/lib/admin/packs.functions";

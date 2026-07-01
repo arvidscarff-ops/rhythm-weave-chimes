@@ -12,7 +12,8 @@
  * notified on change (mirrors the neural settings module).
  */
 
-import { degreeToFreq, type ScaleId, type RootName, SCALES } from "./scales";
+import { degreeToFreq, type RootName } from "./scales";
+import { activeStep, getScale, pickToneForStep } from "./progression";
 import { euclid } from "./euclidean";
 
 export type NoteMode = "sequential" | "random" | "arpeggio" | "brownian";
@@ -30,7 +31,7 @@ export type SlotSettings = {
 export type ComposerSettings = {
   enabled: boolean;
   root: RootName;
-  scale: ScaleId;
+  scale: string;              // custom_scales.id (or "" for the first published scale)
   slots: SlotSettings[]; // length 6
 };
 
@@ -48,7 +49,7 @@ const DEFAULT_SLOTS: SlotSettings[] = [
 export const DEFAULT_COMPOSER: ComposerSettings = {
   enabled: true,
   root: "A",
-  scale: "pentaMin",
+  scale: "",
   slots: DEFAULT_SLOTS,
 };
 
@@ -83,7 +84,7 @@ export function loadComposerSettings(): ComposerSettings {
     const merged: ComposerSettings = {
       enabled: parsed.enabled ?? DEFAULT_COMPOSER.enabled,
       root: (parsed.root as RootName) ?? DEFAULT_COMPOSER.root,
-      scale: (parsed.scale as ScaleId) ?? DEFAULT_COMPOSER.scale,
+      scale: typeof parsed.scale === "string" ? parsed.scale : DEFAULT_COMPOSER.scale,
       slots: Array.isArray(parsed.slots) && parsed.slots.length === 6
         ? (parsed.slots as SlotSettings[])
         : DEFAULT_SLOTS,
@@ -133,45 +134,55 @@ function ensureSource(sourceId: string, slot: SlotSettings): SourceState {
 }
 
 function pickDegree(slot: SlotSettings, st: SourceState): { degree: number; octave: number } {
-  const scaleLen = SCALES[current.scale].intervals.length;
+  // Derive the currently active chord/accent tones from the global clock.
+  const scale = getScale(current.scale);
+  const step = activeStep(scale);
+  const chord = step.chord_tones.length > 0 ? step.chord_tones : [0];
   const octSpan = Math.max(0, slot.octaveHigh - slot.octaveLow);
-  const range = scaleLen * (octSpan + 1); // total in-range degrees
 
-  let deg: number;
+  // The note-mode selects HOW we walk the currently-active chord tone set;
+  // accent tones sneak in via the probability gate inside pickToneForStep.
+  const chordLen = chord.length;
+  let tone: number;
+  let octOff: number;
   switch (slot.noteMode) {
     case "random":
-      deg = Math.floor(Math.random() * range);
-      st.cursor = deg;
+      tone = pickToneForStep(step);
+      octOff = Math.floor(Math.random() * (octSpan + 1));
+      st.cursor = (st.cursor + 1) % chordLen;
       break;
     case "arpeggio": {
-      // 1-3-5 of the scale, climbing one octave at a time
-      const triad = [0, 2, 4];
-      const t = triad[st.arpIdx % 3];
-      const oct = Math.floor(st.arpIdx / 3) % (octSpan + 1);
-      st.arpIdx = (st.arpIdx + 1) % (3 * (octSpan + 1));
-      deg = t + oct * scaleLen;
-      st.cursor = deg;
+      // Walk chord tones bottom-up, climbing one octave per pass.
+      const t = chord[st.arpIdx % chordLen];
+      octOff = Math.floor(st.arpIdx / chordLen) % (octSpan + 1);
+      st.arpIdx = (st.arpIdx + 1) % (chordLen * (octSpan + 1));
+      // Accent gate can still bump us to an accent tone at the same octave.
+      tone = Math.random() < 0.15 && step.accent_tones.length > 0
+        ? step.accent_tones[Math.floor(Math.random() * step.accent_tones.length)]
+        : t;
       break;
     }
     case "brownian": {
-      const stepDelta = (Math.floor(Math.random() * 5) - 2); // -2..+2
-      let next = st.cursor + stepDelta;
-      if (next < 0) next = 0;
-      if (next >= range) next = range - 1;
-      st.cursor = next;
-      deg = next;
+      const stepDelta = Math.floor(Math.random() * 3) - 1; // -1..+1
+      st.cursor = Math.max(0, Math.min(chordLen - 1, st.cursor + stepDelta));
+      tone = pickToneForStep(step);
+      octOff = Math.floor(Math.random() * (octSpan + 1));
       break;
     }
     case "sequential":
     default:
-      deg = st.cursor % range;
-      st.cursor = (st.cursor + 1) % range;
+      tone = chord[st.cursor % chordLen];
+      octOff = Math.floor(st.cursor / chordLen) % (octSpan + 1);
+      st.cursor = (st.cursor + 1) % (chordLen * (octSpan + 1));
+      // Accent gate can substitute an accent tone.
+      if (Math.random() < 0.15 && step.accent_tones.length > 0) {
+        tone = step.accent_tones[Math.floor(Math.random() * step.accent_tones.length)];
+      }
       break;
   }
 
-  const octave = slot.octaveLow + Math.floor(deg / scaleLen);
-  const degInScale = deg % scaleLen;
-  return { degree: degInScale, octave };
+  const octave = slot.octaveLow + octOff;
+  return { degree: tone, octave };
 }
 
 /**
@@ -192,7 +203,8 @@ export function composerAdvance(
   if (!hit) return { play: false, freq: fallbackFreq };
 
   const { degree, octave } = pickDegree(s, st);
-  const freq = degreeToFreq(current.root, current.scale, degree, octave);
+  const scale = getScale(current.scale);
+  const freq = degreeToFreq(current.root, scale.intervals, degree, octave);
   return { play: true, freq };
 }
 

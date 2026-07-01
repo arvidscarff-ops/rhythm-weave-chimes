@@ -886,6 +886,8 @@ function StrumBar({
           {sorted.map((t, i) => {
             const c = noteColor(t.pitch).cssVar;
             const lit = flash[i] !== undefined;
+            const reg = pitchRegister(t.pitch);
+            const dotSize = reg === "bass" ? 12 : reg === "high" ? 5 : 8;
             return (
               <div
                 key={`${t.slot}-${i}`}
@@ -897,8 +899,8 @@ function StrumBar({
                     lit ? "scale-[1.6]" : "scale-100"
                   }`}
                   style={{
-                    width: 8,
-                    height: 8,
+                    width: dotSize,
+                    height: dotSize,
                     background: c,
                     boxShadow: lit
                       ? `0 0 14px color-mix(in oklab, ${c} 80%, transparent)`

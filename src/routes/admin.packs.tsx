@@ -48,7 +48,15 @@ function AdminPacksPage() {
 
 function AdminBootstrap() {
   const { ensure, get, set } = usePasscode();
-  const [ready, setReady] = useState(false);
+  const [status, setStatus] = useState<"pending" | "ready" | "cancelled">("pending");
+
+  const tryUnlock = () => {
+    setStatus("pending");
+    ensure()
+      .then(() => setStatus("ready"))
+      .catch(() => setStatus("cancelled"));
+  };
+
   useEffect(() => {
     // Accept passcode handed off from /admin/unlock via in-memory window stash.
     const w = window as unknown as { __phaseAdminPass?: string };
@@ -57,15 +65,37 @@ function AdminBootstrap() {
       w.__phaseAdminPass = undefined;
     }
     if (get()) {
-      setReady(true);
+      setStatus("ready");
       return;
     }
     ensure()
-      .then(() => setReady(true))
-      .catch(() => setReady(false));
+      .then(() => setStatus("ready"))
+      .catch(() => setStatus("cancelled"));
   }, [ensure, get, set]);
 
-  if (!ready) return null;
+  if (status === "cancelled") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
+        <div className="max-w-sm text-center space-y-4">
+          <h1 className="text-lg font-medium tracking-wide">Passcode required</h1>
+          <p className="text-sm text-foreground/60">
+            Enter the admin passcode to manage sound packs, or head back home.
+          </p>
+          <div className="flex justify-center gap-2 pt-2">
+            <Button size="sm" onClick={tryUnlock}>
+              <Lock className="h-3 w-3 mr-2" /> Enter passcode
+            </Button>
+            <Button asChild size="sm" variant="ghost">
+              <Link to="/">
+                <ChevronLeft className="h-3 w-3 mr-2" /> Back to home
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (status !== "ready") return null;
   return <AdminUI />;
 }
 

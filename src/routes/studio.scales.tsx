@@ -434,7 +434,18 @@ function HandpanField({
             y = cy + Math.sin(angle) * ringRadius;
           }
           const isDing = i === 0;
-          const slotSize = isDing ? 108 : 88;
+          const reg: Register = pitchRegister(p);
+          const ringSize = reg === "bass" ? 104 : reg === "high" ? 72 : 88;
+          const dingSize = reg === "bass" ? 124 : reg === "high" ? 92 : 108;
+          const slotSize = isDing ? dingSize : ringSize;
+          const regShadow =
+            reg === "bass"
+              ? "0 12px 28px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.14)"
+              : reg === "high"
+                ? "0 3px 10px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.10)"
+                : "inset 0 1px 0 rgba(255,255,255,0.10), 0 6px 18px rgba(0,0,0,0.35)";
+          const regLift = reg === "high" ? -2 : 0;
+          const labelSize = reg === "high" ? "text-base" : "text-lg";
           const isRinging = ringing[i] !== undefined;
           const color = noteColor(p);
           const c = color.cssVar;
@@ -459,21 +470,21 @@ function HandpanField({
             ? `0 0 22px color-mix(in oklab, ${chordC} 45%, transparent), inset 0 1px 0 rgba(255,255,255,0.15)`
             : isAccent
               ? `0 0 0 2px ${accentC}, 0 0 24px color-mix(in oklab, ${accentC} 55%, transparent)`
-              : `inset 0 1px 0 rgba(255,255,255,0.10), 0 6px 18px rgba(0,0,0,0.35)`;
+              : regShadow;
           return (
             <div
               key={i}
               className="absolute flex flex-col items-center gap-1"
               style={{
                 left: x - slotSize / 2,
-                top: y - slotSize / 2 - (isDing ? 0 : 8),
+                top: y - slotSize / 2 - (isDing ? 0 : 8) + regLift,
                 width: slotSize,
               }}
             >
               <button
                 type="button"
                 onClick={() => handleSlot(i, p)}
-                title={`${p} · ${color.name}${activeStep ? ` · ${tState}` : ""}`}
+                title={`${p} · ${color.name} · ${reg}${activeStep ? ` · ${tState}` : ""}`}
                 className={`relative flex items-center justify-center rounded-full border transition-all duration-150 focus:outline-none focus-visible:ring-2 ${
                   isRinging ? "scale-[1.06] brightness-125" : "hover:brightness-110"
                 } ${dim ? "opacity-45" : ""}`}
@@ -488,7 +499,7 @@ function HandpanField({
                     : restingShadow,
                 }}
               >
-                <span className="pointer-events-none select-none font-mono text-lg tracking-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]">
+                <span className={`pointer-events-none select-none font-mono ${labelSize} tracking-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]`}>
                   {p}
                 </span>
                 {isRinging && (

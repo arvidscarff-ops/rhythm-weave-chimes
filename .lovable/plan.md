@@ -1,77 +1,59 @@
-## Sound Pack CMS + Humanization Engine
+## How to access the admin CMS today
 
-Extend the existing `packs`/`pack_slots`/`samples` schema with publishing, cover art, and humanization; add an admin-only CMS at `/admin/packs` gated by a shared passcode; wire humanization into the runtime dispatcher; and expose published packs to everyone (signed in or not) on the wheel.
+- URL: `/admin/unlock` → enter passcode → redirects to `/admin/packs`.
+- The passcode is the value stored in the `ADMIN_PASSCODE` secret (Lovable Cloud → Secrets). It is not set yet — you'll be prompted to add it the first time you try to unlock. You choose the value; it lives server-side only and is checked with a timing-safe compare.
+- No admin role is needed. Anyone who knows the passcode gets in for 7 days (encrypted session cookie).
 
-### Phase 1 — Schema & storage
+## What I'll build
 
-Migration (extends existing tables, no parallel `sound_packs`):
+### 1. Glassmorphic passcode keypad (new component)
+`src/components/admin/PasscodeKeypad.tsx`
+- Frosted glass panel: `backdrop-blur-xl`, layered translucent surfaces, soft inner highlight, ambient outer glow that pulses slowly (breathing).
+- 6 empty dots at top that fill in as digits are entered (spring-in animation, subtle glow on fill).
+- 3×4 numeric grid (1–9, ⌫, 0, ↵). Buttons have:
+  - Glass surface with specular top edge
+  - Press: scale-down + brief inner light bloom (haptic feel)
+  - Idle: very slow hue-drifting radial glow behind the panel
+  - Hover: soft lift + brightening ring
+- **Direct keyboard input works without focusing anything** — attaches a `window` keydown listener while mounted (0–9, Backspace, Enter, Escape).
+- On 6 digits (or Enter) → auto-submits to `unlockAdmin`.
+- Shake + red glow flash on wrong passcode, clears digits.
+- Success: green glow sweep, then navigate.
 
-- `packs`: add `is_published boolean default false`, `cover_image_url text`, `humanization jsonb` (pack-level defaults).
-- `pack_slots`: add `humanization jsonb` (nullable override per slot).
-- Storage: create public `pack-covers` bucket (cover art needs anonymous read); keep `samples` bucket private (signed URLs already work for anon via server fn).
-- RLS additions:
-  - `packs`: `SELECT` policy `USING (is_published = true)` granted to `anon` + `authenticated` (keeps existing owner/admin write policies).
-  - `pack_slots` + `samples`: allow read when parent pack is published (join check) to `anon` + `authenticated`.
-  - `GRANT SELECT` on all three to `anon`.
+### 2. Replace the current `/admin/unlock` page
+`src/routes/admin.unlock.tsx` becomes a full-screen dark scene:
+- Animated hazy gradient background (slow drifting blobs, low opacity).
+- Centered `PasscodeKeypad`.
+- Small caption: "Enter passcode to continue".
+- Removes the current Input/Label/Button form.
 
-Humanization JSON shape (shared type, both pack & slot):
-```ts
-{ velocityPct: number, cutoffHz: [min,max]|null, detuneCents: number, panPct: number }
-```
-Slot value, when present, overrides pack value field-by-field.
+### 3. Passcode required for every admin action (no persistent session)
+Change the gate model from "unlock once for 7 days" to "prompt every time":
+- Remove the 7-day session cookie usage. `isAdminUnlocked` / `lockAdmin` become unused.
+- New server fn `verifyAdminPasscode({ passcode })` — timing-safe compare only, returns `{ ok }`. No session write.
+- All admin server fns (`listAdminPacks`, `createAdminPack`, `updateAdminPack`, `deleteAdminPack`, `updateAdminSlot`, `registerAdminSample`, `signedCoverUrl`) get a new required `passcode` input and verify it inside the handler before doing work. Wrong/missing passcode → 401.
+- New client helper `useAdminPasscode()` — opens the glass keypad as a modal, resolves with the entered passcode, caches it in memory only (React state, not localStorage) for the current tab session so you don't retype between clicks. Cleared on tab close or explicit "Lock" button.
+- `/admin/packs` route: on mount, if no in-memory passcode, opens the keypad modal. Every mutation/query passes the cached passcode; if the server rejects it, cache is cleared and the modal reopens.
+- "Admin roles" concept: not currently in the codebase — nothing to remove. Access is purely passcode-based, as you asked.
 
-### Phase 2 — Admin gate (shared passcode)
+### 4. Keep it feeling "alive"
+- Panel: continuous 8s ease-in-out glow breathing (opacity + blur radius oscillation on a pseudo-element).
+- Background: two slow-moving radial gradients (30–45s loops) in indigo/violet/teal at low opacity.
+- Digits dots: on fill, tiny particle-free bloom (box-shadow spring).
+- Button press: uses a short GPU transform (100ms) — no layout thrash.
+- All motion via CSS + a light `framer-motion` usage already available; no new deps.
 
-- Server-only env: `ADMIN_PASSCODE`, `ADMIN_SESSION_SECRET` (added via `add_secret`).
-- `src/lib/admin/gate.functions.ts`: `unlockAdmin`, `lockAdmin`, `requireAdmin()` helper using `useSession` + `timingSafeEqual` (per shared-password-gate pattern).
-- Route `/admin/unlock` (public): passcode form.
-- Route `/admin/packs` (public path, gated in loader via `requireAdmin` → redirect to `/admin/unlock`).
-- Every admin server fn calls `requireAdmin()` first, then uses `supabaseAdmin` for writes (bypasses RLS cleanly for CMS ops).
+## Technical notes (for the record)
 
-### Phase 3 — Admin CMS UI (`/admin/packs`)
+- Keyboard listener uses `useEffect` with `window.addEventListener('keydown', …)`, ignores when `event.metaKey/ctrlKey` set; prevents default for digit/Backspace/Enter so it can't scroll or submit background forms.
+- Passcode cached only in a React context provider mounted at `/admin` layout scope — never written to storage. Refresh = re-prompt (matches your "every time" requirement at the strongest interpretation; if you'd rather it persist for the tab lifetime only, that's already what the in-memory cache gives you between clicks).
+- Server functions: `passcode` added to each `inputValidator`; verification is a shared helper `assertPasscode(pass)` living in `gate.server.ts` (server-only).
+- Types file (`packs.functions.ts`) exported `AdminPack`/`AdminSlot` unchanged.
 
-Three-pane layout matching the existing Studio look:
+## Question before I build
 
-- **Left:** pack list (name, published pill, cover thumb). "New Pack" button.
-- **Middle — Pack editor:**
-  - Name, description, cover upload (drag/drop → `pack-covers` bucket → sets `cover_image_url`).
-  - Publish toggle (writes `is_published`).
-  - Pack-level Humanizer card (4 sliders): Velocity ±%, Cutoff Hz range (dual slider), Detune ±cents, Pan ±%.
-- **Right — Samples:**
-  - Drag/drop `.wav` zone → uploads to `samples` bucket, inserts `samples` row + `pack_slots` row (auto-assigns next free 0–5 slot).
-  - Per-slot row: label, slot index, gain/pitch/pan (existing), **"Override humanization" toggle** revealing the same 4 sliders (persist to `pack_slots.humanization`; null = inherit).
-  - Audition button (reuses `auditionSample`, applies effective humanization).
+**How strict should "required every time" be?**
+- (A) Prompt once per tab (cached in memory until refresh/close). Feels alive but not annoying.
+- (B) Prompt on every single admin action (every save, every upload). Maximum security, higher friction.
 
-Server fns (`src/lib/admin/packs.functions.ts`): `listAllPacks`, `upsertPack`, `deletePack`, `uploadCover`, `addSample`, `updateSlot`, `deleteSlot`, `setPublished`. All gated by `requireAdmin`.
-
-### Phase 4 — Humanization engine
-
-Refactor `src/lib/sound/runtimePacks.ts` `playSampleSlot`:
-
-- Resolve effective humanization: `{ ...packHumanization, ...slotHumanization }` (field-wise).
-- Insert `BiquadFilterNode` (lowpass) into the chain when `cutoffHz` set; randomize `frequency.value` in range per strike.
-- `GainNode`: multiply by `1 + (rand()*2-1) * velocityPct`.
-- `AudioBufferSourceNode.detune.value`: base + `(rand()*2-1) * detuneCents`.
-- `StereoPannerNode.pan.value`: base + `(rand()*2-1) * panPct`, clamped ±1.
-- All randomization computed **at trigger time**, not at load time.
-- Extend `CustomSlot` + `RuntimePack.custom` types to carry `humanization` fields loaded from DB.
-
-### Phase 5 — Public integration
-
-- `fetchPublishedPacks()` public server fn (no auth, uses server publishable client) → returns packs where `is_published=true` with slots + signed sample URLs + cover URL.
-- `runtimePacks.ts`: replace `fetchCustomPacks` (auth-only) with `fetchPublishedPacks` for the public wheel; keep the auth'd variant for Studio's "my packs".
-- Warm cache: `warmCustomPack` already preloads sample buffers on pack selection — extend to also preload on hover in the dock for zero-latency first strike.
-- Dock (`PhaseDock.tsx`): pack selector already lists custom packs; swap data source to published + show `cover_image_url` thumbs.
-
-### Technical notes
-
-- Cover bucket is public (workspace policy permitting); if blocked, fall back to signed URLs refreshed server-side.
-- Humanization sliders use existing `Slider` component; cutoff uses two thumbs (Radix supports `value=[min,max]`).
-- Admin session cookie: httpOnly, 7-day maxAge, separate from Supabase auth cookies.
-- No breaking changes to existing Studio Packs tab — it continues to manage user-owned (non-published) packs. Admin CMS is the only surface that toggles `is_published`.
-
-### Out of scope (this pass)
-
-- Pack versioning / drafts beyond the boolean toggle.
-- Per-user favorites, ratings, or analytics on published packs.
-- Bulk sample import / ZIP upload.
+I'll default to (A) unless you say (B).

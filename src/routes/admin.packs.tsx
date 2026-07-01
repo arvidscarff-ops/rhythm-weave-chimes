@@ -10,10 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
 import { auditionSample } from "@/lib/dev/samplePlayer";
-import {
-  isAdminUnlocked,
-  lockAdmin,
-} from "@/lib/admin/gate.functions";
+import { PasscodeProvider, usePasscode } from "@/lib/admin/passcode-context";
 import {
   listAdminPacks,
   createAdminPack,
@@ -36,15 +33,31 @@ export const Route = createFileRoute("/admin/packs")({
 });
 
 function AdminPacksPage() {
-  const router = useRouter();
-  const check = useServerFn(isAdminUnlocked);
+  return (
+    <PasscodeProvider>
+      <AdminBootstrap />
+    </PasscodeProvider>
+  );
+}
+
+function AdminBootstrap() {
+  const { ensure, get, set } = usePasscode();
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    check().then((r) => {
-      if (!r.unlocked) router.navigate({ to: "/admin/unlock" });
-      else setReady(true);
-    });
-  }, [check, router]);
+    // Accept passcode handed off from /admin/unlock via in-memory window stash.
+    const w = window as unknown as { __phaseAdminPass?: string };
+    if (w.__phaseAdminPass) {
+      set(w.__phaseAdminPass);
+      w.__phaseAdminPass = undefined;
+    }
+    if (get()) {
+      setReady(true);
+      return;
+    }
+    ensure()
+      .then(() => setReady(true))
+      .catch(() => setReady(false));
+  }, [ensure, get, set]);
 
   if (!ready) return null;
   return <AdminUI />;
@@ -53,12 +66,15 @@ function AdminPacksPage() {
 function AdminUI() {
   const qc = useQueryClient();
   const router = useRouter();
+  const { get: getPass, clear: clearPass } = usePasscode();
   const list = useServerFn(listAdminPacks);
   const create = useServerFn(createAdminPack);
   const del = useServerFn(deleteAdminPack);
-  const lock = useServerFn(lockAdmin);
 
-  const packsQ = useQuery({ queryKey: ["admin", "packs"], queryFn: () => list() });
+  const packsQ = useQuery({
+    queryKey: ["admin", "packs"],
+    queryFn: () => list({ data: { passcode: getPass() } }),
+  });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const packs = packsQ.data ?? [];
   const selected = packs.find((p) => p.id === selectedId) ?? packs[0] ?? null;
@@ -67,7 +83,7 @@ function AdminUI() {
   }, [packs, selectedId]);
 
   const createMut = useMutation({
-    mutationFn: (name: string) => create({ data: { name } }),
+    mutationFn: (name: string) => create({ data: { passcode: getPass(), name } }),
     onSuccess: async ({ id }) => {
       await qc.invalidateQueries({ queryKey: ["admin", "packs"] });
       setSelectedId(id);
@@ -77,7 +93,7 @@ function AdminUI() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: string) => del({ data: { id } }),
+    mutationFn: (id: string) => del({ data: { passcode: getPass(), id } }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "packs"] });
       setSelectedId(null);
@@ -97,8 +113,8 @@ function AdminUI() {
         <Button
           size="sm"
           variant="ghost"
-          onClick={async () => {
-            await lock();
+          onClick={() => {
+            clearPass();
             router.navigate({ to: "/admin/unlock" });
           }}
         >
@@ -170,6 +186,7 @@ function AdminUI() {
 
 function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void }) {
   const qc = useQueryClient();
+  const { get: getPass } = usePasscode();
   const update = useServerFn(updateAdminPack);
   const signCover = useServerFn(signedCoverUrl);
   const [name, setName] = useState(pack.name);
@@ -185,14 +202,15 @@ function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void 
     setHumanization(pack.humanization ?? DEFAULT_HUMANIZATION);
     setCoverPreview(null);
     if (pack.cover_image_url) {
-      signCover({ data: { storage_path: pack.cover_image_url } })
+      signCover({ data: { passcode: getPass(), storage_path: pack.cover_image_url } })
         .then((r) => setCoverPreview(r.url))
         .catch(() => {});
     }
-  }, [pack.id, pack.cover_image_url, pack.name, pack.description, pack.humanization, signCover]);
+  }, [pack.id, pack.cover_image_url, pack.name, pack.description, pack.humanization, signCover, getPass]);
 
   const saveMut = useMutation({
-    mutationFn: (patch: Parameters<typeof update>[0]["data"]) => update({ data: patch }),
+    mutationFn: (patch: Omit<Parameters<typeof update>[0]["data"], "passcode">) =>
+      update({ data: { ...patch, passcode: getPass() } }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "packs"] });
       toast.success("Saved");
@@ -200,7 +218,7 @@ function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void 
   });
 
   const publishMut = useMutation({
-    mutationFn: (v: boolean) => update({ data: { id: pack.id, is_published: v } }),
+    mutationFn: (v: boolean) => update({ data: { passcode: getPass(), id: pack.id, is_published: v } }),
     onSuccess: (_r, v) => {
       qc.invalidateQueries({ queryKey: ["admin", "packs"] });
       toast.success(v ? "Published" : "Unpublished");
@@ -395,6 +413,7 @@ function SliderRow({
 
 function SlotEditor({ packId, slot }: { packId: string; slot: AdminSlot }) {
   const qc = useQueryClient();
+  const { get: getPass } = usePasscode();
   const update = useServerFn(updateAdminSlot);
   const register = useServerFn(registerAdminSample);
   const [busy, setBusy] = useState(false);
@@ -415,12 +434,13 @@ function SlotEditor({ packId, slot }: { packId: string; slot: AdminSlot }) {
       if (error) throw error;
       const { id } = await register({
         data: {
+          passcode: getPass(),
           name: file.name,
           storage_path: path,
           mime_type: file.type || "audio/wav",
         },
       });
-      await update({ data: { id: slot.id, sample_id: id, label: file.name } });
+      await update({ data: { passcode: getPass(), id: slot.id, sample_id: id, label: file.name } });
       toast.success(`Slot ${slot.slot_index + 1} uploaded`);
       invalidate();
     } catch (e) {
@@ -432,14 +452,14 @@ function SlotEditor({ packId, slot }: { packId: string; slot: AdminSlot }) {
 
   const saveOverride = async () => {
     await update({
-      data: { id: slot.id, humanization: overrideOn ? hum : null },
+      data: { passcode: getPass(), id: slot.id, humanization: overrideOn ? hum : null },
     });
     toast.success("Slot humanization saved");
     invalidate();
   };
 
   const clearSample = async () => {
-    await update({ data: { id: slot.id, sample_id: null, label: null } });
+    await update({ data: { passcode: getPass(), id: slot.id, sample_id: null, label: null } });
     invalidate();
   };
 

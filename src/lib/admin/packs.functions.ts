@@ -45,9 +45,15 @@ async function admin() {
   return supabaseAdmin;
 }
 
-export const listAdminPacks = createServerFn({ method: "GET" }).handler(
-  async (): Promise<AdminPack[]> => {
-    await (await import("./gate.server")).assertAdminSession();
+async function gate(passcode: string) {
+  const { assertPasscode } = await import("./gate.server");
+  assertPasscode(passcode);
+}
+
+export const listAdminPacks = createServerFn({ method: "POST" })
+  .inputValidator((data: { passcode: string }) => data)
+  .handler(async ({ data: input }): Promise<AdminPack[]> => {
+    await gate(input.passcode);
     const supa = await admin();
     const { data, error } = await supa
       .from("packs")
@@ -81,13 +87,12 @@ export const listAdminPacks = createServerFn({ method: "GET" }).handler(
         }))
         .sort((a, b) => a.slot_index - b.slot_index),
     }));
-  },
-);
+  });
 
 export const createAdminPack = createServerFn({ method: "POST" })
-  .inputValidator((data: { name: string }) => data)
+  .inputValidator((data: { passcode: string; name: string }) => data)
   .handler(async ({ data }) => {
-    await (await import("./gate.server")).assertAdminSession();
+    await gate(data.passcode);
     const supa = await admin();
     const slug = `${slugify(data.name)}-${Date.now().toString(36).slice(-4)}`;
     const { data: pack, error } = await supa
@@ -114,6 +119,7 @@ export const createAdminPack = createServerFn({ method: "POST" })
 export const updateAdminPack = createServerFn({ method: "POST" })
   .inputValidator(
     (data: {
+      passcode: string;
       id: string;
       name?: string;
       description?: string | null;
@@ -123,7 +129,7 @@ export const updateAdminPack = createServerFn({ method: "POST" })
     }) => data,
   )
   .handler(async ({ data }) => {
-    await (await import("./gate.server")).assertAdminSession();
+    await gate(data.passcode);
     const supa = await admin();
     const patch: TablesUpdate<"packs"> = {};
     if (data.name !== undefined) patch.name = data.name;
@@ -137,9 +143,9 @@ export const updateAdminPack = createServerFn({ method: "POST" })
   });
 
 export const deleteAdminPack = createServerFn({ method: "POST" })
-  .inputValidator((data: { id: string }) => data)
+  .inputValidator((data: { passcode: string; id: string }) => data)
   .handler(async ({ data }) => {
-    await (await import("./gate.server")).assertAdminSession();
+    await gate(data.passcode);
     const supa = await admin();
     const { error } = await supa.from("packs").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -149,6 +155,7 @@ export const deleteAdminPack = createServerFn({ method: "POST" })
 export const updateAdminSlot = createServerFn({ method: "POST" })
   .inputValidator(
     (data: {
+      passcode: string;
       id: string;
       sample_id?: string | null;
       label?: string | null;
@@ -159,7 +166,7 @@ export const updateAdminSlot = createServerFn({ method: "POST" })
     }) => data,
   )
   .handler(async ({ data }) => {
-    await (await import("./gate.server")).assertAdminSession();
+    await gate(data.passcode);
     const supa = await admin();
     const patch: TablesUpdate<"pack_slots"> = {};
     if (data.sample_id !== undefined) patch.sample_id = data.sample_id;
@@ -176,10 +183,10 @@ export const updateAdminSlot = createServerFn({ method: "POST" })
 
 export const registerAdminSample = createServerFn({ method: "POST" })
   .inputValidator(
-    (data: { name: string; storage_path: string; mime_type?: string }) => data,
+    (data: { passcode: string; name: string; storage_path: string; mime_type?: string }) => data,
   )
   .handler(async ({ data }) => {
-    await (await import("./gate.server")).assertAdminSession();
+    await gate(data.passcode);
     const supa = await admin();
     const { data: row, error } = await supa
       .from("samples")
@@ -196,9 +203,9 @@ export const registerAdminSample = createServerFn({ method: "POST" })
   });
 
 export const signedCoverUrl = createServerFn({ method: "POST" })
-  .inputValidator((data: { storage_path: string }) => data)
+  .inputValidator((data: { passcode: string; storage_path: string }) => data)
   .handler(async ({ data }): Promise<{ url: string }> => {
-    await (await import("./gate.server")).assertAdminSession();
+    await gate(data.passcode);
     const supa = await admin();
     const { data: signed, error } = await supa.storage
       .from("pack-covers")

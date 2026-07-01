@@ -9,7 +9,7 @@ import {
 
 export type CustomSlot = {
   slotIndex: number;
-  storagePath: string;
+  storagePaths: string[]; // 1..6 variations for round-robin
   label: string | null;
   pitchOffsetSemitones: number;
   gainDb: number;
@@ -27,6 +27,8 @@ export type RuntimePack =
       coverUrl: string | null;
       humanization: Humanization | null;
       slots: (CustomSlot | null)[];
+      // In-memory round-robin state per slot index (last chosen variation index)
+      _rrState?: Record<number, number>;
     };
 
 export const BUILTIN_RUNTIME_PACKS: RuntimePack[] = PACK_IDS.map((id) => ({
@@ -39,13 +41,14 @@ export const BUILTIN_RUNTIME_PACKS: RuntimePack[] = PACK_IDS.map((id) => ({
 
 type SlotRow = {
   slot_index: number;
-  sample_id: string | null;
   label: string | null;
   pitch_offset_semitones: number | string;
   gain_db: number | string;
   pan: number | string;
   humanization: unknown;
-  samples: { storage_path: string } | null;
+  pack_slot_samples:
+    | Array<{ position: number; samples: { storage_path: string } | null }>
+    | null;
 };
 
 type PackRowLite = {
@@ -60,14 +63,21 @@ type PackRowLite = {
 
 function mapPacks(rows: PackRowLite[]): RuntimePack[] {
   return rows.map((p): RuntimePack => {
-    const slots: (CustomSlot | null)[] = new Array(6).fill(null);
+    // Dynamic slot count: pick the highest slot_index+1, min 1
     const srows = (p.pack_slots ?? []) as SlotRow[];
+    const maxIdx = srows.reduce((m, s) => Math.max(m, s.slot_index), -1);
+    const slotCount = Math.max(1, maxIdx + 1);
+    const slots: (CustomSlot | null)[] = new Array(slotCount).fill(null);
     for (const s of srows) {
-      if (!s.sample_id || !s.samples?.storage_path) continue;
-      if (s.slot_index < 0 || s.slot_index > 5) continue;
+      if (s.slot_index < 0 || s.slot_index >= slotCount) continue;
+      const paths = ((s.pack_slot_samples ?? []) as NonNullable<SlotRow["pack_slot_samples"]>)
+        .filter((r) => !!r.samples?.storage_path)
+        .sort((a, b) => a.position - b.position)
+        .map((r) => r.samples!.storage_path);
+      if (paths.length === 0) continue;
       slots[s.slot_index] = {
         slotIndex: s.slot_index,
-        storagePath: s.samples.storage_path,
+        storagePaths: paths,
         label: s.label,
         pitchOffsetSemitones: Number(s.pitch_offset_semitones) || 0,
         gainDb: Number(s.gain_db) || 0,
@@ -83,12 +93,13 @@ function mapPacks(rows: PackRowLite[]): RuntimePack[] {
       coverUrl: p.cover_image_url ?? null,
       humanization: parseHumanization(p.humanization),
       slots,
+      _rrState: {},
     };
   });
 }
 
 const PACK_SELECT =
-  "id,name,description,is_builtin,cover_image_url,humanization,pack_slots(slot_index,sample_id,label,pitch_offset_semitones,gain_db,pan,humanization,samples(storage_path))";
+  "id,name,description,is_builtin,cover_image_url,humanization,pack_slots(slot_index,label,pitch_offset_semitones,gain_db,pan,humanization,pack_slot_samples(position,samples(storage_path)))";
 
 export async function fetchCustomPacks(): Promise<RuntimePack[]> {
   const { data, error } = await supabase
@@ -118,10 +129,11 @@ export async function fetchPublishedPacks(): Promise<RuntimePack[]> {
 
 export async function warmCustomPack(ctx: AudioContext, pack: RuntimePack) {
   if (pack.kind !== "custom") return;
+  const allPaths = pack.slots
+    .filter((s): s is CustomSlot => !!s)
+    .flatMap((s) => s.storagePaths);
   await Promise.all(
-    pack.slots
-      .filter((s): s is CustomSlot => !!s)
-      .map((s) => loadSampleBuffer(ctx, s.storagePath).catch(() => null)),
+    allPaths.map((p) => loadSampleBuffer(ctx, p).catch(() => null)),
   );
 }
 
@@ -131,6 +143,15 @@ function rand(min: number, max: number) {
   return min + Math.random() * (max - min);
 }
 
+// Round-robin selector: never repeat the last-played index when >1 variations.
+function pickVariation(paths: string[], lastIndex: number | undefined): number {
+  if (paths.length <= 1) return 0;
+  const n = paths.length;
+  let i = Math.floor(Math.random() * (n - 1));
+  if (lastIndex !== undefined && i >= lastIndex) i += 1;
+  return i;
+}
+
 function playSampleSlot(
   ctx: AudioContext,
   dest: AudioNode,
@@ -138,8 +159,10 @@ function playSampleSlot(
   packHumanization: Humanization | null,
   freq: number,
   when: number,
+  pickPath: () => string,
 ) {
-  loadSampleBuffer(ctx, slot.storagePath)
+  const path = pickPath();
+  loadSampleBuffer(ctx, path)
     .then((buf) => {
       const h = resolveHumanization(packHumanization, slot.humanization);
       const src = ctx.createBufferSource();
@@ -189,9 +212,16 @@ export function triggerPackVoice(
     playPackVoice(ctx, dest, spec, freq, when);
     return;
   }
-  const slot = pack.slots[ringIndex % 6];
+  const slotCount = pack.slots.length || 1;
+  const slotIdx = ringIndex % slotCount;
+  const slot = pack.slots[slotIdx];
   if (slot) {
-    playSampleSlot(ctx, dest, slot, pack.humanization, freq, when);
+    playSampleSlot(ctx, dest, slot, pack.humanization, freq, when, () => {
+      const state = pack._rrState ?? (pack._rrState = {});
+      const idx = pickVariation(slot.storagePaths, state[slotIdx]);
+      state[slotIdx] = idx;
+      return slot.storagePaths[idx];
+    });
     return;
   }
   const fallback = PACKS.moss.voices[ringIndex % PACKS.moss.voices.length];

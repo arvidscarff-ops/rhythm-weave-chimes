@@ -420,6 +420,7 @@ function SlotEditor({ packId, slot }: { packId: string; slot: AdminSlot }) {
   const { get: getPass } = usePasscode();
   const update = useServerFn(updateAdminSlot);
   const register = useServerFn(registerAdminSample);
+  const createUploadUrl = useServerFn(createAdminUploadUrl);
   const [busy, setBusy] = useState(false);
   const [overrideOn, setOverrideOn] = useState(slot.humanization !== null);
   const [hum, setHum] = useState<Humanization>(slot.humanization ?? DEFAULT_HUMANIZATION);
@@ -431,16 +432,20 @@ function SlotEditor({ packId, slot }: { packId: string; slot: AdminSlot }) {
     try {
       const ext = file.name.split(".").pop() ?? "wav";
       const path = `admin-packs/${packId}/${slot.slot_index}-${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("samples").upload(path, file, {
-        upsert: true,
-        contentType: file.type || "audio/wav",
+      const signed = await createUploadUrl({
+        data: { passcode: getPass(), bucket: "samples", path, upsert: true },
       });
+      const { error } = await supabase.storage
+        .from("samples")
+        .uploadToSignedUrl(signed.path, signed.token, file, {
+          contentType: file.type || "audio/wav",
+        });
       if (error) throw error;
       const { id } = await register({
         data: {
           passcode: getPass(),
           name: file.name,
-          storage_path: path,
+          storage_path: signed.path,
           mime_type: file.type || "audio/wav",
         },
       });

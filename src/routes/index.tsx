@@ -1783,6 +1783,7 @@ function PhaseApp() {
         hoverRingId={hoverRing}
         topo={topo}
       />
+      <AdminTrigger />
       {/* CANVAS */}
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
         <canvas

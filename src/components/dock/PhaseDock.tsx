@@ -668,7 +668,7 @@ function ComposeMenu({
           <DropdownMenuPageTrigger targetId="key">
             Key{" "}
             <span className="ml-auto text-foreground/50">
-              {composer.root} {SCALES[composer.scale].label}
+              {composer.root} {currentScaleLabel}
             </span>
           </DropdownMenuPageTrigger>
           <DropdownMenuSeparator />
@@ -698,7 +698,7 @@ function ComposeMenu({
                   e.preventDefault();
                   const name = window.prompt(
                     "Name this preset",
-                    `${composer.root} ${SCALES[composer.scale].label}`,
+                    `${composer.root} ${currentScaleLabel}`,
                   );
                   if (name?.trim()) saveM.mutate(name.trim());
                 }}
@@ -754,12 +754,17 @@ function ComposeMenu({
           <DropdownMenuSeparator />
           <DropdownMenuLabel>Scale</DropdownMenuLabel>
           <DropdownMenuRadioGroup
-            value={composer.scale}
-            onValueChange={(v) => onComposer({ ...composer, scale: v as ScaleId })}
+            value={currentScale?.id ?? ""}
+            onValueChange={(v) => onComposer({ ...composer, scale: v })}
           >
-            {(Object.keys(SCALES) as ScaleId[]).map((k) => (
-              <DropdownMenuRadioItem key={k} value={k}>
-                {SCALES[k].label}
+            {scales.length === 0 && (
+              <div className="px-4 py-2 text-[11px] uppercase tracking-[0.16em] text-foreground/50">
+                No published scales
+              </div>
+            )}
+            {scales.map((s) => (
+              <DropdownMenuRadioItem key={s.id} value={s.id}>
+                {s.name}
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>

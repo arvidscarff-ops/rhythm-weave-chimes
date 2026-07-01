@@ -528,6 +528,15 @@ function HandpanField({
         })}
       </div>
 
+      <StrumBar
+        pitches={pitches}
+        onStrike={(idx) => {
+          primeAudio();
+          playPitch(pitches[idx] ?? DEFAULT_PITCH);
+          pulse(idx);
+        }}
+      />
+
       <p className="text-center text-[10px] uppercase tracking-wider text-foreground/40">
         {activeStep
           ? "Tap to cycle: Off → Chord (teal) → Accent (violet) → Off"

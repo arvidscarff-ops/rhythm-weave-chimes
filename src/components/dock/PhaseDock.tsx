@@ -973,6 +973,14 @@ function MoreMenu({
               <Wrench className="h-4 w-4" /> Developer console
             </Link>
           </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              setOpen(false);
+              window.dispatchEvent(new CustomEvent("phase:admin-open"));
+            }}
+          >
+            <Shield className="h-4 w-4" /> Admin
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           {authed ? (
             <DropdownMenuItem onSelect={onSignOut}>

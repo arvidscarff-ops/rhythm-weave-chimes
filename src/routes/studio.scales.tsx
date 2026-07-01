@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Waves } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { usePasscode } from "@/lib/admin/passcode-context";
-import { allPitchOptions, DEFAULT_PITCH } from "@/lib/music/pitch";
+import { allPitchOptions, DEFAULT_PITCH, pitchToMidi } from "@/lib/music/pitch";
 import { noteColor } from "@/lib/music/noteColors";
 import { playPitch, primeAudio } from "@/lib/studio/handpanAudio";
 import {

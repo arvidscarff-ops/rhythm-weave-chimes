@@ -1,14 +1,14 @@
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ChevronLeft, Plus, Trash2, Lock } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { PasscodeProvider, usePasscode } from "@/lib/admin/passcode-context";
+import { usePasscode } from "@/lib/admin/passcode-context";
 import {
   listAdminScales,
   createAdminScale,

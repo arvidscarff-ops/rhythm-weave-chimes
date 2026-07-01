@@ -12,13 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as DevRouteImport } from './routes/dev'
 import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
+import { Route as StudioScalesRouteImport } from './routes/studio.scales'
+import { Route as StudioPacksRouteImport } from './routes/studio.packs'
 import { Route as AdminUnlockRouteImport } from './routes/admin.unlock'
 import { Route as AdminScalesRouteImport } from './routes/admin.scales'
 import { Route as AdminPacksRouteImport } from './routes/admin.packs'
-import { Route as AuthenticatedStudioRouteImport } from './routes/_authenticated.studio'
 
 const StudioRoute = StudioRouteImport.update({
   id: '/studio',
@@ -35,10 +35,6 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRoute = AuthenticatedRouteImport.update({
-  id: '/_authenticated',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -47,6 +43,16 @@ const IndexRoute = IndexRouteImport.update({
 const StudioIndexRoute = StudioIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => StudioRoute,
+} as any)
+const StudioScalesRoute = StudioScalesRouteImport.update({
+  id: '/scales',
+  path: '/scales',
+  getParentRoute: () => StudioRoute,
+} as any)
+const StudioPacksRoute = StudioPacksRouteImport.update({
+  id: '/packs',
+  path: '/packs',
   getParentRoute: () => StudioRoute,
 } as any)
 const AdminUnlockRoute = AdminUnlockRouteImport.update({
@@ -64,42 +70,41 @@ const AdminPacksRoute = AdminPacksRouteImport.update({
   path: '/admin/packs',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedStudioRoute = AuthenticatedStudioRouteImport.update({
-  id: '/studio',
-  path: '/studio',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dev': typeof DevRoute
-  '/studio': typeof AuthenticatedStudioRoute
+  '/studio': typeof StudioRouteWithChildren
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
   '/admin/unlock': typeof AdminUnlockRoute
+  '/studio/packs': typeof StudioPacksRoute
+  '/studio/scales': typeof StudioScalesRoute
   '/studio/': typeof StudioIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dev': typeof DevRoute
-  '/studio': typeof StudioIndexRoute
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
   '/admin/unlock': typeof AdminUnlockRoute
+  '/studio/packs': typeof StudioPacksRoute
+  '/studio/scales': typeof StudioScalesRoute
+  '/studio': typeof StudioIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/auth': typeof AuthRoute
   '/dev': typeof DevRoute
   '/studio': typeof StudioRouteWithChildren
-  '/_authenticated/studio': typeof AuthenticatedStudioRoute
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
   '/admin/unlock': typeof AdminUnlockRoute
+  '/studio/packs': typeof StudioPacksRoute
+  '/studio/scales': typeof StudioScalesRoute
   '/studio/': typeof StudioIndexRoute
 }
 export interface FileRouteTypes {
@@ -112,33 +117,36 @@ export interface FileRouteTypes {
     | '/admin/packs'
     | '/admin/scales'
     | '/admin/unlock'
+    | '/studio/packs'
+    | '/studio/scales'
     | '/studio/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/dev'
-    | '/studio'
     | '/admin/packs'
     | '/admin/scales'
     | '/admin/unlock'
+    | '/studio/packs'
+    | '/studio/scales'
+    | '/studio'
   id:
     | '__root__'
     | '/'
-    | '/_authenticated'
     | '/auth'
     | '/dev'
     | '/studio'
-    | '/_authenticated/studio'
     | '/admin/packs'
     | '/admin/scales'
     | '/admin/unlock'
+    | '/studio/packs'
+    | '/studio/scales'
     | '/studio/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthRoute: typeof AuthRoute
   DevRoute: typeof DevRoute
   StudioRoute: typeof StudioRouteWithChildren
@@ -170,13 +178,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated': {
-      id: '/_authenticated'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -189,6 +190,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/studio/'
       preLoaderRoute: typeof StudioIndexRouteImport
+      parentRoute: typeof StudioRoute
+    }
+    '/studio/scales': {
+      id: '/studio/scales'
+      path: '/scales'
+      fullPath: '/studio/scales'
+      preLoaderRoute: typeof StudioScalesRouteImport
+      parentRoute: typeof StudioRoute
+    }
+    '/studio/packs': {
+      id: '/studio/packs'
+      path: '/packs'
+      fullPath: '/studio/packs'
+      preLoaderRoute: typeof StudioPacksRouteImport
       parentRoute: typeof StudioRoute
     }
     '/admin/unlock': {
@@ -212,33 +227,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPacksRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/studio': {
-      id: '/_authenticated/studio'
-      path: '/studio'
-      fullPath: '/studio'
-      preLoaderRoute: typeof AuthenticatedStudioRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
   }
 }
 
-interface AuthenticatedRouteChildren {
-  AuthenticatedStudioRoute: typeof AuthenticatedStudioRoute
-}
-
-const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
-  AuthenticatedStudioRoute: AuthenticatedStudioRoute,
-}
-
-const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
-  AuthenticatedRouteChildren,
-)
-
 interface StudioRouteChildren {
+  StudioPacksRoute: typeof StudioPacksRoute
+  StudioScalesRoute: typeof StudioScalesRoute
   StudioIndexRoute: typeof StudioIndexRoute
 }
 
 const StudioRouteChildren: StudioRouteChildren = {
+  StudioPacksRoute: StudioPacksRoute,
+  StudioScalesRoute: StudioScalesRoute,
   StudioIndexRoute: StudioIndexRoute,
 }
 
@@ -247,7 +247,6 @@ const StudioRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthRoute: AuthRoute,
   DevRoute: DevRoute,
   StudioRoute: StudioRouteWithChildren,

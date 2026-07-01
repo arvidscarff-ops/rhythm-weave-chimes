@@ -23,86 +23,18 @@ import {
 
 export const Route = createFileRoute("/studio/scales")({
   ssr: false,
-  component: AdminScalesPage,
+  component: AdminUI,
   head: () => ({
     meta: [
-      { title: "Admin · Scales & Progressions" },
+      { title: "My Studio · Scales & Progressions" },
       { name: "description", content: "Author generative scales and chord progressions for Phase." },
     ],
   }),
 });
 
-function AdminScalesPage() {
-  return (
-    <PasscodeProvider>
-      <AdminBootstrap />
-    </PasscodeProvider>
-  );
-}
-
-function AdminBootstrap() {
-  const { ensure, get, set } = usePasscode();
-  const router = useRouter();
-  const [status, setStatus] = useState<"pending" | "ready" | "cancelled">("pending");
-
-  const tryUnlock = () => {
-    setStatus("pending");
-    ensure()
-      .then(() => setStatus("ready"))
-      .catch(() => {
-        setStatus("cancelled");
-        void router.navigate({ to: "/" });
-      });
-  };
-
-  useEffect(() => {
-    const w = window as unknown as { __phaseAdminPass?: string };
-    if (w.__phaseAdminPass) {
-      set(w.__phaseAdminPass);
-      w.__phaseAdminPass = undefined;
-    }
-    if (get()) {
-      setStatus("ready");
-      return;
-    }
-    ensure()
-      .then(() => setStatus("ready"))
-      .catch(() => {
-        setStatus("cancelled");
-        void router.navigate({ to: "/" });
-      });
-  }, [ensure, get, router, set]);
-
-  if (status === "cancelled") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
-        <div className="max-w-sm text-center space-y-4">
-          <h1 className="text-lg font-medium tracking-wide">Passcode required</h1>
-          <p className="text-sm text-foreground/60">
-            Enter the admin passcode to manage scales.
-          </p>
-          <div className="flex justify-center gap-2 pt-2">
-            <Button size="sm" onClick={tryUnlock}>
-              <Lock className="h-3 w-3 mr-2" /> Enter passcode
-            </Button>
-            <Button asChild size="sm" variant="ghost">
-              <Link to="/">
-                <ChevronLeft className="h-3 w-3 mr-2" /> Back to home
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  if (status !== "ready") return null;
-  return <AdminUI />;
-}
-
 function AdminUI() {
   const qc = useQueryClient();
-  const router = useRouter();
-  const { get: getPass, clear: clearPass } = usePasscode();
+  const { get: getPass } = usePasscode();
   const list = useServerFn(listAdminScales);
   const create = useServerFn(createAdminScale);
   const del = useServerFn(deleteAdminScale);

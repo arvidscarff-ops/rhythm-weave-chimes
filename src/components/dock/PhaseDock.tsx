@@ -51,7 +51,8 @@ import {
 } from "@/lib/fx/fxState";
 import { NEURAL_PRESETS, type NeuralSettings } from "@/lib/neural/palette";
 import type { RuntimePack } from "@/lib/sound/runtimePacks";
-import { SCALES, ROOT_NAMES, type ScaleId, type RootName } from "@/lib/music/scales";
+import { ROOT_NAMES, type RootName } from "@/lib/music/scales";
+import { fetchPublishedScales } from "@/lib/music/scales.functions";
 import {
   type ComposerSettings,
   type SlotSettings,
@@ -615,7 +616,7 @@ function ComposeMenu({
     const p = raw as {
       e?: boolean;
       r?: RootName;
-      sc?: ScaleId;
+      sc?: string;
       slots?: SlotSettings[];
     };
     onComposer({

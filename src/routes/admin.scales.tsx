@@ -400,13 +400,6 @@ function ProgressionStepCard({
     onSuccess: onChanged,
   });
 
-  const toggle = (list: number[], setList: (n: number[]) => void, tone: number) => {
-    const next = list.includes(tone)
-      ? list.filter((n) => n !== tone)
-      : [...list, tone].sort((a, b) => a - b);
-    setList(next);
-  };
-
   return (
     <div className="min-w-[260px] flex-shrink-0 rounded-md border border-white/10 bg-black/40 p-3 space-y-3">
       <div className="flex items-center justify-between">
@@ -448,7 +441,6 @@ function ProgressionStepCard({
             : [...chord, t].sort((a, b) => a - b);
           setChord(next);
           saveMut.mutate({ chord_tones: next });
-          toggle; // silence unused-warning-safe
         }}
       />
 

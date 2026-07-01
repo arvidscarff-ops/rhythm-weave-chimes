@@ -419,6 +419,7 @@ function SliderRow({
 
 function SlotEditor({ packId, slot }: { packId: string; slot: AdminSlot }) {
   const qc = useQueryClient();
+  const { get: getPass } = usePasscode();
   const update = useServerFn(updateAdminSlot);
   const register = useServerFn(registerAdminSample);
   const [busy, setBusy] = useState(false);
@@ -439,12 +440,13 @@ function SlotEditor({ packId, slot }: { packId: string; slot: AdminSlot }) {
       if (error) throw error;
       const { id } = await register({
         data: {
+          passcode: getPass(),
           name: file.name,
           storage_path: path,
           mime_type: file.type || "audio/wav",
         },
       });
-      await update({ data: { id: slot.id, sample_id: id, label: file.name } });
+      await update({ data: { passcode: getPass(), id: slot.id, sample_id: id, label: file.name } });
       toast.success(`Slot ${slot.slot_index + 1} uploaded`);
       invalidate();
     } catch (e) {
@@ -456,14 +458,14 @@ function SlotEditor({ packId, slot }: { packId: string; slot: AdminSlot }) {
 
   const saveOverride = async () => {
     await update({
-      data: { id: slot.id, humanization: overrideOn ? hum : null },
+      data: { passcode: getPass(), id: slot.id, humanization: overrideOn ? hum : null },
     });
     toast.success("Slot humanization saved");
     invalidate();
   };
 
   const clearSample = async () => {
-    await update({ data: { id: slot.id, sample_id: null, label: null } });
+    await update({ data: { passcode: getPass(), id: slot.id, sample_id: null, label: null } });
     invalidate();
   };
 

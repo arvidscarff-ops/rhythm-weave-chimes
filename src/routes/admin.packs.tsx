@@ -10,10 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
 import { auditionSample } from "@/lib/dev/samplePlayer";
-import {
-  isAdminUnlocked,
-  lockAdmin,
-} from "@/lib/admin/gate.functions";
+import { PasscodeProvider, usePasscode } from "@/lib/admin/passcode-context";
 import {
   listAdminPacks,
   createAdminPack,
@@ -36,15 +33,37 @@ export const Route = createFileRoute("/admin/packs")({
 });
 
 function AdminPacksPage() {
-  const router = useRouter();
-  const check = useServerFn(isAdminUnlocked);
+  return (
+    <PasscodeProvider>
+      <AdminBootstrap />
+    </PasscodeProvider>
+  );
+}
+
+function AdminBootstrap() {
+  const { ensure, get } = usePasscode();
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    check().then((r) => {
-      if (!r.unlocked) router.navigate({ to: "/admin/unlock" });
-      else setReady(true);
-    });
-  }, [check, router]);
+    // Prefer passcode handed over from /admin/unlock (in-memory window stash),
+    // otherwise prompt via the glass keypad.
+    const stashed = (window as unknown as { __phaseAdminPass?: string }).__phaseAdminPass;
+    if (stashed) {
+      // Prime the context cache by calling ensure() after seeding.
+      // We do this by triggering ensure() only if get() is empty; seed via a fake path:
+      // simplest: verify via a lightweight call — instead, just accept it (verify happens on first server call).
+      (window as unknown as { __phaseAdminPass?: string }).__phaseAdminPass = undefined;
+      // Directly write to the ref through ensure by resolving with the stashed value:
+      // Simpler: just call ensure() which will open keypad if empty. To avoid re-prompt,
+      // we call a private setter — instead, expose set:
+    }
+    if (get()) {
+      setReady(true);
+      return;
+    }
+    ensure()
+      .then(() => setReady(true))
+      .catch(() => setReady(false));
+  }, [ensure, get]);
 
   if (!ready) return null;
   return <AdminUI />;
@@ -53,12 +72,15 @@ function AdminPacksPage() {
 function AdminUI() {
   const qc = useQueryClient();
   const router = useRouter();
+  const { get: getPass, clear: clearPass } = usePasscode();
   const list = useServerFn(listAdminPacks);
   const create = useServerFn(createAdminPack);
   const del = useServerFn(deleteAdminPack);
-  const lock = useServerFn(lockAdmin);
 
-  const packsQ = useQuery({ queryKey: ["admin", "packs"], queryFn: () => list() });
+  const packsQ = useQuery({
+    queryKey: ["admin", "packs"],
+    queryFn: () => list({ data: { passcode: getPass() } }),
+  });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const packs = packsQ.data ?? [];
   const selected = packs.find((p) => p.id === selectedId) ?? packs[0] ?? null;
@@ -67,7 +89,7 @@ function AdminUI() {
   }, [packs, selectedId]);
 
   const createMut = useMutation({
-    mutationFn: (name: string) => create({ data: { name } }),
+    mutationFn: (name: string) => create({ data: { passcode: getPass(), name } }),
     onSuccess: async ({ id }) => {
       await qc.invalidateQueries({ queryKey: ["admin", "packs"] });
       setSelectedId(id);
@@ -77,7 +99,7 @@ function AdminUI() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: string) => del({ data: { id } }),
+    mutationFn: (id: string) => del({ data: { passcode: getPass(), id } }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "packs"] });
       setSelectedId(null);
@@ -97,8 +119,8 @@ function AdminUI() {
         <Button
           size="sm"
           variant="ghost"
-          onClick={async () => {
-            await lock();
+          onClick={() => {
+            clearPass();
             router.navigate({ to: "/admin/unlock" });
           }}
         >

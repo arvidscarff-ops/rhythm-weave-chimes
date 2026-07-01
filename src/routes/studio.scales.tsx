@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Waves } from "lucide-react";
+import { Plus, Trash2, Waves, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -288,6 +288,7 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
         </div>
         <Filmstrip
           steps={steps}
+          pitches={pitches}
           activeStepId={activeStepId}
           onSelect={setActiveStepId}
           onAdd={() => addStepMut.mutate()}
@@ -626,6 +627,7 @@ function blockWidth(bars: number) {
 
 function Filmstrip({
   steps,
+  pitches,
   activeStepId,
   onSelect,
   onAdd,
@@ -634,6 +636,7 @@ function Filmstrip({
   onDurationCommit,
 }: {
   steps: AdminProgressionStep[];
+  pitches: string[];
   activeStepId: string | null;
   onSelect: (id: string) => void;
   onAdd: () => void;
@@ -641,13 +644,85 @@ function Filmstrip({
   onDurationPreview: (id: string, bars: number) => void;
   onDurationCommit: (id: string, bars: number) => void;
 }) {
+  const [playingStepId, setPlayingStepId] = useState<string | null>(null);
+  const [playingAll, setPlayingAll] = useState(false);
+  const timers = useRef<number[]>([]);
+
+  const clearTimers = () => {
+    timers.current.forEach((t) => window.clearTimeout(t));
+    timers.current = [];
+  };
+
+  useEffect(() => () => clearTimers(), []);
+
+  const strumStep = (step: AdminProgressionStep, startDelay = 0): number => {
+    const tones = stepPitchesSorted(step, pitches);
+    if (tones.length === 0) return 0;
+    tones.forEach((pitch, i) => {
+      const t = window.setTimeout(() => {
+        playPitch(pitch);
+      }, startDelay + i * STRUM_STEP_MS);
+      timers.current.push(t);
+    });
+    return tones.length * STRUM_STEP_MS;
+  };
+
+  const playOne = (step: AdminProgressionStep) => {
+    if (playingAll) return;
+    primeAudio();
+    clearTimers();
+    const tones = stepPitchesSorted(step, pitches);
+    if (tones.length === 0) return;
+    setPlayingStepId(step.id);
+    const dur = strumStep(step);
+    const t = window.setTimeout(() => setPlayingStepId(null), dur + 60);
+    timers.current.push(t);
+  };
+
+  const stopAll = () => {
+    clearTimers();
+    setPlayingStepId(null);
+    setPlayingAll(false);
+  };
+
+  const playAll = () => {
+    if (playingAll) {
+      stopAll();
+      return;
+    }
+    if (steps.length === 0) return;
+    primeAudio();
+    clearTimers();
+    setPlayingAll(true);
+    let cursor = 0;
+    const ordered = [...steps].sort((a, b) => a.step_order - b.step_order);
+    ordered.forEach((step) => {
+      const tones = stepPitchesSorted(step, pitches);
+      const stepDur = tones.length * STRUM_STEP_MS;
+      const startAt = cursor;
+      const highlightOn = window.setTimeout(() => setPlayingStepId(step.id), startAt);
+      timers.current.push(highlightOn);
+      if (tones.length > 0) strumStep(step, startAt);
+      cursor += Math.max(stepDur, STRUM_STEP_MS) + 200;
+    });
+    const done = window.setTimeout(() => {
+      setPlayingStepId(null);
+      setPlayingAll(false);
+    }, cursor);
+    timers.current.push(done);
+  };
+
   return (
     <div className="flex gap-3 overflow-x-auto pb-2">
       {steps.map((step) => (
         <FilmstripBlock
           key={step.id}
           step={step}
+          pitches={pitches}
           active={step.id === activeStepId}
+          isPlaying={playingStepId === step.id}
+          disablePlay={playingAll}
+          onPlay={() => playOne(step)}
           onSelect={() => onSelect(step.id)}
           onRemove={() => onRemove(step.id)}
           onDurationPreview={(bars) => onDurationPreview(step.id, bars)}
@@ -662,20 +737,62 @@ function Filmstrip({
         <Plus className="h-4 w-4" />
         <span className="text-[10px] uppercase tracking-wider">Add step</span>
       </button>
+      <button
+        type="button"
+        onClick={playAll}
+        disabled={steps.length === 0}
+        className={`flex h-[120px] w-[88px] flex-shrink-0 flex-col items-center justify-center gap-1 rounded-lg border transition disabled:opacity-40 disabled:cursor-not-allowed ${
+          playingAll
+            ? "border-teal-300/60 text-teal-200 bg-teal-400/10"
+            : "border-white/15 text-foreground/60 hover:border-teal-300/40 hover:text-teal-200"
+        }`}
+        title={playingAll ? "Stop playback" : "Play all steps in order"}
+      >
+        {playingAll ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+        <span className="text-[10px] uppercase tracking-wider">
+          {playingAll ? "Stop" : "Play all"}
+        </span>
+      </button>
     </div>
   );
 }
 
+function stepPitchesSorted(step: AdminProgressionStep, pitches: string[]): string[] {
+  const idxs = Array.from(new Set([...step.chord_tones, ...step.accent_tones]));
+  return idxs
+    .filter((i) => i >= 0 && i < pitches.length)
+    .map((i) => {
+      const pitch = pitches[i];
+      let midi = 0;
+      try {
+        midi = pitchToMidi(pitch);
+      } catch {
+        midi = 0;
+      }
+      return { pitch, midi };
+    })
+    .sort((a, b) => a.midi - b.midi)
+    .map((x) => x.pitch);
+}
+
 function FilmstripBlock({
   step,
+  pitches,
   active,
+  isPlaying,
+  disablePlay,
+  onPlay,
   onSelect,
   onRemove,
   onDurationPreview,
   onDurationCommit,
 }: {
   step: AdminProgressionStep;
+  pitches: string[];
   active: boolean;
+  isPlaying: boolean;
+  disablePlay: boolean;
+  onPlay: () => void;
   onSelect: () => void;
   onRemove: () => void;
   onDurationPreview: (bars: number) => void;
@@ -711,6 +828,10 @@ function FilmstripBlock({
   const width = blockWidth(step.duration_bars);
   const chordCount = step.chord_tones.length;
   const accentCount = step.accent_tones.length;
+  const toneCount = new Set([...step.chord_tones, ...step.accent_tones]).size;
+  const hasTones = toneCount > 0;
+  const sweepMs = Math.max(toneCount, 1) * 60;
+  void pitches;
 
   return (
     <div
@@ -741,17 +862,34 @@ function FilmstripBlock({
 
       <div className="mt-3 flex items-start justify-between">
         <span className="pr-label text-white/80">Step {step.step_order + 1}</span>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          className="rounded p-1 text-foreground/40 opacity-0 transition group-hover:opacity-100 hover:text-red-300"
-          title="Remove step"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!hasTones || disablePlay || isPlaying) return;
+              onPlay();
+            }}
+            disabled={!hasTones || disablePlay || isPlaying}
+            className={`rounded p-1 transition disabled:opacity-30 disabled:cursor-not-allowed ${
+              isPlaying ? "text-teal-200" : "text-foreground/60 hover:text-teal-200"
+            }`}
+            title={hasTones ? "Strum this step's notes" : "No chord/accent notes yet"}
+          >
+            <Play className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            className="rounded p-1 text-foreground/40 opacity-0 transition group-hover:opacity-100 hover:text-red-300"
+            title="Remove step"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
       </div>
 
       <div className="mb-2 flex items-end justify-between gap-2">
@@ -764,6 +902,18 @@ function FilmstripBlock({
           <span className="rounded bg-violet-400/15 px-1.5 py-0.5 text-violet-200">{accentCount} accent</span>
         </div>
       </div>
+
+      {isPlaying && (
+        <div
+          key={`sweep-${Date.now()}`}
+          className="pointer-events-none absolute bottom-0 left-0 h-[2px] bg-gradient-to-r from-teal-300/70 via-teal-200 to-teal-300/70"
+          style={{
+            width: "100%",
+            transform: "translateX(-100%)",
+            animation: `strumFill ${sweepMs}ms linear forwards`,
+          }}
+        />
+      )}
 
       {/* left handle */}
       <div

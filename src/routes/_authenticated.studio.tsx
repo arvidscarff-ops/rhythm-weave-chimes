@@ -738,8 +738,24 @@ function SlotCard({
     setLocal(next);
     if (writeTimer.current) window.clearTimeout(writeTimer.current);
     writeTimer.current = window.setTimeout(async () => {
-      const { error } = await supabase.from("pack_slots").update(patch).eq("id", slot.id);
-      if (error) toast.error(error.message);
+      const { sample_id, ...slotPatch } = patch;
+      if (Object.keys(slotPatch).length > 0) {
+        const { error } = await supabase.from("pack_slots").update(slotPatch).eq("id", slot.id);
+        if (error) toast.error(error.message);
+      }
+      if (sample_id !== undefined) {
+        const { error: eDel } = await supabase
+          .from("pack_slot_samples")
+          .delete()
+          .eq("slot_id", slot.id);
+        if (eDel) toast.error(eDel.message);
+        if (sample_id) {
+          const { error: eIns } = await supabase
+            .from("pack_slot_samples")
+            .insert({ slot_id: slot.id, sample_id, position: 0 });
+          if (eIns) toast.error(eIns.message);
+        }
+      }
       onChanged();
     }, debounceMs);
   };

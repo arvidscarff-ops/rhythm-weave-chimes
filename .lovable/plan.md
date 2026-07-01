@@ -1,65 +1,53 @@
-## Note palette refresh + register elevation cue
+## Adaptive Handpan sizing + reworked chord / accent glow
 
-Two coordinated changes to make register instantly readable while keeping pitch-class color meaningful.
+### 1. Adaptive layout (crowding fix)
 
-### 1. New "Aurora Spectrum" palette (12 hues)
+Drive everything from `n = pitches.length` in `HandpanField`.
 
-Replace the existing Boldest Co. tokens in `src/styles.css` and `src/lib/music/noteColors.ts` with a bright, chromatic set that reads well on the dark studio background. Each pitch class gets its own hue; the sequence walks the color wheel so a chromatic run looks like a rainbow and enharmonic pairs share a hue.
+- **Field size** grows with count so it always fits its own container:
+  - `size = clamp(460, 460 + max(0, n - 9) * 22, 620)` (max 620px so it never eats the sidebar).
+  - `ringRadius = size / 2 - maxRingSlotSize / 2 - 14` — derived, so ring slots always sit inside the disc with a hair of padding.
+- **Slot sizing** gets a global `scale` multiplier on top of the register-based sizes (bass 104 / mid 88 / high 72; ding 124 / 108 / 92):
+  - `n ≤ 9`  → scale 1.00
+  - `n = 10–12` → scale 0.90
+  - `n = 13–16` → scale 0.78
+  - `n ≥ 17` → scale 0.68
+- **Angular spacing** already spreads evenly via `((i-1)/ringSlots) * 2π`. The combination of larger radius + smaller slots restores the visible gap between neighbors at 14+ notes. No overlap even at n=24.
+- **Label + chip scaling** — when `scale < 0.85` the disc label drops one step (`text-lg → text-base → text-sm`) and the color chip + Select shrink to `h-5` so nothing spills off the disc.
+- **Ding placement** — stays centered; its radius doesn't need to change with n, only with register + scale.
 
-| Pitch | Name       | Hex      |
-|-------|------------|----------|
-| C     | Teal       | #5eead4  |
-| C#/Db | Cyan       | #38bdf8  |
-| D     | Sky        | #60a5fa  |
-| D#/Eb | Indigo     | #818cf8  |
-| E     | Violet     | #a78bfa  |
-| F     | Magenta    | #e879f9  |
-| F#/Gb | Pink       | #f472b6  |
-| G     | Rose       | #fb7185  |
-| G#/Ab | Amber      | #fbbf24  |
-| A     | Gold       | #facc15  |
-| A#/Bb | Lime       | #a3e635  |
-| B     | Emerald    | #34d399  |
+### 2. Chord = wispy white bloom
 
-- Token names: `--note-c, --note-cs, --note-d, --note-ds, --note-e, --note-f, --note-fs, --note-g, --note-gs, --note-a, --note-as, --note-b`. Rename cleanly and drop the old `--note-oat/cream/sage/...` tokens (only used by `noteColors.ts`, verified).
-- Update `CLASS_TO_TOKEN` in `noteColors.ts` to the new mapping. `NoteColor.name` becomes the color name from the table (used only in tooltips).
+Replace the teal fill with a soft, additive white bloom that reads as "lit from within".
 
-### 2. Register: bass / mid / high via elevation
+- Border: `1px solid rgba(255,255,255,0.85)` (was teal).
+- Background: `radial-gradient(circle at 50% 45%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.22) 35%, rgba(255,255,255,0.06) 65%, rgba(0,0,0,0.35) 100%)` — bright center, feathery falloff.
+- Outer glow shadow: `0 0 24px rgba(255,255,255,0.55), 0 0 48px rgba(255,255,255,0.25), inset 0 1px 0 rgba(255,255,255,0.35)`.
+- An extra absolutely-positioned `-inset-2` element with `filter: blur(10px)` and a translucent white radial gradient adds the "wispy" haze around the disc. Opacity animates gently (2.4s ease-in-out) via a keyframe `chord-breathe` (opacity 0.55 ↔ 0.85) so chord notes softly pulse.
+- Label stays white (unchanged).
 
-New helper `src/lib/music/register.ts`:
+### 3. Accent = halo from behind
 
-```ts
-export type Register = "bass" | "mid" | "high";
-// Bass < C3 (midi < 48), Mid C3–B4 (48–71), High ≥ C5 (midi ≥ 72)
-export function pitchRegister(pitch: string): Register { ... }
-```
+Accent discs stay dark in the center; the light source sits *behind* the sphere.
 
-**Handpan disc styling** (`HandpanField` in `src/routes/studio.scales.tsx`) — sizes and shadows scale by register, keeping the ding always slightly larger than a same-register ring slot:
+- Front sphere: dark radial fill `radial-gradient(circle at 32% 28%, rgba(255,255,255,0.05), rgba(0,0,0,0.75) 70%)` with a 1px `rgba(255,255,255,0.15)` border. No inner glow.
+- Behind halo: an absolutely-positioned sibling rendered *before* the button, `-inset-4`, `rounded-full`, `filter: blur(18px)`, `background: radial-gradient(circle, oklch(0.72 0.22 310 / 0.85) 0%, oklch(0.72 0.22 310 / 0.4) 45%, transparent 75%)`. This creates a violet corona that spills past the sphere edge.
+- Second halo layer with `-inset-1`, `rounded-full`, `boxShadow: 0 0 0 1px oklch(0.72 0.22 310 / 0.55)` — a hairline aura hugging the sphere so the eye still reads the disc boundary.
+- Halo opacity animates via `accent-pulse` keyframe (0.7 ↔ 1.0 over 1.8s) so the light "throbs" from behind. Removes the current `animate-pulse` inline ring.
+- Existing color chip below the Select stays untouched so admins still see the pitch-class color.
 
-- Bass:  ring 104 px / ding 124 px. Shadow `0 12px 28px rgba(0,0,0,0.55)` + inner top-highlight. Feels grounded.
-- Mid:   ring  88 px / ding 108 px. Current shadow (`0 6px 18px rgba(0,0,0,0.35)`). The reference size.
-- High:  ring  72 px / ding  92 px. Softer shadow `0 3px 10px rgba(0,0,0,0.25)` + a faint `translateY(-2px)` lift so it visually floats. Font size trims from `text-lg` → `text-base` so labels stay proportional.
+### 4. Small housekeeping
 
-The teal/violet chord/accent glows still override the shadow when a step is active — register elevation shows through as size only, so tone-state remains unambiguous.
-
-**Strum-bar ticks** (`StrumBar`) — tick dot radius follows the same tier so the strip reinforces the pan: bass = 12 px, mid = 8 px, high = 5 px. Same colors as before, just sized. Bead stays 14 px.
-
-**Filmstrip / anywhere else** — no changes; register is a property of the tone field only.
-
-### 3. Tiny UX polish that falls out for free
-
-- Tooltip on each disc now reads `A4 · Gold · High` (pitch · color name · register).
-- Labels under the pitch selects stay one line by using `text-[10px]` regardless of register.
-
-### Out of scope
-
-- No schema/DB changes. Palette and register are pure client-side derivations from the existing `pitches` array.
-- No changes to composer/audio/progression/filmstrip logic.
-- No new dependencies.
+- Update the "Tap to cycle" caption: **"Off → Chord (white) → Accent (violet halo) → Off"**.
+- Two new keyframes in `src/styles.css`: `chord-breathe` and `accent-pulse` (both `@keyframes` in the existing global block, matching the file's convention).
+- No changes to data, cycle logic, strum bar, or filmstrip.
 
 ### Files touched
 
-- `src/styles.css` — swap 12 CSS variables.
-- `src/lib/music/noteColors.ts` — new pitch-class → token map + names.
-- `src/lib/music/register.ts` — new file, ~15 lines.
-- `src/routes/studio.scales.tsx` — `HandpanField` slot sizing/shadow by register; `StrumBar` tick sizing by register; tooltip text.
+- `src/routes/studio.scales.tsx` — `HandpanField` sizing math + chord/accent style branches; caption text.
+- `src/styles.css` — two keyframes appended near the other `@keyframes` blocks.
+
+### Out of scope
+
+- Ring is still a single circle. Multi-ring layouts (inner + outer rings) for >18 notes would be a bigger UX change and can be a follow-up.
+- No changes to strum bar or filmstrip visuals.

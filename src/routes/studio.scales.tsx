@@ -125,7 +125,6 @@ function AdminUI() {
             <p className="text-sm text-foreground/60">Create a scale to get started.</p>
           )}
         </section>
-      </main>
     </div>
   );
 }

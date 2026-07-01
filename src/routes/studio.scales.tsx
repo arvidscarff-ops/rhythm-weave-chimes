@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { usePasscode } from "@/lib/admin/passcode-context";
 import { allPitchOptions, DEFAULT_PITCH } from "@/lib/music/pitch";
+import { noteColor } from "@/lib/music/noteColors";
 import { playPitch, primeAudio } from "@/lib/studio/handpanAudio";
 import {
   listAdminScales,

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { assertAdminSession } from "./gate.functions";
 import type { Humanization } from "./humanization";
+import type { TablesUpdate } from "@/integrations/supabase/types";
 
 export type AdminSlot = {
   id: string;
@@ -124,12 +125,12 @@ export const updateAdminPack = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await assertAdminSession();
     const supa = await admin();
-    const patch: Record<string, unknown> = {};
+    const patch: TablesUpdate<"packs"> = {};
     if (data.name !== undefined) patch.name = data.name;
     if (data.description !== undefined) patch.description = data.description;
     if (data.is_published !== undefined) patch.is_published = data.is_published;
     if (data.cover_image_url !== undefined) patch.cover_image_url = data.cover_image_url;
-    if (data.humanization !== undefined) patch.humanization = data.humanization;
+    if (data.humanization !== undefined) patch.humanization = data.humanization as unknown as TablesUpdate<"packs">["humanization"];
     const { error } = await supa.from("packs").update(patch).eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -160,14 +161,14 @@ export const updateAdminSlot = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await assertAdminSession();
     const supa = await admin();
-    const patch: Record<string, unknown> = {};
+    const patch: TablesUpdate<"pack_slots"> = {};
     if (data.sample_id !== undefined) patch.sample_id = data.sample_id;
     if (data.label !== undefined) patch.label = data.label;
     if (data.gain_db !== undefined) patch.gain_db = data.gain_db;
     if (data.pan !== undefined) patch.pan = data.pan;
     if (data.pitch_offset_semitones !== undefined)
       patch.pitch_offset_semitones = data.pitch_offset_semitones;
-    if (data.humanization !== undefined) patch.humanization = data.humanization;
+    if (data.humanization !== undefined) patch.humanization = data.humanization as unknown as TablesUpdate<"pack_slots">["humanization"];
     const { error } = await supa.from("pack_slots").update(patch).eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };

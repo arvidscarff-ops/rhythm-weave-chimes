@@ -109,11 +109,37 @@ function DevConsole() {
     if (!packId) { setSlots([]); return; }
     const { data, error } = await supabase
       .from("pack_slots")
-      .select("*")
+      .select("*, pack_slot_samples(sample_id, position)")
       .eq("pack_id", packId)
       .order("slot_index");
-    if (error) setError(error.message);
-    else setSlots((data ?? []) as Slot[]);
+    if (error) { setError(error.message); return; }
+    type Row = {
+      id: string;
+      pack_id: string;
+      slot_index: number;
+      label: string | null;
+      gain_db: number;
+      pan: number;
+      pitch_offset_semitones: number;
+      pack_slot_samples: Array<{ sample_id: string; position: number }> | null;
+    };
+    setSlots(
+      ((data ?? []) as unknown as Row[]).map((r) => {
+        const first = (r.pack_slot_samples ?? [])
+          .slice()
+          .sort((a, b) => a.position - b.position)[0];
+        return {
+          id: r.id,
+          pack_id: r.pack_id,
+          slot_index: r.slot_index,
+          sample_id: first?.sample_id ?? null,
+          label: r.label,
+          gain_db: r.gain_db,
+          pan: r.pan,
+          pitch_offset_semitones: r.pitch_offset_semitones,
+        };
+      }),
+    );
   }, []);
 
   useEffect(() => {
@@ -138,9 +164,8 @@ function DevConsole() {
       .single();
     setBusy(false);
     if (error) { setError(error.message); return; }
-    // initialise 6 empty slots
-    const rows = Array.from({ length: 6 }, (_, i) => ({ pack_id: data.id, slot_index: i }));
-    await supabase.from("pack_slots").insert(rows);
+    // initialise 1 empty slot; dynamic pack model
+    await supabase.from("pack_slots").insert({ pack_id: data.id, slot_index: 0 });
     await refreshPacks();
     setSelectedPackId(data.id);
   };
@@ -359,7 +384,18 @@ function SlotsEditor({
   onDelete: (id: string) => void;
 }) {
   const update = async (slot: Slot, patch: Partial<Slot>) => {
-    await supabase.from("pack_slots").update(patch).eq("id", slot.id);
+    const { sample_id, ...slotPatch } = patch;
+    if (Object.keys(slotPatch).length > 0) {
+      await supabase.from("pack_slots").update(slotPatch).eq("id", slot.id);
+    }
+    if (sample_id !== undefined) {
+      await supabase.from("pack_slot_samples").delete().eq("slot_id", slot.id);
+      if (sample_id) {
+        await supabase
+          .from("pack_slot_samples")
+          .insert({ slot_id: slot.id, sample_id, position: 0 });
+      }
+    }
     onChange();
   };
 

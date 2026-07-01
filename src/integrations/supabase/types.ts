@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      pack_slot_samples: {
+        Row: {
+          created_at: string
+          id: string
+          position: number
+          sample_id: string
+          slot_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          position: number
+          sample_id: string
+          slot_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          position?: number
+          sample_id?: string
+          slot_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pack_slot_samples_sample_id_fkey"
+            columns: ["sample_id"]
+            isOneToOne: false
+            referencedRelation: "samples"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pack_slot_samples_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: false
+            referencedRelation: "pack_slots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pack_slots: {
         Row: {
           created_at: string
@@ -24,7 +63,6 @@ export type Database = {
           pack_id: string
           pan: number
           pitch_offset_semitones: number
-          sample_id: string | null
           slot_index: number
         }
         Insert: {
@@ -36,7 +74,6 @@ export type Database = {
           pack_id: string
           pan?: number
           pitch_offset_semitones?: number
-          sample_id?: string | null
           slot_index: number
         }
         Update: {
@@ -48,7 +85,6 @@ export type Database = {
           pack_id?: string
           pan?: number
           pitch_offset_semitones?: number
-          sample_id?: string | null
           slot_index?: number
         }
         Relationships: [
@@ -57,13 +93,6 @@ export type Database = {
             columns: ["pack_id"]
             isOneToOne: false
             referencedRelation: "packs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pack_slots_sample_id_fkey"
-            columns: ["sample_id"]
-            isOneToOne: false
-            referencedRelation: "samples"
             referencedColumns: ["id"]
           },
         ]

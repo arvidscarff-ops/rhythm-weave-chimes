@@ -1,53 +1,36 @@
-## Adaptive Handpan sizing + reworked chord / accent glow
+## Per-step strum in the filmstrip
 
-### 1. Adaptive layout (crowding fix)
+Add a small strum button to each step block in the chord-progression filmstrip so the user can audition any step's assigned notes without having to select it, plus a "play all" that walks through every step back-to-back.
 
-Drive everything from `n = pitches.length` in `HandpanField`.
+### Per-step strum button
 
-- **Field size** grows with count so it always fits its own container:
-  - `size = clamp(460, 460 + max(0, n - 9) * 22, 620)` (max 620px so it never eats the sidebar).
-  - `ringRadius = size / 2 - maxRingSlotSize / 2 - 14` — derived, so ring slots always sit inside the disc with a hair of padding.
-- **Slot sizing** gets a global `scale` multiplier on top of the register-based sizes (bass 104 / mid 88 / high 72; ding 124 / 108 / 92):
-  - `n ≤ 9`  → scale 1.00
-  - `n = 10–12` → scale 0.90
-  - `n = 13–16` → scale 0.78
-  - `n ≥ 17` → scale 0.68
-- **Angular spacing** already spreads evenly via `((i-1)/ringSlots) * 2π`. The combination of larger radius + smaller slots restores the visible gap between neighbors at 14+ notes. No overlap even at n=24.
-- **Label + chip scaling** — when `scale < 0.85` the disc label drops one step (`text-lg → text-base → text-sm`) and the color chip + Select shrink to `h-5` so nothing spills off the disc.
-- **Ding placement** — stays centered; its radius doesn't need to change with n, only with register + scale.
+- Add a compact play/strum icon-button in the top-right of every `FilmstripBlock` (next to the trash icon area, always visible — not hover-only).
+- Clicking it:
+  - Calls `primeAudio()` once.
+  - Collects that step's assigned tones = union of `step.chord_tones` and `step.accent_tones`, mapped to their pitches via the scale, sorted low-to-high by MIDI (same logic used in `StrumBar`'s `sorted`).
+  - Fires `playPitch(pitch)` for each tone spaced by `STRUM_STEP_MS` (60ms), matching the handpan strum feel.
+  - Does not change `activeStepId` — the user keeps editing the current step while previewing others.
+  - `e.stopPropagation()` so the click doesn't also select the step.
+- Visual feedback: a subtle teal sweep line inside the block during playback (reuses the existing `strumFill` keyframe, duration = `tones * STRUM_STEP_MS`), plus a brief press state on the button. Disable the button while its own sweep is running.
+- If the step has zero assigned tones, render the button in a dimmed disabled state with tooltip "No chord/accent notes yet".
 
-### 2. Chord = wispy white bloom
+### Play-all-steps button
 
-Replace the teal fill with a soft, additive white bloom that reads as "lit from within".
+- Add a "Play all" button next to the existing "Add step" button in the filmstrip toolbar row.
+- Sequentially strums each step in `step_order`. Between steps, wait `stepTones * STRUM_STEP_MS + 200ms` gap so the ear can separate them. Not tempo/bar-aware — this is a working preview, not a full playback engine.
+- While running, the button becomes "Stop" and cancels all pending timeouts on click. Steps light up their sweep line as they play (drive by passing an `isPlaying` prop into the currently-playing block, or a shared `playingStepId` state in `Filmstrip`).
 
-- Border: `1px solid rgba(255,255,255,0.85)` (was teal).
-- Background: `radial-gradient(circle at 50% 45%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.22) 35%, rgba(255,255,255,0.06) 65%, rgba(0,0,0,0.35) 100%)` — bright center, feathery falloff.
-- Outer glow shadow: `0 0 24px rgba(255,255,255,0.55), 0 0 48px rgba(255,255,255,0.25), inset 0 1px 0 rgba(255,255,255,0.35)`.
-- An extra absolutely-positioned `-inset-2` element with `filter: blur(10px)` and a translucent white radial gradient adds the "wispy" haze around the disc. Opacity animates gently (2.4s ease-in-out) via a keyframe `chord-breathe` (opacity 0.55 ↔ 0.85) so chord notes softly pulse.
-- Label stays white (unchanged).
+### Technical notes
 
-### 3. Accent = halo from behind
-
-Accent discs stay dark in the center; the light source sits *behind* the sphere.
-
-- Front sphere: dark radial fill `radial-gradient(circle at 32% 28%, rgba(255,255,255,0.05), rgba(0,0,0,0.75) 70%)` with a 1px `rgba(255,255,255,0.15)` border. No inner glow.
-- Behind halo: an absolutely-positioned sibling rendered *before* the button, `-inset-4`, `rounded-full`, `filter: blur(18px)`, `background: radial-gradient(circle, oklch(0.72 0.22 310 / 0.85) 0%, oklch(0.72 0.22 310 / 0.4) 45%, transparent 75%)`. This creates a violet corona that spills past the sphere edge.
-- Second halo layer with `-inset-1`, `rounded-full`, `boxShadow: 0 0 0 1px oklch(0.72 0.22 310 / 0.55)` — a hairline aura hugging the sphere so the eye still reads the disc boundary.
-- Halo opacity animates via `accent-pulse` keyframe (0.7 ↔ 1.0 over 1.8s) so the light "throbs" from behind. Removes the current `animate-pulse` inline ring.
-- Existing color chip below the Select stays untouched so admins still see the pitch-class color.
-
-### 4. Small housekeeping
-
-- Update the "Tap to cycle" caption: **"Off → Chord (white) → Accent (violet halo) → Off"**.
-- Two new keyframes in `src/styles.css`: `chord-breathe` and `accent-pulse` (both `@keyframes` in the existing global block, matching the file's convention).
-- No changes to data, cycle logic, strum bar, or filmstrip.
-
-### Files touched
-
-- `src/routes/studio.scales.tsx` — `HandpanField` sizing math + chord/accent style branches; caption text.
-- `src/styles.css` — two keyframes appended near the other `@keyframes` blocks.
+- New helper inside `studio.scales.tsx`:
+  ```ts
+  function stepPitchesSorted(step, pitches): string[]
+  ```
+  returning the union of `chord_tones` + `accent_tones` resolved to pitches, sorted by `pitchToMidi` ascending, with a graceful fallback for unparsable pitches.
+- Lift audio calls into `Filmstrip`: pass `pitches: string[]` and `onStrikePitch: (pitch: string) => void` props down from the parent (same `primeAudio` + `playPitch` used by the main `StrumBar`). `FilmstripBlock` owns its own timer refs and clears them on unmount.
+- No changes to data model, server functions, or persisted state — this is playback-only.
+- Files touched: `src/routes/studio.scales.tsx` only.
 
 ### Out of scope
 
-- Ring is still a single circle. Multi-ring layouts (inner + outer rings) for >18 notes would be a bigger UX change and can be a follow-up.
-- No changes to strum bar or filmstrip visuals.
+- Tempo-aware or bars-aware playback, metronome sync, chord/accent volume differentiation, MIDI export, or a full progression sequencer. Just an ergonomic audition button.

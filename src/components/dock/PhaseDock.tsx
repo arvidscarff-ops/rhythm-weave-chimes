@@ -985,8 +985,8 @@ function MoreMenu({
             <Info className="h-4 w-4" /> About
           </DropdownMenuPageTrigger>
           <DropdownMenuItem asChild>
-            <Link to="/dev" className="flex w-full items-center gap-2">
-              <Wrench className="h-4 w-4" /> Developer console
+            <Link to="/studio" className="flex w-full items-center gap-2">
+              <FolderOpen className="h-4 w-4" /> My Studio
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -1016,13 +1016,6 @@ function MoreMenu({
             <LogIn className="h-4 w-4" /> Sign in
           </Link>
         </DropdownMenuItem>
-          )}
-          {authed && (
-            <DropdownMenuItem asChild>
-              <Link to="/studio" className="flex w-full items-center gap-2">
-                <FolderOpen className="h-4 w-4" /> My Studio
-              </Link>
-            </DropdownMenuItem>
           )}
         </DropdownMenuPage>
 

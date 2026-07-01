@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as StudioRouteImport } from './routes/studio'
-import { Route as DevRouteImport } from './routes/dev'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
@@ -23,11 +22,6 @@ import { Route as AdminPacksRouteImport } from './routes/admin.packs'
 const StudioRoute = StudioRouteImport.update({
   id: '/studio',
   path: '/studio',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevRoute = DevRouteImport.update({
-  id: '/dev',
-  path: '/dev',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -74,7 +68,6 @@ const AdminPacksRoute = AdminPacksRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/dev': typeof DevRoute
   '/studio': typeof StudioRouteWithChildren
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
@@ -86,7 +79,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/dev': typeof DevRoute
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
   '/admin/unlock': typeof AdminUnlockRoute
@@ -98,7 +90,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/dev': typeof DevRoute
   '/studio': typeof StudioRouteWithChildren
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
@@ -112,7 +103,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
-    | '/dev'
     | '/studio'
     | '/admin/packs'
     | '/admin/scales'
@@ -124,7 +114,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
-    | '/dev'
     | '/admin/packs'
     | '/admin/scales'
     | '/admin/unlock'
@@ -135,7 +124,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/auth'
-    | '/dev'
     | '/studio'
     | '/admin/packs'
     | '/admin/scales'
@@ -148,7 +136,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
-  DevRoute: typeof DevRoute
   StudioRoute: typeof StudioRouteWithChildren
   AdminPacksRoute: typeof AdminPacksRoute
   AdminScalesRoute: typeof AdminScalesRoute
@@ -162,13 +149,6 @@ declare module '@tanstack/react-router' {
       path: '/studio'
       fullPath: '/studio'
       preLoaderRoute: typeof StudioRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dev': {
-      id: '/dev'
-      path: '/dev'
-      fullPath: '/dev'
-      preLoaderRoute: typeof DevRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -248,7 +228,6 @@ const StudioRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
-  DevRoute: DevRoute,
   StudioRoute: StudioRouteWithChildren,
   AdminPacksRoute: AdminPacksRoute,
   AdminScalesRoute: AdminScalesRoute,

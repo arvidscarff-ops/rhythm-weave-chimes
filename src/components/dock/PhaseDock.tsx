@@ -585,6 +585,16 @@ function ComposeMenu({
   const qc = useQueryClient();
   const list = useServerFn(listMyPresets);
   const save = useServerFn(savePreset);
+  const fetchScales = useServerFn(fetchPublishedScales);
+  const scalesQ = useQuery({
+    queryKey: ["published-scales"],
+    queryFn: () => fetchScales(),
+    staleTime: 30_000,
+  });
+  const scales = scalesQ.data ?? [];
+  const currentScale =
+    scales.find((s) => s.id === composer.scale) ?? scales[0];
+  const currentScaleLabel = currentScale?.name ?? "—";
   const presetsQ = useQuery({
     queryKey: ["my-presets"],
     queryFn: () => list(),

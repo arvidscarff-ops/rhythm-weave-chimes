@@ -19,6 +19,7 @@ import {
 import {
   BUILTIN_RUNTIME_PACKS,
   fetchCustomPacks,
+  fetchPublishedPacks,
   triggerPackVoice,
   warmCustomPack,
   type RuntimePack,
@@ -1392,8 +1393,15 @@ function PhaseApp() {
     let cancelled = false;
     const load = async () => {
       try {
-        const list = await fetchCustomPacks();
-        if (!cancelled) setCustomPacks(list);
+        const [mine, published] = await Promise.all([
+          fetchCustomPacks().catch(() => []),
+          fetchPublishedPacks().catch(() => []),
+        ]);
+        // Merge, dedupe by id, prefer published entry
+        const byId = new Map<string, (typeof published)[number]>();
+        for (const p of mine) byId.set(p.id, p);
+        for (const p of published) byId.set(p.id, p);
+        if (!cancelled) setCustomPacks(Array.from(byId.values()));
       } catch (err) {
         console.warn("[packs] custom fetch failed", err);
       }

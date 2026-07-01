@@ -2,7 +2,7 @@ import type { SceneKind } from "@/routes/index.tsx";
 import type { FxState, ReverbType, ChorusType, GrainType, ToneType } from "@/lib/fx/fxState";
 import type { NeuralSettings } from "@/lib/neural/palette";
 import type { ComposerSettings, SlotSettings } from "@/lib/music/composer";
-import type { RootName, ScaleId } from "@/lib/music/scales";
+import type { RootName } from "@/lib/music/scales";
 import type {
   WheelState,
   WheelRing,
@@ -36,7 +36,7 @@ export type SessionState = {
   };
   pack: string;
   neural: { p: string; o: number; s: number };
-  composer: { e: boolean; r: RootName; sc: ScaleId; slots: SlotSettings[] };
+  composer: { e: boolean; r: RootName; sc: string; slots: SlotSettings[] };
   wheel: {
     rings: {
       rf: number;

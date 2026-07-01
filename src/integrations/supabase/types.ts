@@ -21,6 +21,7 @@ export type Database = {
           intervals: number[]
           is_published: boolean
           name: string
+          pitches: string[] | null
           pool_size: number
           updated_at: string
         }
@@ -30,6 +31,7 @@ export type Database = {
           intervals?: number[]
           is_published?: boolean
           name: string
+          pitches?: string[] | null
           pool_size?: number
           updated_at?: string
         }
@@ -39,6 +41,7 @@ export type Database = {
           intervals?: number[]
           is_published?: boolean
           name?: string
+          pitches?: string[] | null
           pool_size?: number
           updated_at?: string
         }

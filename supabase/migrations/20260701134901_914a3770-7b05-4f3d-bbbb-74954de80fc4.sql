@@ -1,0 +1,1 @@
+ALTER TABLE public.custom_scales ADD COLUMN IF NOT EXISTS pitches text[];

@@ -329,3 +329,21 @@ button.pr-rail-link { background: transparent; border: 0; cursor: pointer; }
   -ms-overflow-style: none;
   &::-webkit-scrollbar { display: none; }
 }
+
+@keyframes glow-breathe {
+  0%, 100% { opacity: 0.35; filter: blur(28px); }
+  50%      { opacity: 0.6;  filter: blur(38px); }
+}
+
+@keyframes keypad-shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-8px); }
+  40%, 60% { transform: translateX(8px); }
+}
+
+@keyframes haze-drift {
+  0%   { transform: translate3d(-8%, -6%, 0) scale(1); }
+  50%  { transform: translate3d( 8%,  6%, 0) scale(1.15); }
+  100% { transform: translate3d(-8%, -6%, 0) scale(1); }
+}

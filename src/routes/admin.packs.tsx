@@ -192,6 +192,7 @@ function AdminUI() {
 
 function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void }) {
   const qc = useQueryClient();
+  const { get: getPass } = usePasscode();
   const update = useServerFn(updateAdminPack);
   const signCover = useServerFn(signedCoverUrl);
   const [name, setName] = useState(pack.name);
@@ -207,14 +208,15 @@ function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void 
     setHumanization(pack.humanization ?? DEFAULT_HUMANIZATION);
     setCoverPreview(null);
     if (pack.cover_image_url) {
-      signCover({ data: { storage_path: pack.cover_image_url } })
+      signCover({ data: { passcode: getPass(), storage_path: pack.cover_image_url } })
         .then((r) => setCoverPreview(r.url))
         .catch(() => {});
     }
-  }, [pack.id, pack.cover_image_url, pack.name, pack.description, pack.humanization, signCover]);
+  }, [pack.id, pack.cover_image_url, pack.name, pack.description, pack.humanization, signCover, getPass]);
 
   const saveMut = useMutation({
-    mutationFn: (patch: Parameters<typeof update>[0]["data"]) => update({ data: patch }),
+    mutationFn: (patch: Omit<Parameters<typeof update>[0]["data"], "passcode">) =>
+      update({ data: { ...patch, passcode: getPass() } }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "packs"] });
       toast.success("Saved");
@@ -222,7 +224,7 @@ function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void 
   });
 
   const publishMut = useMutation({
-    mutationFn: (v: boolean) => update({ data: { id: pack.id, is_published: v } }),
+    mutationFn: (v: boolean) => update({ data: { passcode: getPass(), id: pack.id, is_published: v } }),
     onSuccess: (_r, v) => {
       qc.invalidateQueries({ queryKey: ["admin", "packs"] });
       toast.success(v ? "Published" : "Unpublished");

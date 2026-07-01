@@ -1,56 +1,65 @@
-## Strummer feature — Handpan Tone Field
+## Note palette refresh + register elevation cue
 
-Add a small, tactile strummer bar directly beneath the Handpan disc, above the "Tap to cycle" caption. Two controls, one purpose: hear the whole scale fast.
+Two coordinated changes to make register instantly readable while keeping pitch-class color meaningful.
 
-### Layout
+### 1. New "Aurora Spectrum" palette (12 hues)
 
-```text
-┌──────────────────────────────────────────────────────────┐
-│  ● ─────────────────●───────────────────  [▶ Strum all] │
-│  B2  F#3  G3  B3  D4  E4  F#4  A4        (auto button)  │
-└──────────────────────────────────────────────────────────┘
+Replace the existing Boldest Co. tokens in `src/styles.css` and `src/lib/music/noteColors.ts` with a bright, chromatic set that reads well on the dark studio background. Each pitch class gets its own hue; the sequence walks the color wheel so a chromatic run looks like a rainbow and enharmonic pairs share a hue.
+
+| Pitch | Name       | Hex      |
+|-------|------------|----------|
+| C     | Teal       | #5eead4  |
+| C#/Db | Cyan       | #38bdf8  |
+| D     | Sky        | #60a5fa  |
+| D#/Eb | Indigo     | #818cf8  |
+| E     | Violet     | #a78bfa  |
+| F     | Magenta    | #e879f9  |
+| F#/Gb | Pink       | #f472b6  |
+| G     | Rose       | #fb7185  |
+| G#/Ab | Amber      | #fbbf24  |
+| A     | Gold       | #facc15  |
+| A#/Bb | Lime       | #a3e635  |
+| B     | Emerald    | #34d399  |
+
+- Token names: `--note-c, --note-cs, --note-d, --note-ds, --note-e, --note-f, --note-fs, --note-g, --note-gs, --note-a, --note-as, --note-b`. Rename cleanly and drop the old `--note-oat/cream/sage/...` tokens (only used by `noteColors.ts`, verified).
+- Update `CLASS_TO_TOKEN` in `noteColors.ts` to the new mapping. `NoteColor.name` becomes the color name from the table (used only in tooltips).
+
+### 2. Register: bass / mid / high via elevation
+
+New helper `src/lib/music/register.ts`:
+
+```ts
+export type Register = "bass" | "mid" | "high";
+// Bass < C3 (midi < 48), Mid C3–B4 (48–71), High ≥ C5 (midi ≥ 72)
+export function pitchRegister(pitch: string): Register { ... }
 ```
 
-- Full-width glass strip, ~64px tall, sitting between the pan and the "Tap to cycle" hint.
-- Left ~80%: the **manual strum bar**. Right ~20%: the **auto-strum button**.
+**Handpan disc styling** (`HandpanField` in `src/routes/studio.scales.tsx`) — sizes and shadows scale by register, keeping the ding always slightly larger than a same-register ring slot:
 
-### Manual strum bar
+- Bass:  ring 104 px / ding 124 px. Shadow `0 12px 28px rgba(0,0,0,0.55)` + inner top-highlight. Feels grounded.
+- Mid:   ring  88 px / ding 108 px. Current shadow (`0 6px 18px rgba(0,0,0,0.35)`). The reference size.
+- High:  ring  72 px / ding  92 px. Softer shadow `0 3px 10px rgba(0,0,0,0.25)` + a faint `translateY(-2px)` lift so it visually floats. Font size trims from `text-lg` → `text-base` so labels stay proportional.
 
-- 9 vertical tick marks (one per note), spaced evenly low→high left-to-right. Each tick is colored with its `noteColor()` chip and labeled underneath (`B2`, `F#3`…).
-- A glowing **plectrum bead** (12px teal disc, soft outer glow) sits on the bar. Drag it horizontally with pointer events (`setPointerCapture` on the bar). Also draggable by clicking anywhere on the bar and sweeping — the bead jumps to the pointer.
-- As the bead **crosses** a tick (moves past its x-position in either direction), fire `playPitch(pitches[i])` exactly once for that crossing. Track the last tick index; only fire when the current index changes. This gives a perfectly linear harp-strum feel — fast sweep = fast roll, slow drag = individual notes.
-- The tick that just fired pulses briefly (150ms scale + glow) so the strum is visible as well as audible. The corresponding disc on the pan above also flashes (reuse a lightweight ring pulse on the matching `HandpanField` slot).
-- Release the pointer → bead stays where it landed. Double-click the bar → bead resets to the far left.
+The teal/violet chord/accent glows still override the shadow when a step is active — register elevation shows through as size only, so tone-state remains unambiguous.
 
-### Auto-strum button
+**Strum-bar ticks** (`StrumBar`) — tick dot radius follows the same tier so the strip reinforces the pan: bass = 12 px, mid = 8 px, high = 5 px. Same colors as before, just sized. Bead stays 14 px.
 
-- Rounded pill button with a "sweep" icon (custom svg: three ascending bars + arrow) and label **"Strum all"**. Sits at the right of the strip.
-- On click: sort the current 9 pitches **low → high** (via `pitchToMidi`), then fire them 60ms apart using `setTimeout` chained through the sorted list. Same visual pulse on each tick + pan disc as the manual strum.
-- Button becomes disabled + shows a subtle progress fill (teal bar sweeping left→right across the button background) for the ~540ms duration, then re-enables. Prevents overlap-spam.
-- Also plays the animation on the manual strum bar's bead — it glides left→right in sync with the auto sweep, reinforcing what the control does.
+**Filmstrip / anywhere else** — no changes; register is a property of the tone field only.
 
-### Sort + note order
+### 3. Tiny UX polish that falls out for free
 
-- Sort by MIDI ascending. Ties (unlikely) keep original slot order. The bar labels always reflect the sorted order, so the leftmost tick = lowest pitch on the pan, regardless of physical slot position. This is intentional — the strummer is a **listening tool**, not a slot inspector; the pan itself already shows physical layout.
-- When the admin changes a note in the pan (via the Select or `-/+`), the strum bar rebuilds its ticks in the new sort order on the next render.
-
-### State / integration
-
-- New component `StrumBar` inside `src/routes/studio.scales.tsx` (co-located; small enough not to warrant its own file). Props: `pitches: string[]`, `onStrike?: (slotIndex: number) => void`.
-- `onStrike` bubbles to `ScaleEditor`, which triggers the existing pan-disc pulse (add a `flashSlot` ref/state on `HandpanField`, keyed by `slotIndex` + timestamp so repeat strikes re-fire the animation).
-- Audio uses the existing `playPitch` from `@/lib/studio/handpanAudio` — the polyphonic anti-choke path already handles overlapping strums.
-- No schema changes, no server-fn changes, no changes to the composer/progression, no changes to the filmstrip.
-
-### Visual polish
-
-- Bar background: `bg-white/5 backdrop-blur` + inner border `border-white/10`, matching the existing filmstrip glass.
-- Tick baseline: 1px `bg-white/15` horizontal rule through the middle.
-- Bead: teal radial gradient (`oklch(0.78 0.16 195)`) with `filter: drop-shadow(0 0 8px …)`, `cursor-grab` → `cursor-grabbing` on drag.
-- Auto button: same glass surface, teal ring on hover, teal glow while sweeping.
-- Ding (slot 0) is included in the strum just like a ring note.
+- Tooltip on each disc now reads `A4 · Gold · High` (pitch · color name · register).
+- Labels under the pitch selects stay one line by using `text-[10px]` regardless of register.
 
 ### Out of scope
 
-- No MIDI export, no recording, no tempo-synced strum (fixed 60ms as agreed).
-- No changes to the 3-state chord/accent toggle or filmstrip resize handles.
-- No changes to composer or runtime audio engine.
+- No schema/DB changes. Palette and register are pure client-side derivations from the existing `pitches` array.
+- No changes to composer/audio/progression/filmstrip logic.
+- No new dependencies.
+
+### Files touched
+
+- `src/styles.css` — swap 12 CSS variables.
+- `src/lib/music/noteColors.ts` — new pitch-class → token map + names.
+- `src/lib/music/register.ts` — new file, ~15 lines.
+- `src/routes/studio.scales.tsx` — `HandpanField` slot sizing/shadow by register; `StrumBar` tick sizing by register; tooltip text.

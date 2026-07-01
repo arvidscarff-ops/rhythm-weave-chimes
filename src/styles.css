@@ -134,19 +134,19 @@
 
 /* Polyrhythm app tokens */
 :root {
-  /* Handpan note palette (Boldest Co.) — pitch class → color */
-  --note-oat: #EBDCC7;
-  --note-cream: #EBDEA6;
-  --note-sage: #BBC5AB;
-  --note-peach: #F09E7D;
-  --note-honey: #F8991D;
-  --note-spicy: #FC4024;
-  --note-femme: #EF4782;
-  --note-dessert: #8552A0;
-  --note-butch: #9F8D32;
-  --note-basil: #00784F;
-  --note-proud: #00859C;
-  --note-pine: #004242;
+  /* Handpan note palette (Aurora Spectrum) — pitch class → color */
+  --note-c:  #5eead4;
+  --note-cs: #38bdf8;
+  --note-d:  #60a5fa;
+  --note-ds: #818cf8;
+  --note-e:  #a78bfa;
+  --note-f:  #e879f9;
+  --note-fs: #f472b6;
+  --note-g:  #fb7185;
+  --note-gs: #fbbf24;
+  --note-a:  #facc15;
+  --note-as: #a3e635;
+  --note-b:  #34d399;
 
   --pr-bg: oklch(36% 0.045 200);
   --pr-bg-2: oklch(28% 0.04 205);

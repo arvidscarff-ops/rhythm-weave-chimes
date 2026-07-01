@@ -19,18 +19,18 @@ const PITCH_CLASS: Record<string, number> = {
 };
 
 const CLASS_TO_TOKEN: Record<number, { name: string; token: string }> = {
-  0:  { name: "Spicy",   token: "--note-spicy" },
-  1:  { name: "Femme",   token: "--note-femme" },
-  2:  { name: "Honey",   token: "--note-honey" },
-  3:  { name: "Dessert", token: "--note-dessert" },
-  4:  { name: "Cream",   token: "--note-cream" },
-  5:  { name: "Peach",   token: "--note-peach" },
-  6:  { name: "Proud",   token: "--note-proud" },
-  7:  { name: "Basil",   token: "--note-basil" },
-  8:  { name: "Butch",   token: "--note-butch" },
-  9:  { name: "Sage",    token: "--note-sage" },
-  10: { name: "Pine",    token: "--note-pine" },
-  11: { name: "Oat",     token: "--note-oat" },
+  0:  { name: "Teal",    token: "--note-c"  },
+  1:  { name: "Cyan",    token: "--note-cs" },
+  2:  { name: "Sky",     token: "--note-d"  },
+  3:  { name: "Indigo",  token: "--note-ds" },
+  4:  { name: "Violet",  token: "--note-e"  },
+  5:  { name: "Magenta", token: "--note-f"  },
+  6:  { name: "Pink",    token: "--note-fs" },
+  7:  { name: "Rose",    token: "--note-g"  },
+  8:  { name: "Amber",   token: "--note-gs" },
+  9:  { name: "Gold",    token: "--note-a"  },
+  10: { name: "Lime",    token: "--note-as" },
+  11: { name: "Emerald", token: "--note-b"  },
 };
 
 export type NoteColor = { name: string; token: string; cssVar: string };

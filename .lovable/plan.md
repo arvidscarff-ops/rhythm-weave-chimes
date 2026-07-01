@@ -1,54 +1,56 @@
-## Confirmed
+## Strummer feature — Handpan Tone Field
 
-**3-state toggle cycle** on each Handpan note slot (for the currently active step):
-`Off → Chord → Accent → Off` (repeat). Slot index `i` maps to a tone number in the step's arrays:
-- Off: not present in either array
-- Chord: present in `chord_tones`, absent from `accent_tones`
-- Accent: present in `accent_tones`, absent from `chord_tones` (mutually exclusive so cycling is unambiguous)
+Add a small, tactile strummer bar directly beneath the Handpan disc, above the "Tap to cycle" caption. Two controls, one purpose: hear the whole scale fast.
 
-Every click still fires `playPitch(pitches[i])` so the admin hears the chord assemble.
+### Layout
 
-**Filmstrip layout:** horizontal scroll strip above the Handpan. Each block is a glass card whose *width* is derived from `duration_bars` (e.g. `72 + duration*36 px`, clamped 1–32). Active block gets a bright teal ring + glow; inactive blocks are dim glass. Trailing "+ Add step" tile calls `addProgressionStep`.
+```text
+┌──────────────────────────────────────────────────────────┐
+│  ● ─────────────────●───────────────────  [▶ Strum all] │
+│  B2  F#3  G3  B3  D4  E4  F#4  A4        (auto button)  │
+└──────────────────────────────────────────────────────────┘
+```
 
-**Drag-to-resize handles:** each block has a 6px-wide vertical grabber on its left and right edges (`cursor-ew-resize`). On `pointerdown` I capture the pointer, record `startX` and `startDuration`, and on `pointermove` compute `next = clamp(round(startDuration + (dx / PX_PER_BAR) * sign), 1, 32)` where `sign` = +1 for the right handle and −1 for the left. The block's width updates live from local state so the drag feels physical. On `pointerup` (or if the value changed) I call `updateProgressionStep({ duration_bars })` once — no per-pixel network chatter. Pointer capture on the handle element keeps the drag alive even if the cursor leaves the block.
+- Full-width glass strip, ~64px tall, sitting between the pan and the "Tap to cycle" hint.
+- Left ~80%: the **manual strum bar**. Right ~20%: the **auto-strum button**.
 
-## Component changes (`src/routes/studio.scales.tsx`)
+### Manual strum bar
 
-1. **Lift active-step state into `ScaleEditor`:** `const [activeStepId, setActiveStepId] = useState<string | null>(null)`; default to `scale.steps[0]?.id` (and reset when it disappears). Pass `activeStep` down to `HandpanField`.
+- 9 vertical tick marks (one per note), spaced evenly low→high left-to-right. Each tick is colored with its `noteColor()` chip and labeled underneath (`B2`, `F#3`…).
+- A glowing **plectrum bead** (12px teal disc, soft outer glow) sits on the bar. Drag it horizontally with pointer events (`setPointerCapture` on the bar). Also draggable by clicking anywhere on the bar and sweeping — the bead jumps to the pointer.
+- As the bead **crosses** a tick (moves past its x-position in either direction), fire `playPitch(pitches[i])` exactly once for that crossing. Track the last tick index; only fire when the current index changes. This gives a perfectly linear harp-strum feel — fast sweep = fast roll, slow drag = individual notes.
+- The tick that just fired pulses briefly (150ms scale + glow) so the strum is visible as well as audible. The corresponding disc on the pan above also flashes (reuse a lightweight ring pulse on the matching `HandpanField` slot).
+- Release the pointer → bead stays where it landed. Double-click the bar → bead resets to the far left.
 
-2. **New `<Filmstrip>` component** — replaces the `ProgressionStepCard` grid.
-   - Renders each step as a `FilmstripBlock` with: step number badge, "N BARS" label, small chord/accent count chips, trash icon on hover.
-   - Active block: `ring-2 ring-teal-300/70` + outer glow via `boxShadow`.
-   - "+ Add step" tile at the end, calls existing `addStepMut` and selects the new step on success.
+### Auto-strum button
 
-3. **`FilmstripBlock`** — glass card, width driven by `duration_bars` (local optimistic state during drag), with left/right `<ResizeHandle>` children. Committing calls `updateProgressionStep({ duration_bars })` via the existing pattern.
+- Rounded pill button with a "sweep" icon (custom svg: three ascending bars + arrow) and label **"Strum all"**. Sits at the right of the strip.
+- On click: sort the current 9 pitches **low → high** (via `pitchToMidi`), then fire them 60ms apart using `setTimeout` chained through the sorted list. Same visual pulse on each tick + pan disc as the manual strum.
+- Button becomes disabled + shows a subtle progress fill (teal bar sweeping left→right across the button background) for the ~540ms duration, then re-enables. Prevents overlap-spam.
+- Also plays the animation on the manual strum bar's bead — it glides left→right in sync with the auto sweep, reinforcing what the control does.
 
-4. **`HandpanField` — three-state mode.**
-   - New optional props: `activeStep`, `onToggleTone(idx)`. When `activeStep` is provided, the ring buttons cycle Off→Chord→Accent instead of just striking.
-   - Visual mapping per slot `i`:
-     - Off: current dim disc, opacity 0.45, no fill glow.
-     - Chord: solid teal fill (`--pr-melo` / teal-400 gradient) with strong inner light.
-     - Accent: hollow disc with pulsing purple ring (`--pr-bass` / violet-400 outer glow, transparent fill).
-   - Existing pitch color chip beside each Select stays so admins still see which note is which.
-   - Ding (`i === 0`) participates in the cycle exactly like ring slots.
-   - Audio: every cycle click calls `playPitch(pitches[i])` (unchanged zero-choke path).
-   - Pitch selection (the Select dropdown) keeps its current strike-only behavior — it edits the scale pool, not the step arrays.
+### Sort + note order
 
-5. **Toggle handler in `ScaleEditor`:**
-   ```
-   const next = cycle(activeStep, i)  // Off→Chord→Accent→Off
-   updateProgressionStep({ chord_tones, accent_tones })
-   ```
-   Uses optimistic local state on the active step so the disc flips instantly, then reconciles from the `invalidate()` refetch. `chord_tones` and `accent_tones` stay mutually exclusive.
+- Sort by MIDI ascending. Ties (unlikely) keep original slot order. The bar labels always reflect the sorted order, so the leftmost tick = lowest pitch on the pan, regardless of physical slot position. This is intentional — the strummer is a **listening tool**, not a slot inspector; the pan itself already shows physical layout.
+- When the admin changes a note in the pan (via the Select or `-/+`), the strum bar rebuilds its ticks in the new sort order on the next render.
 
-6. **Remove the old `ProgressionStepCard` + `TonePicker`** (dead once the Filmstrip + Handpan handle everything). The per-step chord/accent arrays are now edited exclusively through the Handpan.
+### State / integration
 
-## Out of scope
+- New component `StrumBar` inside `src/routes/studio.scales.tsx` (co-located; small enough not to warrant its own file). Props: `pitches: string[]`, `onStrike?: (slotIndex: number) => void`.
+- `onStrike` bubbles to `ScaleEditor`, which triggers the existing pan-disc pulse (add a `flashSlot` ref/state on `HandpanField`, keyed by `slotIndex` + timestamp so repeat strikes re-fire the animation).
+- Audio uses the existing `playPitch` from `@/lib/studio/handpanAudio` — the polyphonic anti-choke path already handles overlapping strums.
+- No schema changes, no server-fn changes, no changes to the composer/progression, no changes to the filmstrip.
 
-- No schema / server-function changes — `updateProgressionStep` already accepts `chord_tones`, `accent_tones`, `duration_bars`.
-- No audio engine changes.
-- No changes to the composer / progression consumers — the data shape stays identical.
+### Visual polish
 
-## Open question
+- Bar background: `bg-white/5 backdrop-blur` + inner border `border-white/10`, matching the existing filmstrip glass.
+- Tick baseline: 1px `bg-white/15` horizontal rule through the middle.
+- Bead: teal radial gradient (`oklch(0.78 0.16 195)`) with `filter: drop-shadow(0 0 8px …)`, `cursor-grab` → `cursor-grabbing` on drag.
+- Auto button: same glass surface, teal ring on hover, teal glow while sweeping.
+- Ding (slot 0) is included in the strum just like a ring note.
 
-Confirm the cycle order: **Off → Chord → Accent → Off**. If you'd prefer Off → Chord → Off with Accent toggled by shift-click (or a right-click), say so and I'll wire that instead.
+### Out of scope
+
+- No MIDI export, no recording, no tempo-synced strum (fixed 60ms as agreed).
+- No changes to the 3-state chord/accent toggle or filmstrip resize handles.
+- No changes to composer or runtime audio engine.

@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Waves } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { usePasscode } from "@/lib/admin/passcode-context";
-import { allPitchOptions, DEFAULT_PITCH } from "@/lib/music/pitch";
+import { allPitchOptions, DEFAULT_PITCH, pitchToMidi } from "@/lib/music/pitch";
 import { noteColor } from "@/lib/music/noteColors";
 import { playPitch, primeAudio } from "@/lib/studio/handpanAudio";
 import {
@@ -528,6 +528,15 @@ function HandpanField({
         })}
       </div>
 
+      <StrumBar
+        pitches={pitches}
+        onStrike={(idx) => {
+          primeAudio();
+          playPitch(pitches[idx] ?? DEFAULT_PITCH);
+          pulse(idx);
+        }}
+      />
+
       <p className="text-center text-[10px] uppercase tracking-wider text-foreground/40">
         {activeStep
           ? "Tap to cycle: Off → Chord (teal) → Accent (violet) → Off"
@@ -704,6 +713,255 @@ function FilmstripBlock({
         onClick={(e) => e.stopPropagation()}
         className="absolute right-0 top-0 h-full w-2 cursor-ew-resize bg-gradient-to-l from-white/10 to-transparent hover:from-teal-300/40"
       />
+    </div>
+  );
+}
+
+// ---------- Strummer ----------
+
+const STRUM_STEP_MS = 60;
+
+function StrumBar({
+  pitches,
+  onStrike,
+}: {
+  pitches: string[];
+  onStrike: (slotIndex: number) => void;
+}) {
+  // Sort by MIDI ascending; preserve original slot index for onStrike.
+  const sorted = useMemo(() => {
+    return pitches
+      .map((p, i) => {
+        let midi = 0;
+        try {
+          midi = pitchToMidi(p);
+        } catch {
+          midi = 0;
+        }
+        return { pitch: p, slot: i, midi };
+      })
+      .sort((a, b) => a.midi - b.midi || a.slot - b.slot);
+  }, [pitches]);
+  const n = sorted.length;
+
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const [beadPct, setBeadPct] = useState(0);
+  const [flash, setFlash] = useState<Record<number, number>>({});
+  const flashTimers = useRef<Record<number, number>>({});
+  const lastIdx = useRef<number | null>(null);
+  const dragging = useRef(false);
+  const [sweeping, setSweeping] = useState(false);
+  const rafRef = useRef<number | null>(null);
+
+  const tickPct = (i: number) => (n <= 1 ? 50 : (i / (n - 1)) * 100);
+
+  const pingTick = (posIdx: number) => {
+    const slot = sorted[posIdx].slot;
+    onStrike(slot);
+    const token = (flash[posIdx] ?? 0) + 1;
+    setFlash((f) => ({ ...f, [posIdx]: token }));
+    if (flashTimers.current[posIdx]) window.clearTimeout(flashTimers.current[posIdx]);
+    flashTimers.current[posIdx] = window.setTimeout(() => {
+      setFlash((f) => {
+        if (f[posIdx] !== token) return f;
+        const { [posIdx]: _drop, ...rest } = f;
+        return rest;
+      });
+    }, 260);
+  };
+
+  const nearestIdx = (pct: number) => {
+    if (n <= 1) return 0;
+    return Math.max(0, Math.min(n - 1, Math.round((pct / 100) * (n - 1))));
+  };
+
+  const updateBead = (clientX: number) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const raw = ((clientX - rect.left) / rect.width) * 100;
+    const pct = Math.max(0, Math.min(100, raw));
+    setBeadPct(pct);
+    const idx = nearestIdx(pct);
+    const prev = lastIdx.current;
+    if (prev === null) {
+      lastIdx.current = idx;
+      pingTick(idx);
+      return;
+    }
+    if (idx !== prev) {
+      const step = idx > prev ? 1 : -1;
+      for (let i = prev + step; step > 0 ? i <= idx : i >= idx; i += step) {
+        pingTick(i);
+      }
+      lastIdx.current = idx;
+    }
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (sweeping) return;
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragging.current = true;
+    lastIdx.current = null;
+    updateBead(e.clientX);
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current) return;
+    updateBead(e.clientX);
+  };
+  const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current) return;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* noop */
+    }
+    dragging.current = false;
+  };
+
+  const autoStrum = () => {
+    if (sweeping || n === 0) return;
+    setSweeping(true);
+    setBeadPct(0);
+    lastIdx.current = null;
+    sorted.forEach((_, i) => {
+      window.setTimeout(() => {
+        pingTick(i);
+        setBeadPct(tickPct(i));
+      }, i * STRUM_STEP_MS);
+    });
+    window.setTimeout(() => {
+      setSweeping(false);
+    }, n * STRUM_STEP_MS + 60);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      Object.values(flashTimers.current).forEach((t) => window.clearTimeout(t));
+    };
+  }, []);
+
+  const resetBead = () => {
+    if (sweeping) return;
+    setBeadPct(0);
+    lastIdx.current = null;
+  };
+
+  const sweepMs = n * STRUM_STEP_MS;
+
+  return (
+    <div className="mx-auto flex w-full max-w-[560px] items-stretch gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3 backdrop-blur">
+      {/* Track */}
+      <div
+        className="relative flex-1 select-none"
+        onDoubleClick={resetBead}
+      >
+        <div
+          ref={trackRef}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          className={`relative h-10 w-full touch-none rounded-md ${
+            dragging.current ? "cursor-grabbing" : "cursor-grab"
+          }`}
+          style={{ touchAction: "none" }}
+        >
+          {/* baseline */}
+          <div className="pointer-events-none absolute left-1 right-1 top-1/2 h-px -translate-y-1/2 bg-white/15" />
+          {/* ticks */}
+          {sorted.map((t, i) => {
+            const c = noteColor(t.pitch).cssVar;
+            const lit = flash[i] !== undefined;
+            return (
+              <div
+                key={`${t.slot}-${i}`}
+                className="pointer-events-none absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${tickPct(i)}%` }}
+              >
+                <span
+                  className={`block rounded-full transition-transform duration-150 ${
+                    lit ? "scale-[1.6]" : "scale-100"
+                  }`}
+                  style={{
+                    width: 8,
+                    height: 8,
+                    background: c,
+                    boxShadow: lit
+                      ? `0 0 14px color-mix(in oklab, ${c} 80%, transparent)`
+                      : `0 0 4px color-mix(in oklab, ${c} 40%, transparent)`,
+                  }}
+                />
+              </div>
+            );
+          })}
+          {/* bead */}
+          <div
+            className="pointer-events-none absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
+            style={{
+              left: `${beadPct}%`,
+              transition: sweeping ? `left ${STRUM_STEP_MS}ms linear` : "none",
+            }}
+          >
+            <span
+              className="block rounded-full"
+              style={{
+                width: 14,
+                height: 14,
+                background:
+                  "radial-gradient(circle at 35% 30%, oklch(0.92 0.09 195), oklch(0.68 0.16 195) 70%)",
+                boxShadow:
+                  "0 0 14px oklch(0.78 0.16 195 / 0.75), inset 0 1px 0 rgba(255,255,255,0.4)",
+              }}
+            />
+          </div>
+        </div>
+        {/* labels */}
+        <div className="relative mt-1 h-4">
+          {sorted.map((t, i) => (
+            <span
+              key={`lbl-${t.slot}-${i}`}
+              className="pointer-events-none absolute -translate-x-1/2 font-mono text-[9px] text-white/60"
+              style={{ left: `${tickPct(i)}%`, top: 0 }}
+            >
+              {t.pitch}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Auto-strum button */}
+      <button
+        type="button"
+        onClick={autoStrum}
+        disabled={sweeping || n === 0}
+        title="Strum all notes low to high"
+        className={`relative flex flex-shrink-0 items-center gap-1.5 self-start overflow-hidden rounded-md border px-3 py-2 text-[11px] uppercase tracking-wider transition ${
+          sweeping
+            ? "border-teal-300/60 text-teal-100"
+            : "border-white/15 bg-white/[0.03] text-white/80 hover:border-teal-300/60 hover:text-white"
+        }`}
+        style={{
+          boxShadow: sweeping
+            ? "0 0 22px oklch(0.78 0.16 195 / 0.45)"
+            : undefined,
+        }}
+      >
+        {sweeping && (
+          <span
+            className="pointer-events-none absolute inset-y-0 left-0 bg-gradient-to-r from-teal-400/40 to-teal-300/10"
+            style={{
+              width: "100%",
+              transform: "translateX(-100%)",
+              animation: `strumFill ${sweepMs}ms linear forwards`,
+            }}
+          />
+        )}
+        <Waves className="relative h-3.5 w-3.5" />
+        <span className="relative">Strum all</span>
+        <style>{`@keyframes strumFill { to { transform: translateX(0); } }`}</style>
+      </button>
     </div>
   );
 }

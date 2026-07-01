@@ -23,6 +23,7 @@ import {
   Share2,
   FolderOpen,
   Save,
+  Shield,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -971,6 +972,14 @@ function MoreMenu({
             <Link to="/dev" className="flex w-full items-center gap-2">
               <Wrench className="h-4 w-4" /> Developer console
             </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              setOpen(false);
+              window.dispatchEvent(new CustomEvent("phase:admin-open"));
+            }}
+          >
+            <Shield className="h-4 w-4" /> Admin
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           {authed ? (

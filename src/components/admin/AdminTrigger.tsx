@@ -24,8 +24,16 @@ export function AdminTrigger() {
         setOpen(true);
       }
     };
+    const onOpen = () => {
+      setError(false);
+      setOpen(true);
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("phase:admin-open", onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("phase:admin-open", onOpen);
+    };
   }, []);
 
   async function onSubmit(code: string) {

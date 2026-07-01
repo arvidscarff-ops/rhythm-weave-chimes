@@ -317,14 +317,72 @@ function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void 
 
       {/* Slots */}
       <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-        <h2 className="text-sm font-medium mb-3">Sample slots (6)</h2>
-        <div className="space-y-2">
-          {pack.slots.map((s) => (
-            <SlotEditor key={s.id} packId={pack.id} slot={s} />
-          ))}
-        </div>
+        <SlotsSection pack={pack} />
       </div>
     </section>
+  );
+}
+
+function SlotsSection({ pack }: { pack: AdminPack }) {
+  const qc = useQueryClient();
+  const { get: getPass } = usePasscode();
+  const addSlot = useServerFn(addAdminSlot);
+  const removeSlot = useServerFn(removeAdminSlot);
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["admin", "packs"] });
+
+  const addMut = useMutation({
+    mutationFn: () => addSlot({ data: { passcode: getPass(), pack_id: pack.id } }),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Slot added");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Add failed"),
+  });
+
+  const removeMut = useMutation({
+    mutationFn: (id: string) => removeSlot({ data: { passcode: getPass(), id } }),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Slot removed");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Remove failed"),
+  });
+
+  const atMax = pack.slots.length >= MAX_SLOTS_PER_PACK;
+  const atMin = pack.slots.length <= 1;
+
+  return (
+    <>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-medium">
+          Sample slots ({pack.slots.length}/{MAX_SLOTS_PER_PACK})
+        </h2>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={atMax || addMut.isPending}
+          onClick={() => addMut.mutate()}
+          title={atMax ? "Maximum reached" : "Add slot"}
+        >
+          <Plus className="h-3 w-3 mr-2" /> Add slot
+        </Button>
+      </div>
+      <div className="space-y-3">
+        {pack.slots.map((s) => (
+          <SlotEditor
+            key={s.id}
+            packId={pack.id}
+            slot={s}
+            canRemove={!atMin}
+            onRemove={() => {
+              if (window.confirm(`Remove slot #${s.slot_index + 1}?`)) {
+                removeMut.mutate(s.id);
+              }
+            }}
+          />
+        ))}
+      </div>
+    </>
   );
 }
 

@@ -35,81 +35,12 @@ import {
 
 export const Route = createFileRoute("/studio/packs")({
   ssr: false,
-  component: AdminPacksPage,
+  component: AdminUI,
 });
-
-function AdminPacksPage() {
-  return (
-    <PasscodeProvider>
-      <AdminBootstrap />
-    </PasscodeProvider>
-  );
-}
-
-function AdminBootstrap() {
-  const { ensure, get, set } = usePasscode();
-  const router = useRouter();
-  const [status, setStatus] = useState<"pending" | "ready" | "cancelled">("pending");
-
-  const tryUnlock = () => {
-    setStatus("pending");
-    ensure()
-      .then(() => setStatus("ready"))
-      .catch(() => {
-        setStatus("cancelled");
-        void router.navigate({ to: "/" });
-      });
-  };
-
-  useEffect(() => {
-    // Accept passcode handed off from /admin/unlock via in-memory window stash.
-    const w = window as unknown as { __phaseAdminPass?: string };
-    if (w.__phaseAdminPass) {
-      set(w.__phaseAdminPass);
-      w.__phaseAdminPass = undefined;
-    }
-    if (get()) {
-      setStatus("ready");
-      return;
-    }
-    ensure()
-      .then(() => setStatus("ready"))
-      .catch(() => {
-        setStatus("cancelled");
-        void router.navigate({ to: "/" });
-      });
-  }, [ensure, get, router, set]);
-
-  if (status === "cancelled") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
-        <div className="max-w-sm text-center space-y-4">
-          <h1 className="text-lg font-medium tracking-wide">Passcode required</h1>
-          <p className="text-sm text-foreground/60">
-            Enter the admin passcode to manage sound packs, or head back home.
-          </p>
-          <div className="flex justify-center gap-2 pt-2">
-            <Button size="sm" onClick={tryUnlock}>
-              <Lock className="h-3 w-3 mr-2" /> Enter passcode
-            </Button>
-            <Button asChild size="sm" variant="ghost">
-              <Link to="/">
-                <ChevronLeft className="h-3 w-3 mr-2" /> Back to home
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  if (status !== "ready") return null;
-  return <AdminUI />;
-}
 
 function AdminUI() {
   const qc = useQueryClient();
-  const router = useRouter();
-  const { get: getPass, clear: clearPass } = usePasscode();
+  const { get: getPass } = usePasscode();
   const list = useServerFn(listAdminPacks);
   const create = useServerFn(createAdminPack);
   const del = useServerFn(deleteAdminPack);

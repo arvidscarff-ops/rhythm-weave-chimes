@@ -190,6 +190,7 @@ function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void 
   const { get: getPass } = usePasscode();
   const update = useServerFn(updateAdminPack);
   const signCover = useServerFn(signedCoverUrl);
+  const createUploadUrl = useServerFn(createAdminUploadUrl);
   const [name, setName] = useState(pack.name);
   const [description, setDescription] = useState(pack.description ?? "");
   const [humanization, setHumanization] = useState<Humanization>(
@@ -229,15 +230,17 @@ function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void 
   const uploadCover = async (file: File) => {
     const ext = file.name.split(".").pop() ?? "png";
     const path = `${pack.id}/cover-${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from("pack-covers").upload(path, file, {
-      upsert: true,
-      contentType: file.type,
+    const signed = await createUploadUrl({
+      data: { passcode: getPass(), bucket: "pack-covers", path, upsert: true },
     });
+    const { error } = await supabase.storage
+      .from("pack-covers")
+      .uploadToSignedUrl(signed.path, signed.token, file, { contentType: file.type });
     if (error) {
       toast.error(error.message);
       return;
     }
-    saveMut.mutate({ id: pack.id, cover_image_url: path });
+    saveMut.mutate({ id: pack.id, cover_image_url: signed.path });
   };
 
   return (

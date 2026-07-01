@@ -109,6 +109,7 @@ import {
   barsFromSession,
 } from "@/lib/session/sessionUrl";
 import { setSceneOverlay } from "@/lib/engine/sceneOverlay";
+import { AdminTrigger } from "@/components/admin/AdminTrigger";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -1782,6 +1783,7 @@ function PhaseApp() {
         hoverRingId={hoverRing}
         topo={topo}
       />
+      <AdminTrigger />
       {/* CANVAS */}
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
         <canvas

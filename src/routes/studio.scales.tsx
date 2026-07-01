@@ -394,11 +394,17 @@ function HandpanField({
   };
 
   // Radial layout: slot 0 in the center (the "ding"), rest around a ring.
-  const size = 460;
+  // Field + slot sizes adapt to note count so 14+ notes still breathe.
+  const n = pitches.length;
+  const crowdScale = n <= 9 ? 1 : n <= 12 ? 0.9 : n <= 16 ? 0.78 : 0.68;
+  const size = Math.min(620, 460 + Math.max(0, n - 9) * 22);
   const cx = size / 2;
   const cy = size / 2;
-  const ringRadius = 170;
-  const ringSlots = Math.max(0, pitches.length - 1);
+  // Reserve space for the largest possible ring slot (bass) so it sits
+  // fully inside the disc with a bit of padding.
+  const maxRingSize = 104 * crowdScale;
+  const ringRadius = size / 2 - maxRingSize / 2 - 14;
+  const ringSlots = Math.max(0, n - 1);
 
   return (
     <div className="space-y-4">
@@ -435,9 +441,9 @@ function HandpanField({
           }
           const isDing = i === 0;
           const reg: Register = pitchRegister(p);
-          const ringSize = reg === "bass" ? 104 : reg === "high" ? 72 : 88;
-          const dingSize = reg === "bass" ? 124 : reg === "high" ? 92 : 108;
-          const slotSize = isDing ? dingSize : ringSize;
+          const baseRing = reg === "bass" ? 104 : reg === "high" ? 72 : 88;
+          const baseDing = reg === "bass" ? 124 : reg === "high" ? 92 : 108;
+          const slotSize = Math.round((isDing ? baseDing : baseRing) * crowdScale);
           const regShadow =
             reg === "bass"
               ? "0 12px 28px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.14)"
@@ -445,7 +451,13 @@ function HandpanField({
                 ? "0 3px 10px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.10)"
                 : "inset 0 1px 0 rgba(255,255,255,0.10), 0 6px 18px rgba(0,0,0,0.35)";
           const regLift = reg === "high" ? -2 : 0;
-          const labelSize = reg === "high" ? "text-base" : "text-lg";
+          const baseLabel = reg === "high" ? "text-base" : "text-lg";
+          const labelSize =
+            crowdScale < 0.85
+              ? reg === "high"
+                ? "text-xs"
+                : "text-sm"
+              : baseLabel;
           const isRinging = ringing[i] !== undefined;
           const color = noteColor(p);
           const c = color.cssVar;
@@ -453,23 +465,22 @@ function HandpanField({
           const isChord = tState === "chord";
           const isAccent = tState === "accent";
           const dim = activeStep && tState === "off";
-          const chordC = "oklch(0.78 0.16 195)"; // teal
           const accentC = "oklch(0.72 0.22 310)"; // violet
           const borderColor = isAccent
-            ? accentC
+            ? "rgba(255,255,255,0.18)"
             : isChord
-              ? chordC
+              ? "rgba(255,255,255,0.85)"
               : `color-mix(in oklab, ${c} ${isDing ? 70 : 55}%, transparent)`;
           const background = isChord
-            ? `radial-gradient(circle at 32% 28%, color-mix(in oklab, ${chordC} 80%, transparent) 0%, color-mix(in oklab, ${chordC} 45%, transparent) 55%, rgba(0,0,0,0.55) 100%)`
+            ? "radial-gradient(circle at 50% 45%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.22) 35%, rgba(255,255,255,0.06) 65%, rgba(0,0,0,0.35) 100%)"
             : isAccent
-              ? `radial-gradient(circle at 50% 50%, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.65) 60%, color-mix(in oklab, ${accentC} 25%, transparent) 100%)`
+              ? "radial-gradient(circle at 32% 28%, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.75) 70%)"
               : `radial-gradient(circle at 32% 28%, color-mix(in oklab, ${c} ${isDing ? 55 : 42}%, transparent) 0%, color-mix(in oklab, ${c} ${isDing ? 25 : 18}%, transparent) 45%, rgba(0,0,0,0.55) 100%)`;
-          const glowColor = isAccent ? accentC : isChord ? chordC : c;
+          const glowColor = isAccent ? accentC : isChord ? "rgba(255,255,255,1)" : c;
           const restingShadow = isChord
-            ? `0 0 22px color-mix(in oklab, ${chordC} 45%, transparent), inset 0 1px 0 rgba(255,255,255,0.15)`
+            ? "0 0 24px rgba(255,255,255,0.55), 0 0 48px rgba(255,255,255,0.25), inset 0 1px 0 rgba(255,255,255,0.35)"
             : isAccent
-              ? `0 0 0 2px ${accentC}, 0 0 24px color-mix(in oklab, ${accentC} 55%, transparent)`
+              ? "inset 0 1px 0 rgba(255,255,255,0.06)"
               : regShadow;
           return (
             <div
@@ -481,18 +492,71 @@ function HandpanField({
                 width: slotSize,
               }}
             >
+              {isAccent && (
+                <>
+                  {/* Halo emanating from BEHIND the sphere */}
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute rounded-full"
+                    style={{
+                      top: -16,
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      width: slotSize + 32,
+                      height: slotSize + 32,
+                      filter: "blur(18px)",
+                      background:
+                        "radial-gradient(circle, oklch(0.72 0.22 310 / 0.85) 0%, oklch(0.72 0.22 310 / 0.4) 45%, transparent 75%)",
+                      animation: "accent-pulse 1.8s ease-in-out infinite",
+                      zIndex: 0,
+                    }}
+                  />
+                  {/* Hairline aura hugging the sphere edge */}
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute rounded-full"
+                    style={{
+                      top: -4,
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      width: slotSize + 8,
+                      height: slotSize + 8,
+                      boxShadow: "0 0 0 1px oklch(0.72 0.22 310 / 0.55)",
+                      zIndex: 0,
+                    }}
+                  />
+                </>
+              )}
+              {isChord && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute rounded-full"
+                  style={{
+                    top: -10,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    width: slotSize + 20,
+                    height: slotSize + 20,
+                    filter: "blur(10px)",
+                    background:
+                      "radial-gradient(circle, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.18) 45%, transparent 75%)",
+                    animation: "chord-breathe 2.4s ease-in-out infinite",
+                    zIndex: 0,
+                  }}
+                />
+              )}
               <button
                 type="button"
                 onClick={() => handleSlot(i, p)}
                 title={`${p} · ${color.name} · ${reg}${activeStep ? ` · ${tState}` : ""}`}
-                className={`relative flex items-center justify-center rounded-full border transition-all duration-150 focus:outline-none focus-visible:ring-2 ${
+                className={`relative z-10 flex items-center justify-center rounded-full border transition-all duration-150 focus:outline-none focus-visible:ring-2 ${
                   isRinging ? "scale-[1.06] brightness-125" : "hover:brightness-110"
                 } ${dim ? "opacity-45" : ""}`}
                 style={{
                   width: slotSize,
                   height: slotSize,
                   borderColor,
-                  borderWidth: isAccent ? 2 : 1,
+                  borderWidth: 1,
                   background,
                   boxShadow: isRinging
                     ? `0 0 32px color-mix(in oklab, ${glowColor} 70%, transparent), inset 0 1px 0 rgba(255,255,255,0.15)`
@@ -507,12 +571,6 @@ function HandpanField({
                     key={ringing[i]}
                     className="pointer-events-none absolute inset-0 rounded-full animate-ping"
                     style={{ boxShadow: `0 0 0 2px color-mix(in oklab, ${glowColor} 55%, transparent)` }}
-                  />
-                )}
-                {isAccent && (
-                  <span
-                    className="pointer-events-none absolute -inset-1 rounded-full animate-pulse"
-                    style={{ boxShadow: `0 0 0 1px color-mix(in oklab, ${accentC} 45%, transparent)` }}
                   />
                 )}
               </button>

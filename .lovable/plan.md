@@ -1,75 +1,77 @@
+## Sound Pack CMS + Humanization Engine
 
-## Goal
+Extend the existing `packs`/`pack_slots`/`samples` schema with publishing, cover art, and humanization; add an admin-only CMS at `/admin/packs` gated by a shared passcode; wire humanization into the runtime dispatcher; and expose published packs to everyone (signed in or not) on the wheel.
 
-Ship the **Scenes** tab of My Studio so any signed-in user can craft and save their own scenes, audition them live on the wheel, and pick them from the dock — without writing code. Same UX language as Presets + Packs.
+### Phase 1 — Schema & storage
 
-## The core question (pick one)
+Migration (extends existing tables, no parallel `sound_packs`):
 
-The 8 in-tree scenes (String Network, Pendulum Fan, Spiral Arp, Radial Sweep, Mandala Matrix, Metatron Lattice, Fractal Nebula, Radial Resonator) are each ~300–500 lines of bespoke physics. "Creative freedom" can mean two very different products:
+- `packs`: add `is_published boolean default false`, `cover_image_url text`, `humanization jsonb` (pack-level defaults).
+- `pack_slots`: add `humanization jsonb` (nullable override per slot).
+- Storage: create public `pack-covers` bucket (cover art needs anonymous read); keep `samples` bucket private (signed URLs already work for anon via server fn).
+- RLS additions:
+  - `packs`: `SELECT` policy `USING (is_published = true)` granted to `anon` + `authenticated` (keeps existing owner/admin write policies).
+  - `pack_slots` + `samples`: allow read when parent pack is published (join check) to `anon` + `authenticated`.
+  - `GRANT SELECT` on all three to `anon`.
 
-**A. Scene Remixer (1 build pass).** Take any built-in scene as a *template*, expose its tunable knobs (node count, ratios, palette, voice slot mapping, refractory, geometry seed, ink-bleed amount, audio pack lock), tweak in real time, save as your own scene. You can create dozens of distinct-feeling scenes from each template. Ships now, fits today's `user_scenes.graph_json` model trivially.
-
-**B. Primitive Graph Builder (4–6 build passes).** A node-graph canvas where you place *primitives* (orbits, lines, particles, trigger zones, modulators) and wire them together — think Pure Data / TouchDesigner-lite. Maximum freedom, but requires a runtime interpreter, a graph editor UI, and a primitive library before *anything* renders. No usable output until pass 4+.
-
-I recommend **A first**, then layer B on top later (A's saved scenes become "templates" the graph builder can extend). It also matches the rest of the studio — Presets and Packs are both "configure within a fixed shape".
-
-## What A looks like (if you pick it)
-
-```text
-┌────────────────────────────────────────────────────────────────┐
-│ My Studio                  [Presets] [Packs] [Scenes]          │
-├──────────────┬─────────────────────────────────┬───────────────┤
-│ MY SCENES    │ EDIT: "Slow Aurora"             │ TEMPLATE      │
-│ + new        │ ─────────────────────────       │ ● String Net  │
-│ • Aurora ▸   │ Geometry                        │ ○ Pendulum    │
-│ • Choral     │   Anchors      [— 7 —]          │ ○ Spiral Arp  │
-│ • Drift      │   Strings/anchor [— 3 —]        │ ○ Radial      │
-│              │   Seed         [1428] [🎲]      │ ○ Mandala     │
-│              │ Motion                          │ ○ Metatron    │
-│              │   Speed bias   [— 0.7 —]        │ ○ Nebula      │
-│              │   Drift        [— 0.2 —]        │ ○ Resonator   │
-│              │ Audio                           │               │
-│              │   Pack lock    [Moss ▾]         │ Each template │
-│              │   Slot map     [1→A 2→B …]      │ exposes its   │
-│              │   Refractory   [— 0.18s —]      │ own knob set. │
-│              │ Visuals                         │               │
-│              │   Palette      [aurora ▾]       │               │
-│              │   Trail        [— 0.45 —]       │               │
-│              │   Ink bleed    [— 0.3 —]        │               │
-│              │ [▶ Audition on wheel] [Save]    │               │
-└──────────────┴─────────────────────────────────┴───────────────┘
+Humanization JSON shape (shared type, both pack & slot):
+```ts
+{ velocityPct: number, cutoffHz: [min,max]|null, detuneCents: number, panPct: number }
 ```
+Slot value, when present, overrides pack value field-by-field.
 
-### Build A — phases
+### Phase 2 — Admin gate (shared passcode)
 
-1. **Knob extraction.** Each scene file declares a typed `params` schema + a pure `applyParams(state, params)` so the existing physics reads from the schema instead of constants. No behavior change for built-ins (defaults reproduce today's look).
-2. **Scene definition DTO.** A `SceneDefinition` JSON shape stored in `user_scenes.graph_json` — `{ templateId, params, voiceMap, palette, schemaVersion }`. Versioned so future schema migrations are safe.
-3. **Runtime resolver.** `resolveScene(definitionOrBuiltinId)` returns a live `Scene` instance for the render loop. Dock pack/scene menu reads from this resolver, so user scenes appear alongside built-ins.
-4. **Server functions** (`src/lib/studio/scenes.functions.ts`, RLS-scoped to `owner_id`): `listMyScenes`, `createScene`, `updateScene`, `renameScene`, `deleteScene`, `duplicateScene`, `exportSceneJson`.
-5. **Studio Scenes tab UI.** Three-column layout matching Packs. Template picker on the right; live knobs in the middle with 250 ms debounce; "Audition on wheel" deep-links back to `/` with a temporary session override (no save until you click Save).
-6. **Dock integration.** Scene picker grows a "My Scenes" group; "Manage scenes" → `/studio?tab=scenes`.
-7. **Promotion to built-in.** Same flow as Packs: Export JSON → I drop it into `src/lib/scenes/built-in-curated.ts` and it ships for everyone.
+- Server-only env: `ADMIN_PASSCODE`, `ADMIN_SESSION_SECRET` (added via `add_secret`).
+- `src/lib/admin/gate.functions.ts`: `unlockAdmin`, `lockAdmin`, `requireAdmin()` helper using `useSession` + `timingSafeEqual` (per shared-password-gate pattern).
+- Route `/admin/unlock` (public): passcode form.
+- Route `/admin/packs` (public path, gated in loader via `requireAdmin` → redirect to `/admin/unlock`).
+- Every admin server fn calls `requireAdmin()` first, then uses `supabaseAdmin` for writes (bypasses RLS cleanly for CMS ops).
 
-### What's not in A
-- Hand-drawn geometry / SVG import.
-- Custom trigger-zone authoring.
-- Per-scene shader / WebGL effects.
-- Multi-template composition (one template per scene).
+### Phase 3 — Admin CMS UI (`/admin/packs`)
 
-These all land naturally in B.
+Three-pane layout matching the existing Studio look:
 
-## What B would add later
-- A `primitives/` library (Orbit, LineSegment, ParticleStream, TriggerZone, LFO, RatioGrid, Palette).
-- A graph editor (react-flow or similar) with typed sockets.
-- A pure interpreter that compiles a graph into a `Scene` at runtime.
-- Migration: every A-scene serialises to an equivalent graph automatically.
+- **Left:** pack list (name, published pill, cover thumb). "New Pack" button.
+- **Middle — Pack editor:**
+  - Name, description, cover upload (drag/drop → `pack-covers` bucket → sets `cover_image_url`).
+  - Publish toggle (writes `is_published`).
+  - Pack-level Humanizer card (4 sliders): Velocity ±%, Cutoff Hz range (dual slider), Detune ±cents, Pan ±%.
+- **Right — Samples:**
+  - Drag/drop `.wav` zone → uploads to `samples` bucket, inserts `samples` row + `pack_slots` row (auto-assigns next free 0–5 slot).
+  - Per-slot row: label, slot index, gain/pitch/pan (existing), **"Override humanization" toggle** revealing the same 4 sliders (persist to `pack_slots.humanization`; null = inherit).
+  - Audition button (reuses `auditionSample`, applies effective humanization).
 
-## Out of scope (later passes either way)
-- Sharing user scenes between users.
-- Public scene gallery.
-- AI scene generation from a text prompt.
-- Recording/exporting scene videos.
+Server fns (`src/lib/admin/packs.functions.ts`): `listAllPacks`, `upsertPack`, `deletePack`, `uploadCover`, `addSample`, `updateSlot`, `deleteSlot`, `setPublished`. All gated by `requireAdmin`.
 
-## Question for you
+### Phase 4 — Humanization engine
 
-Pick A or B (or "A now, B later" — my recommendation). I won't start coding until you confirm, because the answer changes file #1.
+Refactor `src/lib/sound/runtimePacks.ts` `playSampleSlot`:
+
+- Resolve effective humanization: `{ ...packHumanization, ...slotHumanization }` (field-wise).
+- Insert `BiquadFilterNode` (lowpass) into the chain when `cutoffHz` set; randomize `frequency.value` in range per strike.
+- `GainNode`: multiply by `1 + (rand()*2-1) * velocityPct`.
+- `AudioBufferSourceNode.detune.value`: base + `(rand()*2-1) * detuneCents`.
+- `StereoPannerNode.pan.value`: base + `(rand()*2-1) * panPct`, clamped ±1.
+- All randomization computed **at trigger time**, not at load time.
+- Extend `CustomSlot` + `RuntimePack.custom` types to carry `humanization` fields loaded from DB.
+
+### Phase 5 — Public integration
+
+- `fetchPublishedPacks()` public server fn (no auth, uses server publishable client) → returns packs where `is_published=true` with slots + signed sample URLs + cover URL.
+- `runtimePacks.ts`: replace `fetchCustomPacks` (auth-only) with `fetchPublishedPacks` for the public wheel; keep the auth'd variant for Studio's "my packs".
+- Warm cache: `warmCustomPack` already preloads sample buffers on pack selection — extend to also preload on hover in the dock for zero-latency first strike.
+- Dock (`PhaseDock.tsx`): pack selector already lists custom packs; swap data source to published + show `cover_image_url` thumbs.
+
+### Technical notes
+
+- Cover bucket is public (workspace policy permitting); if blocked, fall back to signed URLs refreshed server-side.
+- Humanization sliders use existing `Slider` component; cutoff uses two thumbs (Radix supports `value=[min,max]`).
+- Admin session cookie: httpOnly, 7-day maxAge, separate from Supabase auth cookies.
+- No breaking changes to existing Studio Packs tab — it continues to manage user-owned (non-published) packs. Admin CMS is the only surface that toggles `is_published`.
+
+### Out of scope (this pass)
+
+- Pack versioning / drafts beyond the boolean toggle.
+- Per-user favorites, ratings, or analytics on published packs.
+- Bulk sample import / ZIP upload.

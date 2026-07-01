@@ -3064,11 +3064,6 @@ function PhaseChrome({
         >
           Visuals
         </button>
-        {isAdmin && (
-          <Link to="/dev" className="pr-rail-link">
-            Dev
-          </Link>
-        )}
         {!user ? (
           <Link to="/auth" className="pr-rail-link">
             Sign in

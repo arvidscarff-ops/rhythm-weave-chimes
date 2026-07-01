@@ -26,6 +26,7 @@ export type ActiveScale = {
   name: string;
   pool_size: number;
   intervals: number[];
+  pitches?: string[];
   steps: ProgressionStep[];
 };
 

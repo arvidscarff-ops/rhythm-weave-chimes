@@ -14,6 +14,7 @@ export type AdminScale = {
   name: string;
   pool_size: number;
   intervals: number[];
+  pitches: string[];
   is_published: boolean;
   updated_at: string;
   steps: AdminProgressionStep[];
@@ -36,7 +37,7 @@ export const listAdminScales = createServerFn({ method: "POST" })
     const supa = await admin();
     const { data: rows, error } = await supa
       .from("custom_scales")
-      .select("id,name,pool_size,intervals,is_published,updated_at,scale_progressions(id,step_order,chord_tones,accent_tones,duration_bars)")
+      .select("id,name,pool_size,intervals,pitches,is_published,updated_at,scale_progressions(id,step_order,chord_tones,accent_tones,duration_bars)")
       .order("updated_at", { ascending: false });
     if (error) throw new Error(error.message);
     type StepRow = { id: string; step_order: number; chord_tones: number[] | null; accent_tones: number[] | null; duration_bars: number | null };
@@ -45,6 +46,7 @@ export const listAdminScales = createServerFn({ method: "POST" })
       name: r.name,
       pool_size: r.pool_size,
       intervals: r.intervals ?? [],
+      pitches: r.pitches ?? [],
       is_published: r.is_published,
       updated_at: r.updated_at,
       steps: ((r.scale_progressions ?? []) as StepRow[])
@@ -89,6 +91,7 @@ export const updateAdminScale = createServerFn({ method: "POST" })
       name?: string;
       pool_size?: number;
       intervals?: number[];
+      pitches?: string[];
       is_published?: boolean;
     }) => data,
   )
@@ -99,6 +102,7 @@ export const updateAdminScale = createServerFn({ method: "POST" })
     if (data.name !== undefined) patch.name = data.name;
     if (data.pool_size !== undefined) patch.pool_size = data.pool_size;
     if (data.intervals !== undefined) patch.intervals = data.intervals;
+    if (data.pitches !== undefined) patch.pitches = data.pitches;
     if (data.is_published !== undefined) patch.is_published = data.is_published;
     const { error } = await supa.from("custom_scales").update(patch).eq("id", data.id);
     if (error) throw new Error(error.message);

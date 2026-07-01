@@ -339,17 +339,19 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
 function HandpanField({
   pitches,
   onChange,
+  activeStep,
+  onCycleTone,
 }: {
   pitches: string[];
   onChange: (next: string[]) => void;
+  activeStep: AdminProgressionStep | null;
+  onCycleTone: (idx: number) => void;
 }) {
   const options = useMemo(() => allPitchOptions("C1", "C7"), []);
   const [ringing, setRinging] = useState<Record<number, number>>({});
   const timers = useRef<Record<number, number>>({});
 
-  const strike = (idx: number, pitch: string) => {
-    primeAudio();
-    playPitch(pitch);
+  const pulse = (idx: number) => {
     const token = (ringing[idx] ?? 0) + 1;
     setRinging((r) => ({ ...r, [idx]: token }));
     if (timers.current[idx]) window.clearTimeout(timers.current[idx]);
@@ -360,6 +362,18 @@ function HandpanField({
         return rest;
       });
     }, 700);
+  };
+
+  const strike = (idx: number, pitch: string) => {
+    primeAudio();
+    playPitch(pitch);
+    pulse(idx);
+  };
+
+  const handleSlot = (idx: number, pitch: string) => {
+    pulse(idx);
+    if (activeStep) onCycleTone(idx);
+    else strike(idx, pitch);
   };
 
   const setPitch = (idx: number, value: string) => {
@@ -423,6 +437,28 @@ function HandpanField({
           const isRinging = ringing[i] !== undefined;
           const color = noteColor(p);
           const c = color.cssVar;
+          const tState: ToneState = activeStep ? toneStateOf(activeStep, i) : "off";
+          const isChord = tState === "chord";
+          const isAccent = tState === "accent";
+          const dim = activeStep && tState === "off";
+          const chordC = "oklch(0.78 0.16 195)"; // teal
+          const accentC = "oklch(0.72 0.22 310)"; // violet
+          const borderColor = isAccent
+            ? accentC
+            : isChord
+              ? chordC
+              : `color-mix(in oklab, ${c} ${isDing ? 70 : 55}%, transparent)`;
+          const background = isChord
+            ? `radial-gradient(circle at 32% 28%, color-mix(in oklab, ${chordC} 80%, transparent) 0%, color-mix(in oklab, ${chordC} 45%, transparent) 55%, rgba(0,0,0,0.55) 100%)`
+            : isAccent
+              ? `radial-gradient(circle at 50% 50%, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.65) 60%, color-mix(in oklab, ${accentC} 25%, transparent) 100%)`
+              : `radial-gradient(circle at 32% 28%, color-mix(in oklab, ${c} ${isDing ? 55 : 42}%, transparent) 0%, color-mix(in oklab, ${c} ${isDing ? 25 : 18}%, transparent) 45%, rgba(0,0,0,0.55) 100%)`;
+          const glowColor = isAccent ? accentC : isChord ? chordC : c;
+          const restingShadow = isChord
+            ? `0 0 22px color-mix(in oklab, ${chordC} 45%, transparent), inset 0 1px 0 rgba(255,255,255,0.15)`
+            : isAccent
+              ? `0 0 0 2px ${accentC}, 0 0 24px color-mix(in oklab, ${accentC} 55%, transparent)`
+              : `inset 0 1px 0 rgba(255,255,255,0.10), 0 6px 18px rgba(0,0,0,0.35)`;
           return (
             <div
               key={i}
@@ -435,19 +471,20 @@ function HandpanField({
             >
               <button
                 type="button"
-                onClick={() => strike(i, p)}
-                title={`${p} · ${color.name}`}
+                onClick={() => handleSlot(i, p)}
+                title={`${p} · ${color.name}${activeStep ? ` · ${tState}` : ""}`}
                 className={`relative flex items-center justify-center rounded-full border transition-all duration-150 focus:outline-none focus-visible:ring-2 ${
                   isRinging ? "scale-[1.06] brightness-125" : "hover:brightness-110"
-                }`}
+                } ${dim ? "opacity-45" : ""}`}
                 style={{
                   width: slotSize,
                   height: slotSize,
-                  borderColor: `color-mix(in oklab, ${c} ${isDing ? 70 : 55}%, transparent)`,
-                  background: `radial-gradient(circle at 32% 28%, color-mix(in oklab, ${c} ${isDing ? 55 : 42}%, transparent) 0%, color-mix(in oklab, ${c} ${isDing ? 25 : 18}%, transparent) 45%, rgba(0,0,0,0.55) 100%)`,
+                  borderColor,
+                  borderWidth: isAccent ? 2 : 1,
+                  background,
                   boxShadow: isRinging
-                    ? `0 0 32px color-mix(in oklab, ${c} 70%, transparent), inset 0 1px 0 rgba(255,255,255,0.15)`
-                    : `inset 0 1px 0 rgba(255,255,255,0.10), 0 6px 18px rgba(0,0,0,0.35)`,
+                    ? `0 0 32px color-mix(in oklab, ${glowColor} 70%, transparent), inset 0 1px 0 rgba(255,255,255,0.15)`
+                    : restingShadow,
                 }}
               >
                 <span className="pointer-events-none select-none font-mono text-lg tracking-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]">
@@ -457,7 +494,13 @@ function HandpanField({
                   <span
                     key={ringing[i]}
                     className="pointer-events-none absolute inset-0 rounded-full animate-ping"
-                    style={{ boxShadow: `0 0 0 2px color-mix(in oklab, ${c} 55%, transparent)` }}
+                    style={{ boxShadow: `0 0 0 2px color-mix(in oklab, ${glowColor} 55%, transparent)` }}
+                  />
+                )}
+                {isAccent && (
+                  <span
+                    className="pointer-events-none absolute -inset-1 rounded-full animate-pulse"
+                    style={{ boxShadow: `0 0 0 1px color-mix(in oklab, ${accentC} 45%, transparent)` }}
                   />
                 )}
               </button>
@@ -486,137 +529,181 @@ function HandpanField({
       </div>
 
       <p className="text-center text-[10px] uppercase tracking-wider text-foreground/40">
-        Tap any note to hear it · polyphonic — notes ring out and overlap
+        {activeStep
+          ? "Tap to cycle: Off → Chord (teal) → Accent (violet) → Off"
+          : "Tap any note to hear it · polyphonic — notes ring out and overlap"}
       </p>
     </div>
   );
 }
 
-function ProgressionStepCard({
+const PX_PER_BAR = 32;
+const MIN_BARS = 1;
+const MAX_BARS = 32;
+const BLOCK_BASE = 56;
+function blockWidth(bars: number) {
+  return BLOCK_BASE + Math.max(MIN_BARS, Math.min(MAX_BARS, bars)) * PX_PER_BAR;
+}
+
+function Filmstrip({
+  steps,
+  activeStepId,
+  onSelect,
+  onAdd,
+  onRemove,
+  onDurationPreview,
+  onDurationCommit,
+}: {
+  steps: AdminProgressionStep[];
+  activeStepId: string | null;
+  onSelect: (id: string) => void;
+  onAdd: () => void;
+  onRemove: (id: string) => void;
+  onDurationPreview: (id: string, bars: number) => void;
+  onDurationCommit: (id: string, bars: number) => void;
+}) {
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-2">
+      {steps.map((step) => (
+        <FilmstripBlock
+          key={step.id}
+          step={step}
+          active={step.id === activeStepId}
+          onSelect={() => onSelect(step.id)}
+          onRemove={() => onRemove(step.id)}
+          onDurationPreview={(bars) => onDurationPreview(step.id, bars)}
+          onDurationCommit={(bars) => onDurationCommit(step.id, bars)}
+        />
+      ))}
+      <button
+        type="button"
+        onClick={onAdd}
+        className="flex h-[120px] w-[88px] flex-shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-white/15 text-foreground/50 transition hover:border-white/40 hover:text-foreground/80"
+      >
+        <Plus className="h-4 w-4" />
+        <span className="text-[10px] uppercase tracking-wider">Add step</span>
+      </button>
+    </div>
+  );
+}
+
+function FilmstripBlock({
   step,
-  poolSize,
-  onChanged,
+  active,
+  onSelect,
+  onRemove,
+  onDurationPreview,
+  onDurationCommit,
 }: {
   step: AdminProgressionStep;
-  poolSize: number;
-  onChanged: () => void;
+  active: boolean;
+  onSelect: () => void;
+  onRemove: () => void;
+  onDurationPreview: (bars: number) => void;
+  onDurationCommit: (bars: number) => void;
 }) {
-  const { get: getPass } = usePasscode();
-  const upd = useServerFn(updateProgressionStep);
-  const rm = useServerFn(removeProgressionStep);
+  const dragging = useRef<null | { startX: number; startBars: number; sign: 1 | -1; last: number }>(null);
 
-  const [chord, setChord] = useState<number[]>(step.chord_tones);
-  const [accent, setAccent] = useState<number[]>(step.accent_tones);
-  const [duration, setDuration] = useState<number>(step.duration_bars);
+  const beginDrag = (e: React.PointerEvent<HTMLDivElement>, sign: 1 | -1) => {
+    e.stopPropagation();
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragging.current = { startX: e.clientX, startBars: step.duration_bars, sign, last: step.duration_bars };
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragging.current;
+    if (!d) return;
+    const dx = e.clientX - d.startX;
+    const delta = Math.round((dx / PX_PER_BAR) * d.sign);
+    const next = Math.max(MIN_BARS, Math.min(MAX_BARS, d.startBars + delta));
+    if (next !== d.last) {
+      d.last = next;
+      onDurationPreview(next);
+    }
+  };
+  const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragging.current;
+    if (!d) return;
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    if (d.last !== d.startBars) onDurationCommit(d.last);
+    dragging.current = null;
+  };
 
-  const saveMut = useMutation({
-    mutationFn: (patch: { chord_tones?: number[]; accent_tones?: number[]; duration_bars?: number }) =>
-      upd({ data: { passcode: getPass(), id: step.id, ...patch } }),
-    onSuccess: onChanged,
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
-  });
-  const removeMut = useMutation({
-    mutationFn: () => rm({ data: { passcode: getPass(), id: step.id } }),
-    onSuccess: onChanged,
-  });
+  const width = blockWidth(step.duration_bars);
+  const chordCount = step.chord_tones.length;
+  const accentCount = step.accent_tones.length;
 
   return (
-    <div className="min-w-[260px] flex-shrink-0 rounded-md border border-white/10 bg-black/40 p-3 space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-[0.18em] text-foreground/60">
-          Step {step.step_order + 1}
-        </span>
+    <div
+      onClick={onSelect}
+      className={`group relative flex h-[120px] flex-shrink-0 flex-col justify-between overflow-hidden rounded-lg border p-3 text-left transition cursor-pointer backdrop-blur-md ${
+        active
+          ? "border-teal-300/60 bg-white/[0.06]"
+          : "border-white/10 bg-white/[0.02] hover:bg-white/[0.04]"
+      }`}
+      style={{
+        width,
+        boxShadow: active
+          ? "0 0 0 1px oklch(0.78 0.16 195 / 0.6), 0 0 26px oklch(0.78 0.16 195 / 0.35)"
+          : undefined,
+      }}
+    >
+      {/* film-perforations top/bottom */}
+      <div className="pointer-events-none absolute inset-x-2 top-1 flex justify-between opacity-30">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <span key={i} className="h-1.5 w-1.5 rounded-sm bg-white/40" />
+        ))}
+      </div>
+      <div className="pointer-events-none absolute inset-x-2 bottom-1 flex justify-between opacity-30">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <span key={i} className="h-1.5 w-1.5 rounded-sm bg-white/40" />
+        ))}
+      </div>
+
+      <div className="mt-3 flex items-start justify-between">
+        <span className="pr-label text-white/80">Step {step.step_order + 1}</span>
         <button
-          onClick={() => removeMut.mutate()}
-          className="rounded p-1 text-foreground/50 hover:text-red-300"
-          title="Remove"
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="rounded p-1 text-foreground/40 opacity-0 transition group-hover:opacity-100 hover:text-red-300"
+          title="Remove step"
         >
           <Trash2 className="h-3 w-3" />
         </button>
       </div>
 
-      <div className="space-y-1">
-        <Label className="text-[10px] uppercase tracking-wider text-foreground/50">Duration (bars)</Label>
-        <Input
-          type="number"
-          min={1}
-          max={32}
-          value={duration}
-          onChange={(e) => {
-            const v = Math.max(1, Number(e.target.value) || 1);
-            setDuration(v);
-            saveMut.mutate({ duration_bars: v });
-          }}
-        />
+      <div className="mb-2 flex items-end justify-between gap-2">
+        <span className="font-mono text-2xl leading-none text-white">
+          {step.duration_bars}
+          <span className="ml-1 text-[10px] uppercase tracking-wider text-white/50">bars</span>
+        </span>
+        <div className="flex flex-col items-end gap-0.5 text-[9px] uppercase tracking-wider">
+          <span className="rounded bg-teal-400/15 px-1.5 py-0.5 text-teal-200">{chordCount} chord</span>
+          <span className="rounded bg-violet-400/15 px-1.5 py-0.5 text-violet-200">{accentCount} accent</span>
+        </div>
       </div>
 
-      <TonePicker
-        label="Chord tones"
-        tint="emerald"
-        poolSize={poolSize}
-        selected={chord}
-        onToggle={(t) => {
-          const next = chord.includes(t)
-            ? chord.filter((n) => n !== t)
-            : [...chord, t].sort((a, b) => a - b);
-          setChord(next);
-          saveMut.mutate({ chord_tones: next });
-        }}
+      {/* left handle */}
+      <div
+        onPointerDown={(e) => beginDrag(e, -1)}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onClick={(e) => e.stopPropagation()}
+        className="absolute left-0 top-0 h-full w-2 cursor-ew-resize bg-gradient-to-r from-white/10 to-transparent hover:from-teal-300/40"
       />
-
-      <TonePicker
-        label="Accent tones"
-        tint="amber"
-        poolSize={poolSize}
-        selected={accent}
-        onToggle={(t) => {
-          const next = accent.includes(t)
-            ? accent.filter((n) => n !== t)
-            : [...accent, t].sort((a, b) => a - b);
-          setAccent(next);
-          saveMut.mutate({ accent_tones: next });
-        }}
+      {/* right handle */}
+      <div
+        onPointerDown={(e) => beginDrag(e, 1)}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onClick={(e) => e.stopPropagation()}
+        className="absolute right-0 top-0 h-full w-2 cursor-ew-resize bg-gradient-to-l from-white/10 to-transparent hover:from-teal-300/40"
       />
-    </div>
-  );
-}
-
-function TonePicker({
-  label,
-  tint,
-  poolSize,
-  selected,
-  onToggle,
-}: {
-  label: string;
-  tint: "emerald" | "amber";
-  poolSize: number;
-  selected: number[];
-  onToggle: (tone: number) => void;
-}) {
-  const activeCls =
-    tint === "emerald"
-      ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40"
-      : "bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40";
-  return (
-    <div className="space-y-1">
-      <Label className="text-[10px] uppercase tracking-wider text-foreground/50">{label}</Label>
-      <div className="flex flex-wrap gap-1">
-        {Array.from({ length: Math.max(1, poolSize) }, (_, i) => i).map((t) => {
-          const active = selected.includes(t);
-          return (
-            <button
-              key={t}
-              onClick={() => onToggle(t)}
-              className={`h-7 w-7 rounded text-[11px] tabular-nums transition ${
-                active ? activeCls : "bg-white/5 text-foreground/60 hover:bg-white/10"
-              }`}
-            >
-              {t}
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }

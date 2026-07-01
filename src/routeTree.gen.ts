@@ -13,6 +13,8 @@ import { Route as DevRouteImport } from './routes/dev'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminUnlockRouteImport } from './routes/admin.unlock'
+import { Route as AdminPacksRouteImport } from './routes/admin.packs'
 import { Route as AuthenticatedStudioRouteImport } from './routes/_authenticated.studio'
 
 const DevRoute = DevRouteImport.update({
@@ -34,6 +36,16 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminUnlockRoute = AdminUnlockRouteImport.update({
+  id: '/admin/unlock',
+  path: '/admin/unlock',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminPacksRoute = AdminPacksRouteImport.update({
+  id: '/admin/packs',
+  path: '/admin/packs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedStudioRoute = AuthenticatedStudioRouteImport.update({
   id: '/studio',
   path: '/studio',
@@ -45,12 +57,16 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/dev': typeof DevRoute
   '/studio': typeof AuthenticatedStudioRoute
+  '/admin/packs': typeof AdminPacksRoute
+  '/admin/unlock': typeof AdminUnlockRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dev': typeof DevRoute
   '/studio': typeof AuthenticatedStudioRoute
+  '/admin/packs': typeof AdminPacksRoute
+  '/admin/unlock': typeof AdminUnlockRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -59,12 +75,20 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/dev': typeof DevRoute
   '/_authenticated/studio': typeof AuthenticatedStudioRoute
+  '/admin/packs': typeof AdminPacksRoute
+  '/admin/unlock': typeof AdminUnlockRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/dev' | '/studio'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/dev'
+    | '/studio'
+    | '/admin/packs'
+    | '/admin/unlock'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/dev' | '/studio'
+  to: '/' | '/auth' | '/dev' | '/studio' | '/admin/packs' | '/admin/unlock'
   id:
     | '__root__'
     | '/'
@@ -72,6 +96,8 @@ export interface FileRouteTypes {
     | '/auth'
     | '/dev'
     | '/_authenticated/studio'
+    | '/admin/packs'
+    | '/admin/unlock'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -79,6 +105,8 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthRoute: typeof AuthRoute
   DevRoute: typeof DevRoute
+  AdminPacksRoute: typeof AdminPacksRoute
+  AdminUnlockRoute: typeof AdminUnlockRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -111,6 +139,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/unlock': {
+      id: '/admin/unlock'
+      path: '/admin/unlock'
+      fullPath: '/admin/unlock'
+      preLoaderRoute: typeof AdminUnlockRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/packs': {
+      id: '/admin/packs'
+      path: '/admin/packs'
+      fullPath: '/admin/packs'
+      preLoaderRoute: typeof AdminPacksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/studio': {
       id: '/_authenticated/studio'
       path: '/studio'
@@ -138,6 +180,8 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthRoute: AuthRoute,
   DevRoute: DevRoute,
+  AdminPacksRoute: AdminPacksRoute,
+  AdminUnlockRoute: AdminUnlockRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

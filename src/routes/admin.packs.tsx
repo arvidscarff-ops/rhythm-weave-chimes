@@ -19,6 +19,7 @@ import {
   updateAdminSlot,
   registerAdminSample,
   signedCoverUrl,
+  createAdminUploadUrl,
   type AdminPack,
   type AdminSlot,
 } from "@/lib/admin/packs.functions";

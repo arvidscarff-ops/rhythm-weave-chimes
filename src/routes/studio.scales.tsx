@@ -777,14 +777,22 @@ function stepPitchesSorted(step: AdminProgressionStep, pitches: string[]): strin
 
 function FilmstripBlock({
   step,
+  pitches,
   active,
+  isPlaying,
+  disablePlay,
+  onPlay,
   onSelect,
   onRemove,
   onDurationPreview,
   onDurationCommit,
 }: {
   step: AdminProgressionStep;
+  pitches: string[];
   active: boolean;
+  isPlaying: boolean;
+  disablePlay: boolean;
+  onPlay: () => void;
   onSelect: () => void;
   onRemove: () => void;
   onDurationPreview: (bars: number) => void;
@@ -820,6 +828,10 @@ function FilmstripBlock({
   const width = blockWidth(step.duration_bars);
   const chordCount = step.chord_tones.length;
   const accentCount = step.accent_tones.length;
+  const toneCount = new Set([...step.chord_tones, ...step.accent_tones]).size;
+  const hasTones = toneCount > 0;
+  const sweepMs = Math.max(toneCount, 1) * 60;
+  void pitches;
 
   return (
     <div
@@ -850,17 +862,34 @@ function FilmstripBlock({
 
       <div className="mt-3 flex items-start justify-between">
         <span className="pr-label text-white/80">Step {step.step_order + 1}</span>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          className="rounded p-1 text-foreground/40 opacity-0 transition group-hover:opacity-100 hover:text-red-300"
-          title="Remove step"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!hasTones || disablePlay || isPlaying) return;
+              onPlay();
+            }}
+            disabled={!hasTones || disablePlay || isPlaying}
+            className={`rounded p-1 transition disabled:opacity-30 disabled:cursor-not-allowed ${
+              isPlaying ? "text-teal-200" : "text-foreground/60 hover:text-teal-200"
+            }`}
+            title={hasTones ? "Strum this step's notes" : "No chord/accent notes yet"}
+          >
+            <Play className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            className="rounded p-1 text-foreground/40 opacity-0 transition group-hover:opacity-100 hover:text-red-300"
+            title="Remove step"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
       </div>
 
       <div className="mb-2 flex items-end justify-between gap-2">
@@ -873,6 +902,18 @@ function FilmstripBlock({
           <span className="rounded bg-violet-400/15 px-1.5 py-0.5 text-violet-200">{accentCount} accent</span>
         </div>
       </div>
+
+      {isPlaying && (
+        <div
+          key={`sweep-${Date.now()}`}
+          className="pointer-events-none absolute bottom-0 left-0 h-[2px] bg-gradient-to-r from-teal-300/70 via-teal-200 to-teal-300/70"
+          style={{
+            width: "100%",
+            transform: "translateX(-100%)",
+            animation: `strumFill ${sweepMs}ms linear forwards`,
+          }}
+        />
+      )}
 
       {/* left handle */}
       <div

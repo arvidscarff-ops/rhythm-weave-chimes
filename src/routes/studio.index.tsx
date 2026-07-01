@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/admin/unlock")({
+export const Route = createFileRoute("/studio/")({
   beforeLoad: () => {
-    throw redirect({ to: "/studio" });
+    throw redirect({ to: "/studio/packs" });
   },
 });

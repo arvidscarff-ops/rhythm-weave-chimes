@@ -9,15 +9,22 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as StudioRouteImport } from './routes/studio'
 import { Route as DevRouteImport } from './routes/dev'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as AdminUnlockRouteImport } from './routes/admin.unlock'
 import { Route as AdminScalesRouteImport } from './routes/admin.scales'
 import { Route as AdminPacksRouteImport } from './routes/admin.packs'
 import { Route as AuthenticatedStudioRouteImport } from './routes/_authenticated.studio'
 
+const StudioRoute = StudioRouteImport.update({
+  id: '/studio',
+  path: '/studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevRoute = DevRouteImport.update({
   id: '/dev',
   path: '/dev',
@@ -36,6 +43,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const StudioIndexRoute = StudioIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => StudioRoute,
 } as any)
 const AdminUnlockRoute = AdminUnlockRouteImport.update({
   id: '/admin/unlock',
@@ -66,12 +78,13 @@ export interface FileRoutesByFullPath {
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
   '/admin/unlock': typeof AdminUnlockRoute
+  '/studio/': typeof StudioIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dev': typeof DevRoute
-  '/studio': typeof AuthenticatedStudioRoute
+  '/studio': typeof StudioIndexRoute
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
   '/admin/unlock': typeof AdminUnlockRoute
@@ -82,10 +95,12 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/auth': typeof AuthRoute
   '/dev': typeof DevRoute
+  '/studio': typeof StudioRouteWithChildren
   '/_authenticated/studio': typeof AuthenticatedStudioRoute
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
   '/admin/unlock': typeof AdminUnlockRoute
+  '/studio/': typeof StudioIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -97,6 +112,7 @@ export interface FileRouteTypes {
     | '/admin/packs'
     | '/admin/scales'
     | '/admin/unlock'
+    | '/studio/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -112,10 +128,12 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/dev'
+    | '/studio'
     | '/_authenticated/studio'
     | '/admin/packs'
     | '/admin/scales'
     | '/admin/unlock'
+    | '/studio/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -123,6 +141,7 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthRoute: typeof AuthRoute
   DevRoute: typeof DevRoute
+  StudioRoute: typeof StudioRouteWithChildren
   AdminPacksRoute: typeof AdminPacksRoute
   AdminScalesRoute: typeof AdminScalesRoute
   AdminUnlockRoute: typeof AdminUnlockRoute
@@ -130,6 +149,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/studio': {
+      id: '/studio'
+      path: '/studio'
+      fullPath: '/studio'
+      preLoaderRoute: typeof StudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dev': {
       id: '/dev'
       path: '/dev'
@@ -157,6 +183,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/studio/': {
+      id: '/studio/'
+      path: '/'
+      fullPath: '/studio/'
+      preLoaderRoute: typeof StudioIndexRouteImport
+      parentRoute: typeof StudioRoute
     }
     '/admin/unlock': {
       id: '/admin/unlock'
@@ -201,11 +234,23 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
   AuthenticatedRouteChildren,
 )
 
+interface StudioRouteChildren {
+  StudioIndexRoute: typeof StudioIndexRoute
+}
+
+const StudioRouteChildren: StudioRouteChildren = {
+  StudioIndexRoute: StudioIndexRoute,
+}
+
+const StudioRouteWithChildren =
+  StudioRoute._addFileChildren(StudioRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthRoute: AuthRoute,
   DevRoute: DevRoute,
+  StudioRoute: StudioRouteWithChildren,
   AdminPacksRoute: AdminPacksRoute,
   AdminScalesRoute: AdminScalesRoute,
   AdminUnlockRoute: AdminUnlockRoute,

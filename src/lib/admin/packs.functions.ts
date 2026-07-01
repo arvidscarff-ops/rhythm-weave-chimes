@@ -213,3 +213,27 @@ export const signedCoverUrl = createServerFn({ method: "POST" })
     if (error || !signed) throw new Error(error?.message ?? "sign failed");
     return { url: signed.signedUrl };
   });
+
+const ADMIN_BUCKETS = ["pack-covers", "samples"] as const;
+export type AdminBucket = (typeof ADMIN_BUCKETS)[number];
+
+export const createAdminUploadUrl = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: { passcode: string; bucket: AdminBucket; path: string; upsert?: boolean }) => {
+      if (!ADMIN_BUCKETS.includes(data.bucket)) {
+        throw new Error(`Bucket not allowed: ${data.bucket}`);
+      }
+      return data;
+    },
+  )
+  .handler(
+    async ({ data }): Promise<{ signedUrl: string; token: string; path: string }> => {
+      await gate(data.passcode);
+      const supa = await admin();
+      const { data: signed, error } = await supa.storage
+        .from(data.bucket)
+        .createSignedUploadUrl(data.path, { upsert: data.upsert ?? true });
+      if (error || !signed) throw new Error(error?.message ?? "sign upload failed");
+      return { signedUrl: signed.signedUrl, token: signed.token, path: signed.path };
+    },
+  );

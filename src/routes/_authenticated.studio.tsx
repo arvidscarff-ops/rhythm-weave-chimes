@@ -321,11 +321,35 @@ function PacksTab() {
     queryFn: async (): Promise<SlotRow[]> => {
       const { data, error } = await supabase
         .from("pack_slots")
-        .select("id, pack_id, slot_index, sample_id, label, gain_db, pan, pitch_offset_semitones")
+        .select("id, pack_id, slot_index, label, gain_db, pan, pitch_offset_semitones, pack_slot_samples(sample_id, position)")
         .eq("pack_id", selectedId!)
         .order("slot_index");
       if (error) throw new Error(error.message);
-      return (data ?? []) as SlotRow[];
+      type Row = {
+        id: string;
+        pack_id: string;
+        slot_index: number;
+        label: string | null;
+        gain_db: number;
+        pan: number;
+        pitch_offset_semitones: number;
+        pack_slot_samples: Array<{ sample_id: string; position: number }> | null;
+      };
+      return ((data ?? []) as unknown as Row[]).map((r) => {
+        const first = (r.pack_slot_samples ?? [])
+          .slice()
+          .sort((a, b) => a.position - b.position)[0];
+        return {
+          id: r.id,
+          pack_id: r.pack_id,
+          slot_index: r.slot_index,
+          sample_id: first?.sample_id ?? null,
+          label: r.label,
+          gain_db: r.gain_db,
+          pan: r.pan,
+          pitch_offset_semitones: r.pitch_offset_semitones,
+        };
+      });
     },
   });
 
@@ -352,8 +376,9 @@ function PacksTab() {
         .select("id, slug, name, description, is_public, is_builtin, updated_at")
         .single();
       if (error || !pack) throw new Error(error?.message ?? "Create failed");
-      const rows = Array.from({ length: 6 }, (_, i) => ({ pack_id: pack.id, slot_index: i }));
-      const { error: sErr } = await supabase.from("pack_slots").insert(rows);
+      const { error: sErr } = await supabase
+        .from("pack_slots")
+        .insert({ pack_id: pack.id, slot_index: 0 });
       if (sErr) throw new Error(sErr.message);
       return pack as PackRow;
     },
@@ -412,13 +437,42 @@ function PacksTab() {
       if (e2 || !pack) throw new Error(e2?.message ?? "Duplicate failed");
       const { data: oldSlots, error: e3 } = await supabase
         .from("pack_slots")
-        .select("slot_index, sample_id, label, gain_db, pan, pitch_offset_semitones")
+        .select("id, slot_index, label, gain_db, pan, pitch_offset_semitones, pack_slot_samples(sample_id, position)")
         .eq("pack_id", id);
       if (e3) throw new Error(e3.message);
-      const rows = (oldSlots ?? []).map((s) => ({ ...s, pack_id: pack.id }));
-      if (rows.length) {
-        const { error: e4 } = await supabase.from("pack_slots").insert(rows);
-        if (e4) throw new Error(e4.message);
+      type OldSlot = {
+        id: string;
+        slot_index: number;
+        label: string | null;
+        gain_db: number;
+        pan: number;
+        pitch_offset_semitones: number;
+        pack_slot_samples: Array<{ sample_id: string; position: number }> | null;
+      };
+      const oldRows = (oldSlots ?? []) as unknown as OldSlot[];
+      for (const s of oldRows) {
+        const { data: newSlot, error: e4 } = await supabase
+          .from("pack_slots")
+          .insert({
+            pack_id: pack.id,
+            slot_index: s.slot_index,
+            label: s.label,
+            gain_db: s.gain_db,
+            pan: s.pan,
+            pitch_offset_semitones: s.pitch_offset_semitones,
+          })
+          .select("id")
+          .single();
+        if (e4 || !newSlot) throw new Error(e4?.message ?? "Duplicate slot failed");
+        const samples = (s.pack_slot_samples ?? []).map((r) => ({
+          slot_id: newSlot.id,
+          sample_id: r.sample_id,
+          position: r.position,
+        }));
+        if (samples.length) {
+          const { error: e5 } = await supabase.from("pack_slot_samples").insert(samples);
+          if (e5) throw new Error(e5.message);
+        }
       }
       return pack.id;
     },

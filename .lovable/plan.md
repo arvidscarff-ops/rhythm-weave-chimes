@@ -1,35 +1,54 @@
-## Goal
-Color-code each note in the Handpan tone field using the "Boldest Co." palette from the reference, so notes are visually distinct at a glance.
+## Confirmed
 
-## Approach
+**3-state toggle cycle** on each Handpan note slot (for the currently active step):
+`Off → Chord → Accent → Off` (repeat). Slot index `i` maps to a tone number in the step's arrays:
+- Off: not present in either array
+- Chord: present in `chord_tones`, absent from `accent_tones`
+- Accent: present in `accent_tones`, absent from `chord_tones` (mutually exclusive so cycling is unambiguous)
 
-**1. Add palette tokens to `src/styles.css`**
-Introduce the 12 palette colors as CSS variables (HSL) so notes map to design tokens, not hardcoded hex:
-- `--note-oat` #EBDCC7, `--note-cream` #EBDEA6, `--note-sage` #BBC5AB, `--note-peach` #F09E7D, `--note-honey` #F8991D, `--note-spicy` #FC4024, `--note-femme` #EF4782, `--note-dessert` #8552A0, `--note-butch` #9F8D32, `--note-basil` #00784F, `--note-proud` #00859C, `--note-pine` #004242
+Every click still fires `playPitch(pitches[i])` so the admin hears the chord assemble.
 
-**2. Map pitch class → color (12 tones → 12 palette slots)**
-Deterministic mapping by pitch class (C..B) so the same note always gets the same color regardless of octave or slot position:
-```
-C→Spicy   C#→Femme   D→Honey   D#→Dessert
-E→Cream   F→Peach    F#→Proud  G→Basil
-G#→Butch  A→Sage     A#→Pine   B→Oat
-```
-New helper `src/lib/music/noteColors.ts` exporting `noteColor(pitch)` returning the CSS variable name + a readable label.
+**Filmstrip layout:** horizontal scroll strip above the Handpan. Each block is a glass card whose *width* is derived from `duration_bars` (e.g. `72 + duration*36 px`, clamped 1–32). Active block gets a bright teal ring + glow; inactive blocks are dim glass. Trailing "+ Add step" tile calls `addProgressionStep`.
 
-**3. Apply color in `HandpanField` (`src/routes/studio.scales.tsx`)**
-- Tint each note disc with its color: a soft radial gradient using the note's color (low alpha for fill, higher alpha for the rim), keeping the current dark handpan look.
-- The center "ding" uses its own note's color (replaces the amber-only styling); the ring notes each get their color.
-- Ring/glow on strike pulses in the note's color instead of the current amber.
-- Small color chip appears next to each dropdown selector so the mapping is legible even before striking.
-- The `SelectValue` label stays monospaced white for readability against the tinted disc.
+**Drag-to-resize handles:** each block has a 6px-wide vertical grabber on its left and right edges (`cursor-ew-resize`). On `pointerdown` I capture the pointer, record `startX` and `startDuration`, and on `pointermove` compute `next = clamp(round(startDuration + (dx / PX_PER_BAR) * sign), 1, 32)` where `sign` = +1 for the right handle and −1 for the left. The block's width updates live from local state so the drag feels physical. On `pointerup` (or if the value changed) I call `updateProgressionStep({ duration_bars })` once — no per-pixel network chatter. Pointer capture on the handle element keeps the drag alive even if the cursor leaves the block.
 
-**4. No changes to audio, data model, or progression editor.** Chord/Accent tone pickers stay emerald/amber (they refer to slot indices, not pitches).
+## Component changes (`src/routes/studio.scales.tsx`)
 
-## Files touched
-- `src/styles.css` — add 12 note color tokens
-- `src/lib/music/noteColors.ts` — new, pitch-class → token mapping
-- `src/routes/studio.scales.tsx` — thread `noteColor()` into `HandpanField` disc styling and strike glow
+1. **Lift active-step state into `ScaleEditor`:** `const [activeStepId, setActiveStepId] = useState<string | null>(null)`; default to `scale.steps[0]?.id` (and reset when it disappears). Pass `activeStep` down to `HandpanField`.
+
+2. **New `<Filmstrip>` component** — replaces the `ProgressionStepCard` grid.
+   - Renders each step as a `FilmstripBlock` with: step number badge, "N BARS" label, small chord/accent count chips, trash icon on hover.
+   - Active block: `ring-2 ring-teal-300/70` + outer glow via `boxShadow`.
+   - "+ Add step" tile at the end, calls existing `addStepMut` and selects the new step on success.
+
+3. **`FilmstripBlock`** — glass card, width driven by `duration_bars` (local optimistic state during drag), with left/right `<ResizeHandle>` children. Committing calls `updateProgressionStep({ duration_bars })` via the existing pattern.
+
+4. **`HandpanField` — three-state mode.**
+   - New optional props: `activeStep`, `onToggleTone(idx)`. When `activeStep` is provided, the ring buttons cycle Off→Chord→Accent instead of just striking.
+   - Visual mapping per slot `i`:
+     - Off: current dim disc, opacity 0.45, no fill glow.
+     - Chord: solid teal fill (`--pr-melo` / teal-400 gradient) with strong inner light.
+     - Accent: hollow disc with pulsing purple ring (`--pr-bass` / violet-400 outer glow, transparent fill).
+   - Existing pitch color chip beside each Select stays so admins still see which note is which.
+   - Ding (`i === 0`) participates in the cycle exactly like ring slots.
+   - Audio: every cycle click calls `playPitch(pitches[i])` (unchanged zero-choke path).
+   - Pitch selection (the Select dropdown) keeps its current strike-only behavior — it edits the scale pool, not the step arrays.
+
+5. **Toggle handler in `ScaleEditor`:**
+   ```
+   const next = cycle(activeStep, i)  // Off→Chord→Accent→Off
+   updateProgressionStep({ chord_tones, accent_tones })
+   ```
+   Uses optimistic local state on the active step so the disc flips instantly, then reconciles from the `invalidate()` refetch. `chord_tones` and `accent_tones` stay mutually exclusive.
+
+6. **Remove the old `ProgressionStepCard` + `TonePicker`** (dead once the Filmstrip + Handpan handle everything). The per-step chord/accent arrays are now edited exclusively through the Handpan.
 
 ## Out of scope
-- Recoloring the progression timeline or other Studio surfaces
-- Letting the admin re-assign colors per note (fixed mapping for now)
+
+- No schema / server-function changes — `updateProgressionStep` already accepts `chord_tones`, `accent_tones`, `duration_bars`.
+- No audio engine changes.
+- No changes to the composer / progression consumers — the data shape stays identical.
+
+## Open question
+
+Confirm the cycle order: **Off → Chord → Accent → Off**. If you'd prefer Off → Chord → Off with Accent toggled by shift-click (or a right-click), say so and I'll wire that instead.

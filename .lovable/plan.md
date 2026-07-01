@@ -1,37 +1,39 @@
-## Problem
+## Fix: route admin storage uploads through a passcode-gated signed URL
 
-Right now `/admin/packs` only exists as a URL you have to type manually. There is no button, link, or menu anywhere in the app that leads to it. That's why it feels invisible.
+**Root cause.** The passcode unlocks server functions (which use `supabaseAdmin`, bypassing RLS), but `uploadCover` / `uploadSample` in `src/routes/admin.packs.tsx` upload **directly from the browser**. The browser client is `anon` (the admin gate isn't a Supabase sign-in), and every INSERT policy on `storage.objects` for `pack-covers` and `samples` requires `authenticated` → *"new row violates row-level security policy"*.
 
-## Plan: Add a discoverable (but subtle) admin entry point
+## Changes
 
-### 1. Subtle admin trigger on the main page
-Add a small, low-key affordance in a corner of the main app (e.g. bottom-right of `src/routes/index.tsx`) — a tiny glyph button (⌘ / a small dot / a gear) with very low opacity that brightens on hover. Non-admins won't notice it; you'll know where it is.
+### `src/lib/admin/packs.functions.ts`
+Add a new server function:
 
-Clicking it opens the **glassmorphic passcode keypad** directly as a modal overlay (reusing `PasscodeKeypad`). On correct passcode → navigate to `/admin/packs`. On wrong → shake + clear.
+```ts
+createAdminUploadUrl({ passcode, bucket, path, upsert? })
+```
 
-### 2. Keyboard shortcut (power-user path)
-Global listener: pressing `⌘ + .` (Mac) / `Ctrl + .` (Win) anywhere in the app opens the same passcode modal. Nothing visible, nothing for regular users to discover.
+- Passcode-gated.
+- Whitelists `bucket` to `"pack-covers" | "samples"`.
+- Calls `supabaseAdmin.storage.from(bucket).createSignedUploadUrl(path, { upsert })`.
+- Returns `{ signedUrl, token, path }`.
 
-### 3. Retire `/admin/unlock` as a landing page
-Since the keypad is now summoned in-place, `/admin/unlock` becomes redundant. Two options:
-- **(A)** Delete the route entirely — keypad is only accessible via the corner glyph or shortcut.
-- **(B)** Keep `/admin/unlock` as a bookmarkable fallback that just renders the same keypad full-screen.
+### `src/routes/admin.packs.tsx`
+Replace both direct `.upload(...)` calls with the signed-URL flow:
 
-Default: **(B)** — costs nothing, gives you a URL to bookmark.
+```ts
+const { path, token } = await createUploadUrl({
+  data: { passcode: getPass(), bucket: "pack-covers", path: `${pack.id}/cover-${Date.now()}.${ext}` }
+});
+const { error } = await supabase.storage
+  .from("pack-covers")
+  .uploadToSignedUrl(path, token, file, { contentType: file.type });
+```
 
-### 4. Inside `/admin/packs`
-Add a small "Lock" button in the header that clears the in-memory passcode and navigates back to `/`.
+Same pattern for the `samples` bucket in `SlotEditor.uploadSample`. Everything else (`registerAdminSample`, `updateAdminSlot`, `updateAdminPack`) is unchanged — those already go through server functions.
 
-### Files touched
-- `src/routes/index.tsx` — add corner trigger + global shortcut listener
-- new `src/components/admin/AdminTrigger.tsx` — the glyph + modal orchestration
-- `src/routes/admin.packs.tsx` — add Lock button
-- `src/routes/admin.unlock.tsx` — simplified to just host the keypad (or deleted if you pick A)
+### Not touched
+- No storage policy changes.
+- No migration.
+- No changes to the passcode gate.
 
-### Question for you
-Where should the corner trigger live visually?
-- **Bottom-right** floating dot (most discoverable to you, still subtle)
-- **Bottom-left**, tucked near footer
-- **No visible trigger at all** — only `⌘ + .` shortcut + typing `/admin/unlock`
-
-Reply with a preference (or "bottom-right + shortcut" is my default) and I'll build it.
+### Note on the unrelated security scan findings
+The three storage-policy warnings in your Security panel (`pack_covers_delete_update_no_ownership_check`, `samples_bucket_authenticated_read_all`, `pack_covers_insert_no_ownership_check`) are about the *existing* authenticated-user policies. This fix doesn't rely on them at all — admin writes/reads go through the service-role server. Happy to tighten those policies in a separate pass if you want, but it's orthogonal to unblocking uploads.

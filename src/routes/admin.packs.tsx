@@ -19,6 +19,7 @@ import {
   updateAdminSlot,
   registerAdminSample,
   signedCoverUrl,
+  createAdminUploadUrl,
   type AdminPack,
   type AdminSlot,
 } from "@/lib/admin/packs.functions";
@@ -189,6 +190,7 @@ function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void 
   const { get: getPass } = usePasscode();
   const update = useServerFn(updateAdminPack);
   const signCover = useServerFn(signedCoverUrl);
+  const createUploadUrl = useServerFn(createAdminUploadUrl);
   const [name, setName] = useState(pack.name);
   const [description, setDescription] = useState(pack.description ?? "");
   const [humanization, setHumanization] = useState<Humanization>(
@@ -228,15 +230,17 @@ function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void 
   const uploadCover = async (file: File) => {
     const ext = file.name.split(".").pop() ?? "png";
     const path = `${pack.id}/cover-${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from("pack-covers").upload(path, file, {
-      upsert: true,
-      contentType: file.type,
+    const signed = await createUploadUrl({
+      data: { passcode: getPass(), bucket: "pack-covers", path, upsert: true },
     });
+    const { error } = await supabase.storage
+      .from("pack-covers")
+      .uploadToSignedUrl(signed.path, signed.token, file, { contentType: file.type });
     if (error) {
       toast.error(error.message);
       return;
     }
-    saveMut.mutate({ id: pack.id, cover_image_url: path });
+    saveMut.mutate({ id: pack.id, cover_image_url: signed.path });
   };
 
   return (
@@ -416,6 +420,7 @@ function SlotEditor({ packId, slot }: { packId: string; slot: AdminSlot }) {
   const { get: getPass } = usePasscode();
   const update = useServerFn(updateAdminSlot);
   const register = useServerFn(registerAdminSample);
+  const createUploadUrl = useServerFn(createAdminUploadUrl);
   const [busy, setBusy] = useState(false);
   const [overrideOn, setOverrideOn] = useState(slot.humanization !== null);
   const [hum, setHum] = useState<Humanization>(slot.humanization ?? DEFAULT_HUMANIZATION);
@@ -427,16 +432,20 @@ function SlotEditor({ packId, slot }: { packId: string; slot: AdminSlot }) {
     try {
       const ext = file.name.split(".").pop() ?? "wav";
       const path = `admin-packs/${packId}/${slot.slot_index}-${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("samples").upload(path, file, {
-        upsert: true,
-        contentType: file.type || "audio/wav",
+      const signed = await createUploadUrl({
+        data: { passcode: getPass(), bucket: "samples", path, upsert: true },
       });
+      const { error } = await supabase.storage
+        .from("samples")
+        .uploadToSignedUrl(signed.path, signed.token, file, {
+          contentType: file.type || "audio/wav",
+        });
       if (error) throw error;
       const { id } = await register({
         data: {
           passcode: getPass(),
           name: file.name,
-          storage_path: path,
+          storage_path: signed.path,
           mime_type: file.type || "audio/wav",
         },
       });

@@ -8,6 +8,8 @@ type Ctx = {
   ensure: () => Promise<string>;
   /** Current passcode (may be empty). */
   get: () => string;
+  /** Prime with an already-verified passcode (e.g. from /admin/unlock). */
+  set: (code: string) => void;
   /** Clear the cached passcode (forces re-prompt next time). */
   clear: () => void;
 };
@@ -65,6 +67,9 @@ export function PasscodeProvider({ children }: { children: React.ReactNode }) {
     () => ({
       ensure,
       get: () => passRef.current,
+      set: (code: string) => {
+        passRef.current = code;
+      },
       clear: () => {
         passRef.current = "";
       },

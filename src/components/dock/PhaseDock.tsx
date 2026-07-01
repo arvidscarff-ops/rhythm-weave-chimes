@@ -23,6 +23,7 @@ import {
   Share2,
   FolderOpen,
   Save,
+  Shield,
 } from "lucide-react";
 import {
   DropdownMenu,

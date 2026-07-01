@@ -384,7 +384,18 @@ function SlotsEditor({
   onDelete: (id: string) => void;
 }) {
   const update = async (slot: Slot, patch: Partial<Slot>) => {
-    await supabase.from("pack_slots").update(patch).eq("id", slot.id);
+    const { sample_id, ...slotPatch } = patch;
+    if (Object.keys(slotPatch).length > 0) {
+      await supabase.from("pack_slots").update(slotPatch).eq("id", slot.id);
+    }
+    if (sample_id !== undefined) {
+      await supabase.from("pack_slot_samples").delete().eq("slot_id", slot.id);
+      if (sample_id) {
+        await supabase
+          .from("pack_slot_samples")
+          .insert({ slot_id: slot.id, sample_id, position: 0 });
+      }
+    }
     onChange();
   };
 

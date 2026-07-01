@@ -167,6 +167,8 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
   const { get: getPass } = usePasscode();
   const update = useServerFn(updateAdminScale);
   const addStep = useServerFn(addProgressionStep);
+  const updStep = useServerFn(updateProgressionStep);
+  const rmStep = useServerFn(removeProgressionStep);
 
   const [name, setName] = useState(scale.name);
   const [pitches, setPitches] = useState<string[]>(
@@ -174,6 +176,25 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
       ? scale.pitches
       : ["D3", "A3", "Bb3", "C4", "D4", "E4", "F4", "A4"],
   );
+
+  // Optimistic step state layered on top of server data.
+  const [stepOverrides, setStepOverrides] = useState<Record<string, Partial<AdminProgressionStep>>>({});
+  const steps: AdminProgressionStep[] = useMemo(
+    () =>
+      scale.steps.map((s) =>
+        stepOverrides[s.id] ? { ...s, ...stepOverrides[s.id] } : s,
+      ),
+    [scale.steps, stepOverrides],
+  );
+
+  const [activeStepId, setActiveStepId] = useState<string | null>(steps[0]?.id ?? null);
+  useEffect(() => {
+    if (!activeStepId && steps[0]) setActiveStepId(steps[0].id);
+    else if (activeStepId && !steps.find((s) => s.id === activeStepId)) {
+      setActiveStepId(steps[0]?.id ?? null);
+    }
+  }, [steps, activeStepId]);
+  const activeStep = steps.find((s) => s.id === activeStepId) ?? null;
 
   const invalidate = async () => {
     await qc.invalidateQueries({ queryKey: ["admin", "scales"] });
@@ -192,10 +213,46 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
 
   const addStepMut = useMutation({
     mutationFn: () => addStep({ data: { passcode: getPass(), scale_id: scale.id } }),
-    onSuccess: async () => {
+    onSuccess: async ({ id }) => {
       await invalidate();
+      setActiveStepId(id);
     },
   });
+
+  const updStepMut = useMutation({
+    mutationFn: (patch: {
+      id: string;
+      chord_tones?: number[];
+      accent_tones?: number[];
+      duration_bars?: number;
+    }) => updStep({ data: { passcode: getPass(), ...patch } }),
+    onSuccess: async (_r, vars) => {
+      await invalidate();
+      setStepOverrides((o) => {
+        const { [vars.id]: _drop, ...rest } = o;
+        return rest;
+      });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const rmStepMut = useMutation({
+    mutationFn: (id: string) => rmStep({ data: { passcode: getPass(), id } }),
+    onSuccess: invalidate,
+  });
+
+  const setStepPatch = (id: string, patch: Partial<AdminProgressionStep>) => {
+    setStepOverrides((o) => ({ ...o, [id]: { ...o[id], ...patch } }));
+  };
+
+  const cycleTone = (idx: number) => {
+    if (!activeStep) return;
+    primeAudio();
+    playPitch(pitches[idx] ?? DEFAULT_PITCH);
+    const patch = applyToneCycle(activeStep, idx);
+    setStepPatch(activeStep.id, patch);
+    updStepMut.mutate({ id: activeStep.id, ...patch });
+  };
 
   const commit = () =>
     saveMut.mutate({
@@ -217,6 +274,28 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
 
   return (
     <div className="space-y-6">
+      <div className="rounded-lg border border-white/10 bg-white/[0.02] p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm uppercase tracking-[0.2em] text-foreground/60">
+            Progression timeline
+          </h2>
+          <span className="text-[10px] uppercase tracking-wider text-foreground/40">
+            {activeStep
+              ? `Editing Step ${activeStep.step_order + 1} · ${activeStep.chord_tones.length} chord · ${activeStep.accent_tones.length} accent`
+              : "No step selected"}
+          </span>
+        </div>
+        <Filmstrip
+          steps={steps}
+          activeStepId={activeStepId}
+          onSelect={setActiveStepId}
+          onAdd={() => addStepMut.mutate()}
+          onRemove={(id) => rmStepMut.mutate(id)}
+          onDurationPreview={(id, bars) => setStepPatch(id, { duration_bars: bars })}
+          onDurationCommit={(id, bars) => updStepMut.mutate({ id, duration_bars: bars })}
+        />
+      </div>
+
       <div className="rounded-lg border border-white/10 bg-white/[0.02] p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm uppercase tracking-[0.2em] text-foreground/60">Scale</h2>
@@ -243,6 +322,8 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
         <HandpanField
           pitches={pitches}
           onChange={setPitches}
+          activeStep={activeStep}
+          onCycleTone={cycleTone}
         />
 
         <div className="flex justify-end">
@@ -250,32 +331,6 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
             Save scale
           </Button>
         </div>
-      </div>
-
-      <div className="rounded-lg border border-white/10 bg-white/[0.02] p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm uppercase tracking-[0.2em] text-foreground/60">
-            Progression timeline
-          </h2>
-          <Button size="sm" variant="ghost" onClick={() => addStepMut.mutate()}>
-            <Plus className="h-3 w-3 mr-1" /> Add step
-          </Button>
-        </div>
-
-        {scale.steps.length === 0 ? (
-          <p className="text-xs text-foreground/50">No steps yet.</p>
-        ) : (
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {scale.steps.map((step) => (
-              <ProgressionStepCard
-                key={step.id}
-                step={step}
-                poolSize={pitches.length}
-                onChanged={invalidate}
-              />
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );

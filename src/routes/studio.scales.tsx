@@ -609,7 +609,7 @@ function HandpanField({
 
       <p className="text-center text-[10px] uppercase tracking-wider text-foreground/40">
         {activeStep
-          ? "Tap to cycle: Off → Chord (teal) → Accent (violet) → Off"
+          ? "Tap to cycle: Off → Chord (white bloom) → Accent (violet halo) → Off"
           : "Tap any note to hear it · polyphonic — notes ring out and overlap"}
       </p>
     </div>

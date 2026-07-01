@@ -1,14 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { usePasscode } from "@/lib/admin/passcode-context";
+import { allPitchOptions, DEFAULT_PITCH } from "@/lib/music/pitch";
+import { playPitch, primeAudio } from "@/lib/studio/handpanAudio";
 import {
   listAdminScales,
   createAdminScale,
@@ -136,8 +145,11 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
   const addStep = useServerFn(addProgressionStep);
 
   const [name, setName] = useState(scale.name);
-  const [poolSize, setPoolSize] = useState(scale.pool_size);
-  const [intervals, setIntervals] = useState<number[]>(scale.intervals);
+  const [pitches, setPitches] = useState<string[]>(
+    scale.pitches.length > 0
+      ? scale.pitches
+      : ["D3", "A3", "Bb3", "C4", "D4", "E4", "F4", "A4"],
+  );
 
   const invalidate = async () => {
     await qc.invalidateQueries({ queryKey: ["admin", "scales"] });
@@ -161,20 +173,13 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
     },
   });
 
-  const toggleInterval = (semi: number) => {
-    const next = intervals.includes(semi)
-      ? intervals.filter((n) => n !== semi)
-      : [...intervals, semi].sort((a, b) => a - b);
-    setIntervals(next);
-  };
-
   const commit = () =>
     saveMut.mutate({
       passcode: getPass(),
       id: scale.id,
       name,
-      pool_size: poolSize,
-      intervals,
+      pool_size: pitches.length,
+      pitches,
     });
 
   const publishMut = useMutation({
@@ -206,46 +211,15 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
           </div>
         </div>
 
-        <div className="grid grid-cols-[1fr_120px] gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs text-foreground/60">Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-foreground/60">Pool size</Label>
-            <Input
-              type="number"
-              min={2}
-              max={12}
-              value={poolSize}
-              onChange={(e) => setPoolSize(Number(e.target.value) || 2)}
-            />
-          </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-foreground/60">Name</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
         </div>
 
-        <div className="space-y-2">
-          <Label className="text-xs text-foreground/60">
-            Intervals (semitones from root, {intervals.length} selected)
-          </Label>
-          <div className="flex flex-wrap gap-2">
-            {Array.from({ length: 12 }, (_, i) => i).map((semi) => {
-              const active = intervals.includes(semi);
-              return (
-                <button
-                  key={semi}
-                  onClick={() => toggleInterval(semi)}
-                  className={`h-9 w-9 rounded-md text-xs tabular-nums transition ${
-                    active
-                      ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40"
-                      : "bg-white/5 text-foreground/60 hover:bg-white/10"
-                  }`}
-                >
-                  {semi}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <HandpanField
+          pitches={pitches}
+          onChange={setPitches}
+        />
 
         <div className="flex justify-end">
           <Button size="sm" onClick={commit} disabled={saveMut.isPending}>
@@ -272,13 +246,154 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
               <ProgressionStepCard
                 key={step.id}
                 step={step}
-                poolSize={scale.pool_size}
+                poolSize={pitches.length}
                 onChanged={invalidate}
               />
             ))}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function HandpanField({
+  pitches,
+  onChange,
+}: {
+  pitches: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const options = useMemo(() => allPitchOptions("C1", "C7"), []);
+  const [ringing, setRinging] = useState<Record<number, number>>({});
+  const timers = useRef<Record<number, number>>({});
+
+  const strike = (idx: number, pitch: string) => {
+    primeAudio();
+    playPitch(pitch);
+    const token = (ringing[idx] ?? 0) + 1;
+    setRinging((r) => ({ ...r, [idx]: token }));
+    if (timers.current[idx]) window.clearTimeout(timers.current[idx]);
+    timers.current[idx] = window.setTimeout(() => {
+      setRinging((r) => {
+        if (r[idx] !== token) return r;
+        const { [idx]: _drop, ...rest } = r;
+        return rest;
+      });
+    }, 700);
+  };
+
+  const setPitch = (idx: number, value: string) => {
+    const next = pitches.slice();
+    next[idx] = value;
+    onChange(next);
+    strike(idx, value);
+  };
+
+  const addSlot = () => {
+    const last = pitches[pitches.length - 1] ?? DEFAULT_PITCH;
+    onChange([...pitches, last]);
+  };
+  const removeSlot = () => {
+    if (pitches.length <= 1) return;
+    onChange(pitches.slice(0, -1));
+  };
+
+  // Radial layout: slot 0 in the center (the "ding"), rest around a ring.
+  const size = 460;
+  const cx = size / 2;
+  const cy = size / 2;
+  const ringRadius = 170;
+  const ringSlots = Math.max(0, pitches.length - 1);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs uppercase tracking-[0.18em] text-foreground/60">
+          Handpan tone field
+        </Label>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-foreground/40">
+            {pitches.length} note{pitches.length === 1 ? "" : "s"} · typical 8–12
+          </span>
+          <Button size="sm" variant="ghost" onClick={removeSlot} disabled={pitches.length <= 1}>
+            <span className="text-base leading-none">−</span>
+          </Button>
+          <Button size="sm" variant="ghost" onClick={addSlot}>
+            <Plus className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+
+      <div
+        className="relative mx-auto rounded-full border border-white/10 bg-gradient-to-b from-white/[0.04] to-black/40 shadow-inner"
+        style={{ width: size, height: size }}
+      >
+        {pitches.map((p, i) => {
+          let x: number, y: number;
+          if (i === 0) {
+            x = cx;
+            y = cy;
+          } else {
+            const angle = ((i - 1) / ringSlots) * Math.PI * 2 - Math.PI / 2;
+            x = cx + Math.cos(angle) * ringRadius;
+            y = cy + Math.sin(angle) * ringRadius;
+          }
+          const isDing = i === 0;
+          const slotSize = isDing ? 108 : 88;
+          const isRinging = ringing[i] !== undefined;
+          return (
+            <div
+              key={i}
+              className="absolute flex flex-col items-center gap-1"
+              style={{
+                left: x - slotSize / 2,
+                top: y - slotSize / 2 - (isDing ? 0 : 8),
+                width: slotSize,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => strike(i, p)}
+                className={`relative flex items-center justify-center rounded-full border transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 ${
+                  isDing
+                    ? "border-amber-300/40 bg-gradient-to-br from-amber-200/20 via-amber-500/10 to-black/60"
+                    : "border-white/15 bg-gradient-to-br from-white/[0.08] via-white/[0.02] to-black/50"
+                } ${isRinging ? "scale-[1.06] brightness-150 shadow-[0_0_28px_rgba(251,191,36,0.5)]" : "hover:brightness-125"}`}
+                style={{ width: slotSize, height: slotSize }}
+              >
+                <span className="pointer-events-none select-none font-mono text-lg tracking-tight text-foreground/90">
+                  {p}
+                </span>
+                {isRinging && (
+                  <span
+                    key={ringing[i]}
+                    className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-amber-300/50 animate-ping"
+                  />
+                )}
+              </button>
+              <div className="w-full">
+                <Select value={p} onValueChange={(v) => setPitch(i, v)}>
+                  <SelectTrigger className="h-6 border-white/10 bg-black/40 px-2 text-[10px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    {options.map((opt) => (
+                      <SelectItem key={opt} value={opt} className="text-xs">
+                        {opt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-center text-[10px] uppercase tracking-wider text-foreground/40">
+        Tap any note to hear it · polyphonic — notes ring out and overlap
+      </p>
     </div>
   );
 }

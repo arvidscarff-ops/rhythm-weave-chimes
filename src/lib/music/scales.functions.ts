@@ -17,7 +17,7 @@ export const fetchPublishedScales = createServerFn({ method: "GET" }).handler(
     );
     const { data, error } = await supa
       .from("custom_scales")
-      .select("id,name,pool_size,intervals,scale_progressions(step_order,chord_tones,accent_tones,duration_bars)")
+      .select("id,name,pool_size,intervals,pitches,scale_progressions(step_order,chord_tones,accent_tones,duration_bars)")
       .eq("is_published", true)
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
@@ -26,6 +26,7 @@ export const fetchPublishedScales = createServerFn({ method: "GET" }).handler(
       name: row.name,
       pool_size: row.pool_size,
       intervals: row.intervals ?? [],
+      pitches: row.pitches ?? undefined,
       steps: ((row.scale_progressions ?? []) as Array<{
         step_order: number;
         chord_tones: number[] | null;

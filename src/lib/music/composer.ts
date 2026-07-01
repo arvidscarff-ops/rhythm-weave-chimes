@@ -15,6 +15,7 @@
 import { degreeToFreq, type RootName } from "./scales";
 import { activeStep, getScale, pickToneForStep } from "./progression";
 import { euclid } from "./euclidean";
+import { pitchToFreq } from "./pitch";
 
 export type NoteMode = "sequential" | "random" | "arpeggio" | "brownian";
 
@@ -204,6 +205,16 @@ export function composerAdvance(
 
   const { degree, octave } = pickDegree(s, st);
   const scale = getScale(current.scale);
+  if (scale.pitches && scale.pitches.length > 0) {
+    // Pitch-driven scale: absolute notes, ignore root/octave and use the
+    // degree as a direct index into the handpan tone field.
+    const idx = ((degree % scale.pitches.length) + scale.pitches.length) % scale.pitches.length;
+    try {
+      return { play: true, freq: pitchToFreq(scale.pitches[idx]) };
+    } catch {
+      /* fall through to interval math on parse failure */
+    }
+  }
   const freq = degreeToFreq(current.root, scale.intervals, degree, octave);
   return { play: true, freq };
 }

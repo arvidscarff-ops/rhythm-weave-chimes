@@ -24,6 +24,7 @@ import {
   FolderOpen,
   Save,
   Shield,
+  ListMusic,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -177,7 +178,7 @@ export function PhaseDock(p: Props) {
         />
         <SceneChips scene={p.scene} onScene={p.onScene} />
         <FxMenu fx={p.fx} onFx={p.onFx} />
-        <ComposeMenu composer={p.composer} onComposer={p.onComposer} authed={p.authed} />
+        <ScalesMenu composer={p.composer} onComposer={p.onComposer} authed={p.authed} />
         <PacksMenu packs={p.packs} packId={p.packId} onPackId={p.onPackId} />
         <VisualsMenu neural={p.neural} onNeural={p.onNeural} />
 
@@ -571,8 +572,8 @@ function MixRow({
 }
 
 /* =================== Packs menu =================== */
-/* =================== Compose menu =================== */
-function ComposeMenu({
+/* =================== Scales menu =================== */
+function ScalesMenu({
   composer,
   onComposer,
   authed,
@@ -646,11 +647,11 @@ function ComposeMenu({
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger className={DOCK_BTN}>
-        <Sparkles className="h-4 w-4" /> Compose
+        <ListMusic className="h-4 w-4" /> Scales
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="center">
         <DropdownMenuPage id="main">
-          <DropdownMenuLabel>Composer</DropdownMenuLabel>
+          <DropdownMenuLabel>Scales</DropdownMenuLabel>
           <DropdownMenuCheckboxItem
             checked={composer.enabled}
             onCheckedChange={(v) => onComposer({ ...composer, enabled: !!v })}
@@ -666,11 +667,16 @@ function ComposeMenu({
           </DropdownMenuPageTrigger>
           <DropdownMenuSeparator />
           <DropdownMenuPageTrigger targetId="key">
-            Key{" "}
+            Selected{" "}
             <span className="ml-auto text-foreground/50">
               {composer.root} {currentScaleLabel}
             </span>
           </DropdownMenuPageTrigger>
+          <DropdownMenuItem asChild>
+            <Link to="/studio/scales" className="flex w-full items-center gap-2">
+              <FolderOpen className="h-4 w-4" /> Create / publish scales
+            </Link>
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>Voices</DropdownMenuLabel>
           {composer.slots.map((s, i) => (
@@ -684,7 +690,7 @@ function ComposeMenu({
         </DropdownMenuPage>
 
         <DropdownMenuPage id="presets">
-          <DropdownMenuLabel>Composer Presets</DropdownMenuLabel>
+          <DropdownMenuLabel>Saved scale setups</DropdownMenuLabel>
           {!authed ? (
             <DropdownMenuItem asChild>
               <Link to="/auth" className="flex w-full items-center gap-2">
@@ -752,7 +758,7 @@ function ComposeMenu({
             ))}
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
-          <DropdownMenuLabel>Scale</DropdownMenuLabel>
+          <DropdownMenuLabel>Published scales</DropdownMenuLabel>
           <DropdownMenuRadioGroup
             value={currentScale?.id ?? ""}
             onValueChange={(v) => onComposer({ ...composer, scale: v })}

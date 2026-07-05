@@ -267,9 +267,26 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
   const publishMut = useMutation({
     mutationFn: (v: boolean) =>
       update({ data: { passcode: getPass(), id: scale.id, is_published: v } }),
+    onMutate: async (v: boolean) => {
+      await qc.cancelQueries({ queryKey: ["admin", "scales"] });
+      const prev = qc.getQueryData<AdminScale[]>(["admin", "scales"]);
+      if (prev) {
+        qc.setQueryData<AdminScale[]>(
+          ["admin", "scales"],
+          prev.map((s) => (s.id === scale.id ? { ...s, is_published: v } : s)),
+        );
+      }
+      return { prev };
+    },
+    onError: (e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["admin", "scales"], ctx.prev);
+      toast.error(
+        e instanceof Error ? `Publish failed: ${e.message}` : "Publish failed",
+      );
+    },
     onSuccess: async (_r, v) => {
       await invalidate();
-      toast.success(v ? "Published" : "Unpublished");
+      toast.success(v ? "Published to the app" : "Unpublished");
     },
   });
 

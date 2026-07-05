@@ -75,7 +75,7 @@ function AdminUI() {
 
   const scalesQ = useQuery({
     queryKey: ["admin", "scales"],
-    queryFn: () => list({ data: { passcode: getPass() } }),
+    queryFn: async () => list({ data: { passcode: getPass() || (await ensure()) } }),
   });
   const scales = scalesQ.data ?? [];
   const [selectedId, setSelectedId] = useState<string | null>(null);

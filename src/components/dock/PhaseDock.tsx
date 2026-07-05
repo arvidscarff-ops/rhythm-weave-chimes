@@ -690,7 +690,7 @@ function ScalesMenu({
         </DropdownMenuPage>
 
         <DropdownMenuPage id="presets">
-          <DropdownMenuLabel>Composer Presets</DropdownMenuLabel>
+          <DropdownMenuLabel>Saved scale setups</DropdownMenuLabel>
           {!authed ? (
             <DropdownMenuItem asChild>
               <Link to="/auth" className="flex w-full items-center gap-2">

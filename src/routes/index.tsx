@@ -926,11 +926,14 @@ function PhaseApp() {
   useEffect(() => {
     if (!scalesQ.data) return;
     setRegistry(scalesQ.data);
-    // If the stored composer scale id no longer exists, fall back to first.
+    // If the stored composer scale id no longer exists, fall back to first and
+    // keep the audio engine's composer singleton in sync with React state.
     setComposer((c) => {
       const exists = scalesQ.data!.some((s) => s.id === c.scale);
       if (exists || scalesQ.data!.length === 0) return c;
-      return { ...c, scale: scalesQ.data![0].id };
+      const next = { ...c, scale: scalesQ.data![0].id };
+      saveComposerSettings(next);
+      return next;
     });
   }, [scalesQ.data]);
   // Resolve currently-selected pack into a RuntimePack (built-in or custom).

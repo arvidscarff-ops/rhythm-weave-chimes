@@ -68,7 +68,7 @@ export const Route = createFileRoute("/studio/scales")({
 
 function AdminUI() {
   const qc = useQueryClient();
-  const { get: getPass } = usePasscode();
+  const { ensure, get: getPass } = usePasscode();
   const list = useServerFn(listAdminScales);
   const create = useServerFn(createAdminScale);
   const del = useServerFn(deleteAdminScale);
@@ -85,7 +85,7 @@ function AdminUI() {
   }, [scales, selectedId]);
 
   const createMut = useMutation({
-    mutationFn: (name: string) => create({ data: { passcode: getPass(), name } }),
+    mutationFn: async (name: string) => create({ data: { passcode: await ensure(), name } }),
     onSuccess: async ({ id }) => {
       await qc.invalidateQueries({ queryKey: ["admin", "scales"] });
       await qc.invalidateQueries({ queryKey: ["published-scales"] });
@@ -96,7 +96,7 @@ function AdminUI() {
   });
 
   const delMut = useMutation({
-    mutationFn: (id: string) => del({ data: { passcode: getPass(), id } }),
+    mutationFn: async (id: string) => del({ data: { passcode: await ensure(), id } }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "scales"] });
       await qc.invalidateQueries({ queryKey: ["published-scales"] });
@@ -165,7 +165,7 @@ function AdminUI() {
 
 function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => void }) {
   const qc = useQueryClient();
-  const { get: getPass } = usePasscode();
+  const { ensure } = usePasscode();
   const update = useServerFn(updateAdminScale);
   const addStep = useServerFn(addProgressionStep);
   const updStep = useServerFn(updateProgressionStep);
@@ -213,7 +213,7 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
   });
 
   const addStepMut = useMutation({
-    mutationFn: () => addStep({ data: { passcode: getPass(), scale_id: scale.id } }),
+    mutationFn: async () => addStep({ data: { passcode: await ensure(), scale_id: scale.id } }),
     onSuccess: async ({ id }) => {
       await invalidate();
       setActiveStepId(id);
@@ -227,6 +227,7 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
       accent_tones?: number[];
       duration_bars?: number;
     }) => updStep({ data: { passcode: getPass(), ...patch } }),
+    }) => updStep({ data: { passcode: await ensure(), ...patch } }),
     onSuccess: async (_r, vars) => {
       await invalidate();
       setStepOverrides((o) => {
@@ -238,7 +239,7 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
   });
 
   const rmStepMut = useMutation({
-    mutationFn: (id: string) => rmStep({ data: { passcode: getPass(), id } }),
+    mutationFn: async (id: string) => rmStep({ data: { passcode: await ensure(), id } }),
     onSuccess: invalidate,
   });
 
@@ -255,9 +256,9 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
     updStepMut.mutate({ id: activeStep.id, ...patch });
   };
 
-  const commit = () =>
+  const commit = async () =>
     saveMut.mutate({
-      passcode: getPass(),
+      passcode: await ensure(),
       id: scale.id,
       name,
       pool_size: pitches.length,
@@ -265,8 +266,8 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
     });
 
   const publishMut = useMutation({
-    mutationFn: (v: boolean) =>
-      update({ data: { passcode: getPass(), id: scale.id, is_published: v } }),
+    mutationFn: async (v: boolean) =>
+      update({ data: { passcode: await ensure(), id: scale.id, is_published: v } }),
     onMutate: async (v: boolean) => {
       await qc.cancelQueries({ queryKey: ["admin", "scales"] });
       const prev = qc.getQueryData<AdminScale[]>(["admin", "scales"]);

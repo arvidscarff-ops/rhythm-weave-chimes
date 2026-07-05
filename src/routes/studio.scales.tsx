@@ -221,12 +221,11 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
   });
 
   const updStepMut = useMutation({
-    mutationFn: (patch: {
+    mutationFn: async (patch: {
       id: string;
       chord_tones?: number[];
       accent_tones?: number[];
       duration_bars?: number;
-    }) => updStep({ data: { passcode: getPass(), ...patch } }),
     }) => updStep({ data: { passcode: await ensure(), ...patch } }),
     onSuccess: async (_r, vars) => {
       await invalidate();

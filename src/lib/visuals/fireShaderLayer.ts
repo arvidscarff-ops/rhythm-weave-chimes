@@ -28,6 +28,23 @@ type Particle = {
   wFreq1: number; wFreq2: number; // meander frequencies
   curlAmp: number;             // per-particle perpendicular curl strength (px/s²)
   prevTheta: number;           // previous meander angle (for numerical derivative)
+  // shape variance
+  baseL: number; baseW: number;      // css px, base ellipse axes
+  aspectPhase: number; aspectFreq: number; // for L/W breathing
+  hotPhase: number;                  // for hot-core drift
+  flickerPhase: number; flickerFreq: number;
+  curvePhase: number; curveFreq: number; curveAmp: number; // heading wobble ±rad
+  haloScale: number; haloAlphaMul: number;
+  // trail
+  px: number; py: number;
+};
+
+type Ash = {
+  x: number; y: number;
+  vx: number; vy: number;
+  born: number; life: number;
+  r: number; g: number; b: number;
+  bright: number;
 };
 
 type FireLayer = {
@@ -91,6 +108,7 @@ function emberColor(
 }
 
 const MAX_PARTICLES = 2000;
+const MAX_ASH = 800;
 
 
 export function createFireLayer(parent: HTMLElement): FireLayer {
@@ -144,6 +162,7 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
   ro.observe(canvas);
 
   let lastRenderTime = -1;
+  const ash: Ash[] = [];
 
   layer.spawn = (cssX, cssY, tSec, opts) => {
     resize();
@@ -172,8 +191,14 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
       const vy = Math.sin(ang) * speed - baseSpeed * 0.35 * Math.random();
 
       const jitter = 0.6 + Math.random() * 0.8;
+      // Power-law length: most small, a few long streaks
+      const lenRoll = Math.pow(Math.random(), 1.8); // biased small
+      const baseL = 5 + lenRoll * 21;   // 5..26 css px
+      const widthRoll = Math.pow(Math.random(), 1.4);
+      const baseW = 1.8 + widthRoll * 4.7; // 1.8..6.5
       particles.push({
         x: x0, y: y0,
+        px: x0, py: y0,
         vx, vy,
         born: tSec,
         life: life * (0.55 + Math.random() * 0.9),
@@ -190,6 +215,17 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
         // actually turns ~1–2 rad over the particle's lifetime.
         curlAmp: speed * (0.9 + Math.random() * 0.7),
         prevTheta: 0,
+        baseL, baseW,
+        aspectPhase: Math.random() * Math.PI * 2,
+        aspectFreq: 1.5 + Math.random() * 2.5, // Hz
+        hotPhase: Math.random() * Math.PI * 2,
+        flickerPhase: Math.random() * Math.PI * 2,
+        flickerFreq: 12 + Math.random() * 18,  // fast flicker Hz
+        curvePhase: Math.random() * Math.PI * 2,
+        curveFreq: 0.8 + Math.random() * 1.4,
+        curveAmp: (Math.random() * 0.14) - 0.02, // up to ~8°
+        haloScale: 0.7 + Math.random() * 0.9,
+        haloAlphaMul: 0.55 + Math.random() * 1.1,
       });
     }
 
@@ -252,56 +288,87 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
       p.vy += GRAV * 0.3 * dt;
       p.vx *= dragK;
       p.vy *= dragK;
+      p.px = p.x; p.py = p.y;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
 
       const shrink = 1 - t * 0.65;
       const alpha = Math.pow(1 - t, 1.35) * p.bright;
-      const twinkle = 0.8 + 0.2 * Math.sin(tSec * 28 + p.seed * 6.28);
-      const a = Math.min(1, alpha * twinkle);
+      // Flicker: fast per-particle intensity noise, mixed with slow twinkle
+      const flick = 0.75 + 0.25 * Math.sin(tSec * p.flickerFreq + p.flickerPhase)
+                          + 0.10 * Math.sin(tSec * p.flickerFreq * 0.37 + p.flickerPhase * 1.7);
+      const a = Math.max(0, Math.min(1, alpha * flick));
       if (a <= 0.002) continue;
 
       const speed = Math.hypot(p.vx, p.vy);
-      const ang = speed > 0.1 ? Math.atan2(p.vy, p.vx) : (p.seed % (Math.PI * 2));
+      // Heading: velocity angle + slow per-particle wobble so cigars aren't
+      // perfectly axis-aligned with motion (reads as tumbling embers).
+      const headingBase = speed > 0.1 ? Math.atan2(p.vy, p.vx) : (p.seed % (Math.PI * 2));
+      const ang = headingBase + p.curveAmp * Math.sin(tSec * p.curveFreq + p.curvePhase);
 
-      // Small cigar-shaped ember. Sized like the reference photo (~4-8px
-      // short × 12-24px long), grows slightly with speed, shrinks with age.
-      // Long axis has a small per-particle variance so the burst reads as
-      // varied ember shapes rather than uniform ellipses.
-      const lenVar = 0.75 + ((p.seed * 0.317) % 1) * 0.7; // 0.75..1.45
-      const L = Math.max(6, Math.min(22, (p.r0 * 5 + speed * 0.012) * lenVar)) * shrink;
-      const W = Math.max(2, Math.min(6, p.r0 * 1.35)) * shrink;
+      // Breathing aspect: L and W modulate out of phase → sparks stretch thin
+      // then puff shorter/thicker as they travel.
+      const lMod = 1 + 0.35 * Math.sin(tSec * p.aspectFreq + p.aspectPhase);
+      const wMod = 1 + 0.25 * Math.sin(tSec * p.aspectFreq * 1.7 + p.aspectPhase + 1.2);
+      const speedStretch = 1 + Math.min(0.6, speed * 0.0015);
+      const L = Math.max(3, p.baseL * lMod * shrink * speedStretch);
+      const W = Math.max(1.2, p.baseW * wMod * shrink / Math.max(1, speedStretch * 0.6));
 
       const [cr, cg, cb] = emberColor(p.tint[0], p.tint[1], p.tint[2], t);
 
-      // Bloom halo — small, round, dim. Drawn in world space (before the
-      // cigar transform) so it doesn't inherit anisotropic scaling.
-      const haloA = a * 0.22;
+      // Sub-pixel jitter — breaks pixel-grid lock, reads as higher-res.
+      const jx = (Math.sin(tSec * 41 + p.seed) * 0.5);
+      const jy = (Math.cos(tSec * 37 + p.seed * 1.3) * 0.5);
+      const cxw = (p.x + jx) * dpr;
+      const cyw = (p.y + jy) * dpr;
+
+      // Bloom halo — per-particle scale & alpha so glow row isn't uniform.
+      const haloA = a * 0.22 * p.haloAlphaMul * (0.85 + 0.15 * Math.sin(tSec * 4 + p.seed));
       if (haloA > 0.005) {
-        const haloR = L * 1.4;
-        const halo = ctx.createRadialGradient(p.x * dpr, p.y * dpr, 0, p.x * dpr, p.y * dpr, haloR * dpr);
+        const haloR = L * 1.4 * p.haloScale;
+        const halo = ctx.createRadialGradient(cxw, cyw, 0, cxw, cyw, haloR * dpr);
         halo.addColorStop(0, `rgba(${cr},${cg},${cb},${haloA.toFixed(3)})`);
         halo.addColorStop(0.5, `rgba(${cr},${cg},${cb},${(haloA * 0.3).toFixed(3)})`);
         halo.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.fillStyle = halo;
         ctx.beginPath();
-        ctx.arc(p.x * dpr, p.y * dpr, haloR * dpr, 0, Math.PI * 2);
+        ctx.arc(cxw, cyw, haloR * dpr, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // Cigar core: transform so a unit circle → ellipse of size L × W,
-      // rotated to heading. Radial gradient with head-offset white-hot core
-      // gives a soft ember silhouette whose alpha reaches zero at r=1.
       const cos = Math.cos(ang), sin = Math.sin(ang);
+
+      // --- Tail smear: elongated, dimmer, behind the head (pre-body) ---
+      {
+        const TL = L * 1.35, TW = W * 0.55;
+        // shift back along heading so the smear trails the head
+        const shift = -L * 0.18;
+        const tcx = cxw + cos * shift * dpr;
+        const tcy = cyw + sin * shift * dpr;
+        ctx.setTransform(
+          dpr * cos * (TL * 0.5), dpr * sin * (TL * 0.5),
+          -dpr * sin * (TW * 0.5), dpr * cos * (TW * 0.5),
+          tcx, tcy,
+        );
+        const tailA = a * 0.35;
+        const tg = ctx.createRadialGradient(0.2, 0, 0, 0, 0, 1);
+        tg.addColorStop(0.00, `rgba(${cr},${cg},${cb},${tailA.toFixed(3)})`);
+        tg.addColorStop(0.55, `rgba(${cr},${cg},${cb},${(tailA * 0.4).toFixed(3)})`);
+        tg.addColorStop(1.00, `rgba(${cr},${cg},${cb},0)`);
+        ctx.fillStyle = tg;
+        ctx.beginPath();
+        ctx.arc(0, 0, 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // --- Main body ellipse ---
       ctx.setTransform(
         dpr * cos * (L * 0.5), dpr * sin * (L * 0.5),
         -dpr * sin * (W * 0.5), dpr * cos * (W * 0.5),
-        p.x * dpr, p.y * dpr,
+        cxw, cyw,
       );
-      // In this local space the ellipse occupies unit circle r=1.
-      // Offset the hot core toward the leading tip (+x).
-      const hotX = 0.35;
+      const hotX = 0.15 + 0.4 * Math.sin(tSec * 3.1 + p.hotPhase); // -0.25..0.55
       const grad = ctx.createRadialGradient(hotX, 0, 0, 0, 0, 1);
       grad.addColorStop(0.00, `rgba(255,248,225,${Math.min(1, a * 1.1).toFixed(3)})`);
       grad.addColorStop(0.18, `rgba(${cr},${cg},${cb},${(a * 0.95).toFixed(3)})`);
@@ -311,6 +378,59 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
       ctx.beginPath();
       ctx.arc(0, 0, 1, 0, Math.PI * 2);
       ctx.fill();
+
+      // --- Hot nucleus: tiny sharp bright dot slid toward the head ---
+      {
+        const NL = L * 0.28, NW = W * 0.55;
+        const nShift = L * (0.10 + 0.15 * Math.sin(tSec * 2.7 + p.hotPhase * 1.3));
+        const ncx = cxw + cos * nShift * dpr;
+        const ncy = cyw + sin * nShift * dpr;
+        ctx.setTransform(
+          dpr * cos * (NL * 0.5), dpr * sin * (NL * 0.5),
+          -dpr * sin * (NW * 0.5), dpr * cos * (NW * 0.5),
+          ncx, ncy,
+        );
+        const nA = Math.min(1, a * 1.3);
+        const ng = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+        ng.addColorStop(0.0, `rgba(255,253,240,${nA.toFixed(3)})`);
+        ng.addColorStop(0.5, `rgba(255,230,180,${(nA * 0.5).toFixed(3)})`);
+        ng.addColorStop(1.0, `rgba(255,200,120,0)`);
+        ctx.fillStyle = ng;
+        ctx.beginPath();
+        ctx.arc(0, 0, 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // --- Emit occasional ash fleck for crackly high-freq detail ---
+      if (ash.length < MAX_ASH && Math.random() < 0.12 * (1 - t)) {
+        const av = speed * 0.15;
+        const aang = ang + (Math.random() - 0.5) * 1.4;
+        ash.push({
+          x: p.x, y: p.y,
+          vx: Math.cos(aang) * av + (Math.random() - 0.5) * 20,
+          vy: Math.sin(aang) * av + (Math.random() - 0.5) * 20,
+          born: tSec,
+          life: 0.12 + Math.random() * 0.18,
+          r: cr, g: cg, b: cb,
+          bright: 0.6 + Math.random() * 0.5,
+        });
+      }
+    }
+
+    // --- Render ash flecks (tiny bright pixels) ---
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    for (let i = ash.length - 1; i >= 0; i--) {
+      const a = ash[i];
+      const age = tSec - a.born;
+      const k = age / a.life;
+      if (k >= 1 || age < 0) { ash.splice(i, 1); continue; }
+      a.vy += 40 * dt;
+      a.vx *= 0.94; a.vy *= 0.94;
+      a.x += a.vx * dt; a.y += a.vy * dt;
+      const al = (1 - k) * a.bright;
+      const size = Math.max(1, 1.6 * dpr * (1 - k * 0.5));
+      ctx.fillStyle = `rgba(${a.r},${a.g},${a.b},${al.toFixed(3)})`;
+      ctx.fillRect(a.x * dpr - size * 0.5, a.y * dpr - size * 0.5, size, size);
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);

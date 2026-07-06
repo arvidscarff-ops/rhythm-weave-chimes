@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_scenes: {
+        Row: {
+          audio_reactive: Json
+          background_path: string | null
+          background_type: string
+          created_at: string
+          id: string
+          is_published: boolean
+          name: string
+          trigger_engine_id: string
+          ui_theme_colors: Json
+          updated_at: string
+          visual_fx: Json
+        }
+        Insert: {
+          audio_reactive?: Json
+          background_path?: string | null
+          background_type?: string
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          name: string
+          trigger_engine_id?: string
+          ui_theme_colors?: Json
+          updated_at?: string
+          visual_fx?: Json
+        }
+        Update: {
+          audio_reactive?: Json
+          background_path?: string | null
+          background_type?: string
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          name?: string
+          trigger_engine_id?: string
+          ui_theme_colors?: Json
+          updated_at?: string
+          visual_fx?: Json
+        }
+        Relationships: []
+      }
       custom_scales: {
         Row: {
           created_at: string

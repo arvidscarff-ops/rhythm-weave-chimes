@@ -155,9 +155,6 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
     // Particle count scales with intensity. Default around 15, up to ~40.
     const count = Math.max(4, Math.round(6 + intensity * 5));
 
-    // Warm the sprite cache for this tint now, not on first render.
-    getSprites(opts.tint);
-
     const x0 = Number.isFinite(cssX) ? cssX : cssW / 2;
     const y0 = Number.isFinite(cssY) ? cssY : cssH / 2;
 

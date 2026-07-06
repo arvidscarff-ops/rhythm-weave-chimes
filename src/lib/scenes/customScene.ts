@@ -30,6 +30,7 @@ import {
 } from "@/lib/engine/pathTransformer";
 import { getActiveBlueprint } from "@/lib/scenes/activeBlueprint";
 import { paletteAt, paletteMid, withAlpha } from "@/lib/studio/palettes";
+import { spawnFire, hexToRgb01 } from "@/lib/visuals/fireShaderLayer";
 
 /* ------------------------------------------------------------------ */
 /*  Pitch / voice mapping (unchanged from previous revision)          */
@@ -447,7 +448,17 @@ export const customScene: Scene<CustomSceneState> = {
           const p = progress(et, i, B, D);
           const pos = positionOn(bp.path, p);
           const px = toPx(pos.x, pos.y, scale, rot, g.W, g.H);
-          spawnBurst(state, px.x, px.y, color, t, A.burst);
+          if (A.burst.shape === "fireSpark") {
+            const fs = A.fireSpark;
+            spawnFire(px.x, px.y, t, {
+              life: fs.life,
+              size: fs.size,
+              intensity: fs.intensity,
+              tint: hexToRgb01(fs.tint),
+            });
+          } else {
+            spawnBurst(state, px.x, px.y, color, t, A.burst);
+          }
           if (A.pathPulse.enabled) {
             state.pulses.push({ trackIdx: i, born: t, color, startProgress: p });
             if (state.pulses.length > 128) state.pulses.splice(0, state.pulses.length - 128);

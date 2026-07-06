@@ -1578,8 +1578,27 @@ function PhaseApp() {
       H = e.h;
     ctx2d.setTransform(e.dpr, 0, 0, e.dpr, 0, 0);
 
-    // Always: art surface (transparent + bloom + grain)
-    paintArtBackground(ctx2d, W, H, grainPatternRef);
+    // Always: art surface (transparent + bloom + grain), UNLESS the
+    // active scene owns its own pre-clear (e.g. "custom" Scene Builder
+    // trail decay). In that case skip the default clear/bloom/grain so
+    // long-exposure trails survive frame-to-frame.
+    if (sceneRef.current === "custom") {
+      customScene.preClear?.(ctx2d, {
+        W,
+        H,
+        bpm: 0,
+        speed: 0,
+        density: 0,
+        pitchSemis: 0,
+        audioNow: 0,
+        globalTime: 0,
+        baseLaps: 0,
+        macroCycleSeconds: 0,
+        noteCount: 0,
+      });
+    } else {
+      paintArtBackground(ctx2d, W, H, grainPatternRef);
+    }
 
     const playing = !!(a && playingRef.current);
     const scene = sceneRef.current;

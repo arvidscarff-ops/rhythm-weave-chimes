@@ -14,6 +14,54 @@ import { crossings as phaseCrossings, progress as phaseProgress } from "@/lib/en
 export type PathType = "circle" | "line" | "polygon" | "lissajous";
 export type TriggerMode = "boundary" | "axisIntersect";
 export type SizingMode = "linear" | "exponential" | "constant";
+export type PaletteMode = "gradient" | "preset";
+export type PalettePresetId =
+  | "neonCyberpunk"
+  | "deepOcean"
+  | "autumnHorizon"
+  | "phosphorLime"
+  | "violetDusk";
+
+/** Aesthetic layer — pure presentation, does not affect timing. */
+export type AestheticConfig = {
+  background: {
+    kind: "none" | "image" | "video";
+    url: string;
+    opacity: number;    // 0..1
+    blurPx: number;     // 0..30
+  };
+  notes: {
+    baseRadiusPx: number;   // 2..18
+    breathHz: number;       // 0..2  (per-note independent sine)
+    breathDepth: number;    // 0..0.6
+  };
+  trail: {
+    decay: number;          // 0..0.98 — canvas retention alpha
+  };
+  palette: {
+    mode: PaletteMode;
+    startHex: string;
+    endHex: string;
+    presetId?: PalettePresetId;
+  };
+  burst: {
+    count: number;          // 6..120
+    baseSpeed: number;      // 20..400 px/s
+    lifespanMs: number;     // 200..2000
+    drag: number;           // 0..8   (higher = faster settle)
+    sizeVariance: number;   // 0..3
+  };
+  pathPulse: {
+    enabled: boolean;
+    speed: number;          // 0.2..4  (revolutions/sec along path)
+    widthPx: number;        // 1..8
+  };
+  climax: {
+    ambientFlash: boolean;
+    stardust: boolean;
+    stardustCount: number;  // 0..80
+  };
+};
 
 export type CustomSceneBlueprint = {
   version: 1;
@@ -51,6 +99,28 @@ export type CustomSceneBlueprint = {
     /** 0..5 — dispatched through the active pack's slot. */
     slot: 0 | 1 | 2 | 3 | 4 | 5;
   };
+  /** Aesthetic layer; optional in stored JSON (defaults filled on load). */
+  aesthetic: AestheticConfig;
+};
+
+export const DEFAULT_AESTHETIC: AestheticConfig = {
+  background: { kind: "none", url: "", opacity: 0.6, blurPx: 8 },
+  notes: { baseRadiusPx: 5, breathHz: 0.6, breathDepth: 0.3 },
+  trail: { decay: 0.86 },
+  palette: {
+    mode: "gradient",
+    startHex: "#7DF9FF",
+    endHex: "#FF3EA5",
+  },
+  burst: {
+    count: 28,
+    baseSpeed: 140,
+    lifespanMs: 700,
+    drag: 2.4,
+    sizeVariance: 1.4,
+  },
+  pathPulse: { enabled: true, speed: 1.6, widthPx: 3 },
+  climax: { ambientFlash: true, stardust: true, stardustCount: 40 },
 };
 
 export const DEFAULT_BLUEPRINT: CustomSceneBlueprint = {
@@ -66,6 +136,7 @@ export const DEFAULT_BLUEPRINT: CustomSceneBlueprint = {
   },
   trigger: { mode: "boundary" },
   voice: { slot: 0 },
+  aesthetic: DEFAULT_AESTHETIC,
 };
 
 /**
@@ -260,5 +331,66 @@ export function validateBlueprint(raw: unknown): CustomSceneBlueprint | null {
     voice: {
       slot: (Math.max(0, Math.min(5, Math.floor(Number(voice.slot ?? 0)))) as 0 | 1 | 2 | 3 | 4 | 5),
     },
+    aesthetic: mergeAesthetic(r.aesthetic),
   };
+}
+
+function mergeAesthetic(raw: unknown): AestheticConfig {
+  const d = DEFAULT_AESTHETIC;
+  if (!raw || typeof raw !== "object") return { ...d };
+  const a = raw as Record<string, unknown>;
+  const bg = (a.background ?? {}) as Record<string, unknown>;
+  const nt = (a.notes ?? {}) as Record<string, unknown>;
+  const tr = (a.trail ?? {}) as Record<string, unknown>;
+  const pl = (a.palette ?? {}) as Record<string, unknown>;
+  const br = (a.burst ?? {}) as Record<string, unknown>;
+  const pp = (a.pathPulse ?? {}) as Record<string, unknown>;
+  const cl = (a.climax ?? {}) as Record<string, unknown>;
+  return {
+    background: {
+      kind: (["none", "image", "video"].includes(bg.kind as string) ? bg.kind : d.background.kind) as
+        AestheticConfig["background"]["kind"],
+      url: typeof bg.url === "string" ? bg.url : d.background.url,
+      opacity: clamp01(Number(bg.opacity ?? d.background.opacity)),
+      blurPx: clampRange(Number(bg.blurPx ?? d.background.blurPx), 0, 30),
+    },
+    notes: {
+      baseRadiusPx: clampRange(Number(nt.baseRadiusPx ?? d.notes.baseRadiusPx), 1, 30),
+      breathHz: clampRange(Number(nt.breathHz ?? d.notes.breathHz), 0, 4),
+      breathDepth: clampRange(Number(nt.breathDepth ?? d.notes.breathDepth), 0, 1),
+    },
+    trail: { decay: clampRange(Number(tr.decay ?? d.trail.decay), 0, 0.98) },
+    palette: {
+      mode: (pl.mode === "preset" ? "preset" : "gradient") as PaletteMode,
+      startHex: typeof pl.startHex === "string" ? pl.startHex : d.palette.startHex,
+      endHex: typeof pl.endHex === "string" ? pl.endHex : d.palette.endHex,
+      presetId: typeof pl.presetId === "string" ? (pl.presetId as PalettePresetId) : undefined,
+    },
+    burst: {
+      count: clampRange(Number(br.count ?? d.burst.count), 0, 200),
+      baseSpeed: clampRange(Number(br.baseSpeed ?? d.burst.baseSpeed), 0, 800),
+      lifespanMs: clampRange(Number(br.lifespanMs ?? d.burst.lifespanMs), 50, 4000),
+      drag: clampRange(Number(br.drag ?? d.burst.drag), 0, 12),
+      sizeVariance: clampRange(Number(br.sizeVariance ?? d.burst.sizeVariance), 0, 6),
+    },
+    pathPulse: {
+      enabled: Boolean(pp.enabled ?? d.pathPulse.enabled),
+      speed: clampRange(Number(pp.speed ?? d.pathPulse.speed), 0.05, 8),
+      widthPx: clampRange(Number(pp.widthPx ?? d.pathPulse.widthPx), 0.5, 12),
+    },
+    climax: {
+      ambientFlash: Boolean(cl.ambientFlash ?? d.climax.ambientFlash),
+      stardust: Boolean(cl.stardust ?? d.climax.stardust),
+      stardustCount: clampRange(Number(cl.stardustCount ?? d.climax.stardustCount), 0, 120),
+    },
+  };
+}
+
+function clamp01(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(1, n));
+}
+function clampRange(n: number, lo: number, hi: number): number {
+  if (!Number.isFinite(n)) return lo;
+  return Math.max(lo, Math.min(hi, n));
 }

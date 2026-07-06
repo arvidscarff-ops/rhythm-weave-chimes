@@ -87,3 +87,30 @@ export function importJson(text: string): CustomSceneBlueprint | null {
 export function exportJson(bp: CustomSceneBlueprint): string {
   return JSON.stringify(bp, null, 2);
 }
+
+/** Download a blueprint as a .json file (browser only). */
+export function downloadBlueprintFile(bp: CustomSceneBlueprint): void {
+  if (typeof window === "undefined") return;
+  const blob = new Blob([exportJson(bp)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${(bp.name || "preset").replace(/[^a-z0-9-_]+/gi, "_")}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Read a File selected via <input type="file"> and validate it. */
+export function readBlueprintFile(file: File): Promise<CustomSceneBlueprint | null> {
+  return new Promise((resolve) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const text = typeof r.result === "string" ? r.result : "";
+      resolve(importJson(text));
+    };
+    r.onerror = () => resolve(null);
+    r.readAsText(file);
+  });
+}

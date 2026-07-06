@@ -1,110 +1,65 @@
+## Fixes & upgrades to the Scene Builder
 
-# Trigger Engine & Scene Creator — Studio Expansion
+### 1. Fix missed triggers on vertical/horizontal line
 
-Extends the existing `/studio/builder` route (already wired to the `custom` scene runtime via `activeBlueprint`) into a full aesthetic authoring tool. No new AI, no new audio engines — pure front-end JSON state driving the existing Phase-Alignment `customScene`.
+`pathCrossings` in `src/lib/engine/pathTransformer.ts` samples with `stepDt = lapDuration / 64`. When the lap is long (slow tracks or short scan windows in `draw()`), the sampling loop can skip the entire `(t0, t1]` window and miss a crossing entirely.
 
-## 1. Blueprint schema extension
+- Cap `stepDt` to at most half of `(t1 - t0)` and to a small absolute (e.g. 8 ms) so crossings are detected reliably on every frame, for both audio (`eventsIn`) and visuals (`draw` detection loop).
+- Always seed the loop by evaluating at `t1` so a single-sample window still checks sign change.
 
-Extend `CustomSceneBlueprint` in `src/lib/engine/pathTransformer.ts` with an `aesthetic` block (backward-compatible via `validateBlueprint` defaults):
+### 2. Supercharged particle editor
 
-```ts
-aesthetic: {
-  background: { kind: "none"|"image"|"video"; url: string; opacity: number; blurPx: number };
-  notes: { baseRadiusPx: number; breathHz: number; breathDepth: number };
-  trail: { decay: number };            // 0..0.98 (alpha of clear rect)
-  palette: {
-    mode: "gradient"|"preset";
-    startHex: string; endHex: string;
-    presetId?: "neonCyberpunk"|"deepOcean"|"autumnHorizon"|"phosphorLime"|"violetDusk";
-  };
-  burst: { count: number; baseSpeed: number; lifespanMs: number; drag: number; sizeVariance: number };
-  pathPulse: { enabled: boolean; speed: number; widthPx: number };
-  climax: { ambientFlash: boolean; stardust: boolean; stardustCount: number };
-}
-```
+Expand `AestheticConfig.burst` in `pathTransformer.ts` (with backward-compatible defaults in `validateBlueprint`) and rebuild the Burst tab UI plus the render loop in `customScene.ts`.
 
-Presets = fixed start/end hex tuples resolved at draw time.
+New burst controls:
+- Shape: `dot | ring | spark | streak | glow`
+- Emission: `count`, `angleSpreadDeg` (0–360, default 360), `directionDeg` (0–359)
+- Motion: `baseSpeed`, `speedVariance` (0–1), `drag`, `gravity` (px/s², signed)
+- Life: `lifespanMs`, `lifespanVariance` (0–1)
+- Size: `sizeStartPx`, `sizeEndPx`, `sizeVariance`
+- Color: `colorMode` (`palette | fixed | rainbow`), `fixedColor`, `opacityStart`, `opacityEnd`
+- Blend: `blendMode` (`lighter | source-over`)
+- Trail: `trailLength` (0 = disabled, 1–12 = motion blur segments)
 
-## 2. Runtime rewrite — `customScene.ts`
+Fix the "particles stay forever" bug: in `updateParticles`, integrate with real `dt` (from `now - lastTime`) instead of the hardcoded `0.016`, and reap any particle whose `age >= life` OR whose alpha reaches 0. Add a global hard cap and a per-frame emission cap.
 
-Rewrite `customScene.draw` to consume the new aesthetic block. Behavior is scoped to the `custom` scene only — other 8 engines untouched.
+Rewrite `spawnBurst` and `drawParticles` to honor the new fields (angle spread around direction, size interpolation, gravity, blend mode, optional trail via previous-position ring buffer).
 
-- **Trail decay**: instead of relying on the global canvas clear, draw a `fillRect` with `rgba(0,0,0, 1 - decay)` at scene start when `decay > 0`. Requires a small hook — add optional `Scene.preClear?(ctx,g)` in `sceneTypes.ts` and call it in the render loop in `src/routes/index.tsx` before the normal clear (only when defined; skip default clear that frame).
-- **Uniform orbs + living breath**: constant `baseRadiusPx`, per-track phase `sin(t*breathHz*2π + i*0.37)` modulating alpha 0.7..1.0.
-- **Palette gradient**: precompute per-track color via linear interp in OKLCH between startHex→endHex across `N` tracks; replace current `HUES[i%..]` per-track color.
-- **Path pulse**: on trigger, push `{trackIdx, tSpawn, arcStart}` into a ring buffer. Each frame walk buffer and draw a bright segment along the sampled polyline that advances by `pulseSpeed` and fades over ~600ms.
-- **Particle burst**: reuse `src/lib/visuals/burstField.ts` if API fits — otherwise add a local particle system inside `customScene` (state array, per-particle vx/vy/life/size, drag integration, additive draw).
-- **Macro-cycle climax**: replace the existing 0.35s ripple with:
-  - Ambient flash: full-canvas gradient fill decaying over ~1.2s tinted to palette midpoint.
-  - Stardust: spawn N particles at center on cycle boundary; slow outward drift, long lifespan, tiny size, twinkling alpha.
+### 3. Play/Pause on preview
 
-State lives in a mutable `CustomSceneState` (arrays for pulses, particles, stardust). Cleared only on scene init — never on blueprint swap, so hot-loading a preset never resets the musical clock.
+Add a `playing` state to `BuilderPage` (default true) with a Play/Pause button overlaid on the preview canvas (top-right, next to the existing expand button, also mirrored in theater mode). When paused, the RAF loop still ticks but skips advancing `globalTime` and skips `customScene.draw`, so the last frame is preserved. Also freeze particle time by not advancing `now`.
 
-## 3. Live subscription — no clock reset on preset load
+### 4. Line color override + universal transparency
 
-`setActiveBlueprint` already notifies subscribers. Confirm `customScene.draw` reads `getActiveBlueprint()` every frame (it does). Preset load = mutate blueprint only, never re-init scene, never touch scheduler.
+Extend `AestheticConfig.palette`:
+- New optional `lineColor?: string` (hex) and `lineColorEnabled: boolean`. When enabled, `customScene` wireframe strokes use this solid color (all tracks) regardless of gradient/preset. Note orbs and pulses still follow the gradient/preset.
+- New `lineOpacity` (0–1, default 0.22) replacing the hardcoded stroke alpha.
 
-## 4. Studio route rewrite — `/studio/builder`
+Add transparency sliders (0–1) to every visual section in the Builder that currently lacks one:
+- Background: already has `opacity` ✓
+- Notes: new `noteOpacity` (multiplies orb alpha) + `glowOpacity`
+- Trails: already `decay` (leave; it controls trail persistence) — add `trailTint` alpha via existing decay
+- Palette: new `lineOpacity` (above)
+- Burst: `opacityStart` / `opacityEnd` (above)
+- Path Pulse: new `pulseOpacity`
+- Climax: new `flashOpacity` and `stardustOpacity`
 
-Rewrite `src/routes/studio.builder.tsx` as a premium split-screen:
+All new fields default to current visual values so existing presets look identical.
 
-**Layout**
-- Desktop: `grid-cols-[380px_1fr]` — left rack, right live preview.
-- Mobile: stacked, preview on top.
-- Dark surface with subtle vertical rack accent, matches existing studio aesthetic.
+### Files touched
 
-**Left control rack** — shadcn `Tabs` with sections:
-1. **Geometry** — existing path type + layout + trigger + voice controls (keep current impl).
-2. **Background** — media kind toggle, URL input, opacity slider (0–1), blur slider (0–30px).
-3. **Notes** — base radius, breath rate, breath depth.
-4. **Trails** — decay slider (0–0.98) with live label ("Off" / "Ribbon" / "Long exposure").
-5. **Palette** — mode toggle, two color pickers (native `<input type="color">`), preset dropdown, live 12-swatch preview strip.
-6. **Burst FX** — particle count, base speed, lifespan, drag, size variance.
-7. **Path Pulse** — enable toggle, speed, width.
-8. **Climax** — ambient flash toggle, stardust toggle, stardust count.
-9. **Cycle** — existing base laps / macro seconds / note count.
+- `src/lib/engine/pathTransformer.ts` — sampling fix in `crossings`; expanded `AestheticConfig` types + `validateBlueprint`/`mergeAesthetic` defaults.
+- `src/lib/scenes/customScene.ts` — dt-based particle update; new burst renderer with shapes/gravity/trails; line-color override; opacity fields applied to wireframe/orbs/pulses/climax/stardust.
+- `src/routes/studio.builder.tsx` — Play/Pause button; RAF gated by `playing`; rebuilt Burst tab; Palette tab gets "Line color" toggle + color picker + line-opacity slider; new opacity sliders in Notes/Pulse/Climax; no change to preset storage shape beyond the additive fields.
 
-**Preset rack (persistent footer of left column)**
-- "Save as Preset" (prompt for name)
-- "Load Preset" dropdown (LocalStorage-scanned; selecting swaps blueprint via `setActiveBlueprint` — no scheduler touch)
-- "Export JSON" (download `.json`)
-- "Import JSON" (file picker, validate, apply)
-- "Publish to app" (existing behavior — sets active blueprint)
+### Non-goals
 
-**Right preview**
-- Full-height canvas rendering the SAME `customScene.draw` used in production, driven by a local scene-time clock so the preview keeps running even when the app isn't focused.
-- Background media layer rendered as an absolutely-positioned `<img>`/`<video>` behind the canvas, styled from blueprint (opacity, blur). This is the ONLY place background media renders — main app view already has `SceneBackground` for admin-published themes; we don't overload that.
-- **Theater mode**: expand icon (top-right corner). Toggles `document.fullscreenElement` + local `theater` state that repositions the preview into a fixed inset-0 overlay. Floating close button + ESC handler. Smooth `transition-all` on the container.
+- No changes to audio scheduling, pack routing, or the 8 built-in engines.
+- No new preset storage location; still LocalStorage, additive schema.
 
-## 5. Preset store
+### Verification
 
-`src/lib/studio/sceneBuilderStore.ts` already exists — extend `validateBlueprint` to fill aesthetic defaults for old presets. Add `exportBlueprintFile(bp)` + `importBlueprintFile(file)` helpers.
-
-## 6. Files touched
-
-**Edit**
-- `src/lib/engine/pathTransformer.ts` — extend blueprint type + `DEFAULT_BLUEPRINT` + `validateBlueprint`.
-- `src/lib/scenes/customScene.ts` — full aesthetic runtime.
-- `src/lib/engine/sceneTypes.ts` — add optional `preClear` hook.
-- `src/routes/index.tsx` — respect `preClear` in render loop.
-- `src/routes/studio.builder.tsx` — full UI rewrite.
-- `src/lib/studio/sceneBuilderStore.ts` — import/export helpers.
-
-**Create**
-- `src/lib/studio/palettes.ts` — preset palette table + `paletteAt(i, N, cfg)` OKLCH interp.
-
-**Not touched**
-- Other 8 scenes, dock, scheduler, audio, phaseAlign, migrations, DB.
-
-## Non-goals
-
-- No new audio synthesis, no new packs.
-- No changes to the 8 built-in engines or their alignment math.
-- No cloud persistence — LocalStorage only (per user).
-- No multi-path composition (still single path per blueprint).
-
-## Risks
-
-- Trail decay via `fillRect` interacts with other scenes if the `preClear` hook is misapplied — gate it strictly on `scene.id === "custom"` in the render loop.
-- Background video autoplay: mute + `playsInline`, honor browser autoplay rules.
-- Large particle counts on high-DPI canvases — cap counts (burst ≤ 120, stardust ≤ 80) in the slider max.
+- Preview: choose Axis intersect → Vertical line, watch the note crossing produce a burst on every pass.
+- Toggle Line color on Palette and confirm wireframes turn a single color while orbs keep the gradient.
+- Set high burst count + long lifespan, then reduce them — old particles clear within their new lifespan and no ghost particles linger.
+- Play/Pause halts and resumes the preview cleanly.

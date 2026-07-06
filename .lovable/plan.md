@@ -1,102 +1,78 @@
-# Scene Creator — `/admin/scenes`
+# Phase-Alignment Macro-Cycle Rule
 
-A passcode-gated admin workspace to author "Scenes" (background media + engine + palette + audio-reactivity), preview them live, publish, and have the public app consume them from the database.
+Establish one mathematical law shared by every trigger engine: every active note completes an integer number of laps per macro-cycle, so all notes fire in unison at t=0, phase into polyrhythmic chaos, and snap back to unison at cycle end. The "Big Bang" is emergent — it's simply every voice triggering on the same frame.
 
-## Credit estimate
+## The Rule (canonical, non-negotiable)
 
-Rough range: **~25–40 credits**, depending on iteration. Breakdown:
-- DB migration + storage bucket + RLS/grants: ~2–3
-- Server functions (CRUD + signed URL upload): ~3–5
-- Admin dashboard UI (split-screen, dropzone, engine selector, sliders, color pickers): ~10–15
-- Audio-reactive wiring into existing canvas engines: ~5–8
-- Public dock integration + smooth scene transition: ~4–6
-- Polish, typecheck, bug fixes: ~3
+For a scene with `N` active notes, base laps `B`, and macro-cycle duration `D` seconds:
 
-Actual cost depends on how many revision passes you request on the visual design and how deep the audio-reactive integration needs to go into each existing engine.
+- Note `i` (0-indexed) completes `laps_i = B + i` full traversals per macro-cycle.
+- `progress_i(t) = ((t mod D) / D) * laps_i mod 1`
+- A trigger fires whenever `progress_i` wraps past 1 → 0.
+- At `t = k·D` for any integer k, every `progress_i = 0` simultaneously → unison.
 
-## 1. Data layer
+Every engine must derive its motion from `progress_i` (or a deterministic function of it). No engine may keep its own free-running clock, use `Math.random()` per-frame, or set velocity from geometry length (which currently makes rings desync).
 
-New table `public.app_scenes`:
-- `id uuid pk`, `name text`, `owner_id uuid` (nullable for built-ins)
-- `background_type text check in ('image','video')`
-- `background_path text` (storage key; resolve to signed/public URL client-side)
-- `trigger_engine_id text` (matches existing `SceneKind`: `stringNet | pendulumFan | spiralArp | radialSweep | mandalaMatrix | metatronLattice | fractalNebula | radialResonator`)
-- `ui_theme_colors jsonb` — `{ nodeGlow, wireframe, dockAccent, textAccent }`
-- `visual_fx jsonb` — `{ backgroundBlur, backgroundGlow, trailPersistence }`
-- `audio_reactive jsonb` — `{ amplitude, scalePulse, opacityPulse, blurPulse, threshold }`
-- `is_published bool default false`
-- `created_at`, `updated_at` + trigger
+## Shared module: `src/lib/engine/phaseAlign.ts` (new)
 
-GRANTs: `authenticated` full; `anon` SELECT only where `is_published = true` (via policy) so the public dock can read without auth. `service_role` all.
+Single source of truth. Exports:
 
-New storage bucket `scene-assets` (private). Uploads via signed upload URL from a server fn; reads via signed URL (short-lived) or public bucket if you prefer — I'll default to private + signed reads to keep it consistent with `samples`/`pack-covers`.
+- `computeProgress(t, i, B, D)` → `[0,1)`
+- `crossings(t0, t1, i, B, D)` → array of trigger scene-times in `(t0, t1]` (handles multiple wraps per frame for fast notes)
+- `lapsFor(i, B)` = `B + i`
+- Reads `engineClock.t()`; unaffected by pause/speed because `engineClock` already integrates those.
 
-## 2. Server functions (`src/lib/admin/scenes.functions.ts`)
+The existing `speedCoeffs` / `phaseOffsets` in `src/lib/engine/polyrhythm.ts` become **deprecated** for cadence — kept only for visual jitter (hue offsets, initial angles), not for period math. Rewriting them would silently break scenes; the retrofit swaps call sites instead.
 
-- `listScenes`, `listPublishedScenes` (public, no auth)
-- `createScene`, `updateScene`, `renameScene`, `deleteScene`, `duplicateScene`
-- `publishScene(id, is_published)`
-- `createSceneAssetUploadUrl({ ext, mime })` → returns `{ path, token }` for direct browser upload
-- `getSceneAssetUrl(path)` → signed URL
+## Engine retrofits (all 8)
 
-All admin mutations gated by existing `verifyAdminPasscode` pattern (mirrors `packs.functions.ts` / `scales.functions.ts`).
+Each scene's `eventsIn(state, t0, t1, g)` and `sample(state, t, g)` are rewritten to consume `phaseAlign` for cadence. Geometry (angles, radii, lattice positions) stays; only the timing math changes.
 
-## 3. Admin UI — `/admin/scenes`
+| Engine | What changes |
+|---|---|
+| `stringNetwork` | Node position along path = `progress_i`; trigger on wrap. |
+| `pendulumFan` | Replace `strandRatios` / sine-crossing math with `progress_i` sweep between ring endpoints; drop `RISING_PHASE` / `COOLDOWN` (cooldown obsolete — unison is now the design). |
+| `spiralArp` | Arm rotation = `progress_i * 2π`. |
+| `radialSweep` | Sweep angle per lane = `progress_i * 2π`. |
+| `mandalaMatrix` | Petal pulse phase = `progress_i`. |
+| `metatronLattice` | Node illumination cycle = `progress_i`. |
+| `fractalNebula` | Orbit angle = `progress_i * 2π`. |
+| `radialResonator` | Ring expansion phase = `progress_i`. |
 
-Split-screen layout using existing `ResizablePanelGroup`:
+The Phase-Zero "Big Bang" chord already fires at `t=0`; with this rule it also naturally fires at every `t=k·D`.
 
-```text
-┌─────────────────────────┬─────────────────────────┐
-│  Scene list + editor    │   Live preview canvas   │
-│  ─ Name                 │   (background media +   │
-│  ─ Media dropzone       │    selected engine +    │
-│  ─ Engine dropdown      │    palette + audio-fx   │
-│  ─ Palette pickers      │    applied in realtime) │
-│  ─ FX sliders           │                         │
-│  ─ Audio-reactive       │   [Play test tone] to   │
-│  ─ Publish toggle       │    exercise reactivity  │
-└─────────────────────────┴─────────────────────────┘
-```
+## Global controls: scene defaults + live overrides
 
-Components:
-- `SceneList` — sidebar of scenes with create/duplicate/delete.
-- `SceneEditorForm` — all controls; local draft state; debounced `updateScene`.
-- `MediaDropzone` — drag/drop, validates type + size (≤ ~15 MB video, ~5 MB image), uploads via signed URL, stores `background_path` + `background_type`.
-- `EngineSelector` — dropdown of the 8 existing `SceneKind`s.
-- `PaletteEditor` — 4 color inputs (native `<input type="color">` + hex text).
-- `FxSliders` — background blur (0–40px), background glow (0–1), trail persistence (0–0.5 clear-alpha).
-- `AudioReactivePanel` — amplitude 0–2×, plus per-channel toggles (scale/opacity/blur) and threshold.
-- `PreviewCanvas` — renders the selected background under a `<canvas>` that mounts the chosen engine via existing `sceneOverlay` + `sceneTypes` wiring, subscribing to `triggerBus` for reactive pulses.
+**Scene Creator (`app_scenes` new columns):**
+- `base_laps int not null default 10`
+- `macro_cycle_seconds numeric not null default 30`
+- `note_count int not null default 8` (range 4–24)
 
-## 4. Audio-reactive plumbing
+Edited in `/studio/scenes` as three sliders in a new "Macro-Cycle" section of the editor.
 
-- Extend `triggerBus` (or subscribe to existing note callbacks) to emit a normalized `intensity` per hit.
-- New helper `applyReactive(el, settings, intensity)` that mutates CSS custom properties `--scene-scale`, `--scene-opacity`, `--scene-blur` on the background wrapper via `requestAnimationFrame`, with exponential decay.
-- Preview canvas subscribes locally; public dock uses the same helper against the app-level background wrapper.
+**Dock live override:** New "Cycle" panel in `PhaseDock` with the same three sliders. Overrides persist in `sessionUrl` (not DB). If unset, active scene's defaults apply. Reset button restores scene defaults.
 
-## 5. Public sync
+**Wiring:** `SceneGlobals` gains `baseLaps`, `macroCycleSeconds`, `noteCount`. `sceneOverlay` resolves the effective values (dock override ?? active scene ?? hardcoded fallback) per frame and passes them in.
 
-- New `useActiveScene()` hook fetches `listPublishedScenes` (React Query) and reads/writes the selection to `sessionUrl` state (same pattern as `pack`).
-- Update `PhaseDock`'s Scenes menu to list published scenes from DB alongside/instead of hardcoded ones (kept as fallback).
-- Add `<SceneBackground />` in `__root.tsx` (or `routes/index.tsx`) rendering the media element + palette CSS vars scoped to a wrapper; engine canvas reads the same vars.
-- Palette applied by setting `--node-glow`, `--wire-color`, `--dock-accent`, `--text-accent` on the wrapper; existing engines updated minimally to read these vars where they currently use hardcoded colors.
-- Transition: cross-fade background (`opacity` + `filter`) over ~600ms when scene changes.
+## UI: canonical proof-of-concept engine
 
-## 6. Build order
+Add a 9th `SceneKind`: `phaseAlignRings` — nested concentric circles, one dot per note orbiting clockwise (0° = top). Renders directly from `computeProgress`, no bespoke state. Serves as the visual reference that the rule is working; also useful as a "debug scene" to sanity-check retrofits.
 
-1. Migration + `scene-assets` bucket + RLS/grants.
-2. Server functions + signed upload flow.
-3. Admin route shell + list/create/delete.
-4. Editor form (metadata, engine, palette, FX).
-5. Media dropzone + upload.
-6. Live preview canvas (background + engine mount).
-7. Audio-reactive module + preview test-tone.
-8. Public dock integration + `<SceneBackground />` + palette CSS var wiring.
-9. Typecheck, polish transitions, verify publish→appears-in-app loop.
+## Build order
 
-## Open questions (answer before build, or I'll take the defaults noted)
+1. `phaseAlign.ts` module + unit-verifiable pure functions.
+2. Extend `SceneGlobals` + `sceneOverlay` resolution logic.
+3. Retrofit engines one at a time (stringNetwork first as smallest), verifying unison at each `k·D` visually.
+4. Migration: add `base_laps`, `macro_cycle_seconds`, `note_count` to `app_scenes` (+ GRANTs already in place; column-level defaults, no policy changes).
+5. Scene Creator UI: Macro-Cycle section.
+6. Dock override panel + `sessionUrl` schema bump (v→2 with back-compat parse).
+7. Add `phaseAlignRings` scene + register in dock's Backdrop menu.
+8. `tsgo` clean; verify snapback visually on preview.
 
-1. **Storage privacy**: private bucket + signed URLs (default) or public bucket for simpler `<video>` playback?
-2. **Video size cap**: default ≤ 15 MB, ≤ 20s loop. OK?
-3. **Should published scenes replace the current hardcoded scene list in the dock, or appear as an additional "Custom" group?** Default: additional group, hardcoded stays as fallback.
-4. **Palette scope**: apply to all 8 engines uniformly (default), or per-engine overrides later?
+## Technical notes
+
+- **Why kill `polyrhythm.ts` cadence use:** its coefficients are irrational-by-design (φ jitter) — they *guarantee* non-repeating cycles, which is the exact opposite of what we now want. Keep the file, mark cadence exports deprecated, migrate call sites.
+- **Fast notes crossing multiple times per frame:** at high `i`, `laps_i` can be ~34 (B=10, N=24) → up to 34/60·D wraps per frame at D=1s. `crossings()` enumerates all of them so no triggers are dropped.
+- **Pause/speed:** `engineClock` already integrates `speed` into `t()`. Macro-cycle math uses `t mod D` so slowing down stretches the cycle rather than breaking alignment.
+- **Big Bang amplification:** deferred. Rule naturally produces unison; amplification (compressor sidechain, reverb pre-delay, volume swell) is a separate later pass.
+- **`user_scenes` table** is untouched by this change.

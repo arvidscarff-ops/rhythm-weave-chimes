@@ -19,10 +19,13 @@ export type Database = {
           audio_reactive: Json
           background_path: string | null
           background_type: string
+          base_laps: number
           created_at: string
           id: string
           is_published: boolean
+          macro_cycle_seconds: number
           name: string
+          note_count: number
           trigger_engine_id: string
           ui_theme_colors: Json
           updated_at: string
@@ -32,10 +35,13 @@ export type Database = {
           audio_reactive?: Json
           background_path?: string | null
           background_type?: string
+          base_laps?: number
           created_at?: string
           id?: string
           is_published?: boolean
+          macro_cycle_seconds?: number
           name: string
+          note_count?: number
           trigger_engine_id?: string
           ui_theme_colors?: Json
           updated_at?: string
@@ -45,10 +51,13 @@ export type Database = {
           audio_reactive?: Json
           background_path?: string | null
           background_type?: string
+          base_laps?: number
           created_at?: string
           id?: string
           is_published?: boolean
+          macro_cycle_seconds?: number
           name?: string
+          note_count?: number
           trigger_engine_id?: string
           ui_theme_colors?: Json
           updated_at?: string

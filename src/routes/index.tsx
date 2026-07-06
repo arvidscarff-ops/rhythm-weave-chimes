@@ -39,6 +39,7 @@ import { mandalaMatrixScene, type MandalaMatrixState } from "@/lib/scenes/mandal
 import { metatronLatticeScene, type MetatronLatticeState } from "@/lib/scenes/metatronLattice";
 import { fractalNebulaScene, type FractalNebulaState } from "@/lib/scenes/fractalNebula";
 import { radialResonatorScene, type RadialResonatorState } from "@/lib/scenes/radialResonator";
+import { phaseAlignRingsScene, type PhaseAlignRingsState } from "@/lib/scenes/phaseAlignRings";
 import { engineClock } from "@/lib/engine/clock";
 import { engineScheduler } from "@/lib/engine/scheduler";
 import {
@@ -63,7 +64,7 @@ import {
  * dock's universal density (multiply) knob. Mirrors each scene's internal
  * count formula so the dock can display an honest number.
  */
-function resolveNotesCount(scene: SceneKind, density: number): number {
+function resolveNotesCount(scene: SceneKind, density: number, noteCount: number = 8): number {
   switch (scene) {
     case "stringNet": {
       const n = Math.max(3, Math.min(6, Math.round(3 + (density - 2) * 0.3)));
@@ -84,6 +85,8 @@ function resolveNotesCount(scene: SceneKind, density: number): number {
       return 50;
     case "radialResonator":
       return 24;
+    case "phaseAlignRings":
+      return Math.max(4, Math.min(24, noteCount));
     case "wheel":
     case "pendulum":
     case "bars":
@@ -114,6 +117,16 @@ import {
 } from "@/lib/session/sessionUrl";
 import { setSceneOverlay } from "@/lib/engine/sceneOverlay";
 import { AdminTrigger } from "@/components/admin/AdminTrigger";
+import {
+  subscribeActiveScene,
+  getActiveScene,
+} from "@/lib/scenes/activeScene";
+import {
+  loadCycleOverride,
+  saveCycleOverride,
+  subscribeCycleOverride,
+  type CycleOverride,
+} from "@/lib/engine/cycleOverride";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -151,7 +164,8 @@ export type SceneKind =
   | "mandalaMatrix"
   | "metatronLattice"
   | "fractalNebula"
-  | "radialResonator";
+  | "radialResonator"
+  | "phaseAlignRings";
 
 type Knobs = {
   mainVol: number; // 0..1
@@ -217,6 +231,7 @@ type EngineState = {
   metatronLattice: MetatronLatticeState | null;
   fractalNebula: FractalNebulaState | null;
   radialResonator: RadialResonatorState | null;
+  phaseAlignRings: PhaseAlignRingsState | null;
 };
 
 type AudioGraph = {
@@ -266,6 +281,7 @@ const SCENES: SceneKind[] = [
   "metatronLattice",
   "fractalNebula",
   "radialResonator",
+  "phaseAlignRings",
 ];
 type VoiceSlot = "melo" | "bass" | "atmo";
 const VOICE_SLOTS: VoiceSlot[] = ["melo", "bass", "atmo"];
@@ -967,6 +983,7 @@ function PhaseApp() {
     metatronLattice: null,
     fractalNebula: null,
     radialResonator: null,
+    phaseAlignRings: null,
   });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const grainPatternRef = useRef<CanvasPattern | null>(null);
@@ -974,6 +991,38 @@ function PhaseApp() {
   const hoverOpacityRef = useRef<number>(0);
   const lastHoverRef = useRef<string | null>(null);
   const [hoverRing, setHoverRing] = useState<string | null>(null);
+
+  /* ---- Phase-Alignment cycle (baseLaps / macroCycleSeconds / noteCount) ---
+   * Resolved every frame from: dock override ?? active scene default ??
+   * built-in default (10, 30, 8). Kept in a ref for the render loop and
+   * scheduler globals; the dock reads live values via subscribeCycleOverride.
+   * --------------------------------------------------------------------- */
+  const cycleOverrideRef = useRef<CycleOverride>(
+    typeof window === "undefined"
+      ? { baseLaps: null, macroCycleSeconds: null, noteCount: null }
+      : loadCycleOverride(),
+  );
+  const [cycleTick, setCycleTick] = useState(0);
+  useEffect(() => {
+    const unsubOv = subscribeCycleOverride((o) => {
+      cycleOverrideRef.current = o;
+      setCycleTick((t) => t + 1);
+    });
+    const unsubScene = subscribeActiveScene(() => setCycleTick((t) => t + 1));
+    return () => {
+      unsubOv();
+      unsubScene();
+    };
+  }, []);
+  const resolveGlobalCycle = useCallback(() => {
+    const ov = cycleOverrideRef.current;
+    const s = getActiveScene();
+    return {
+      baseLaps: ov.baseLaps ?? s?.base_laps ?? 10,
+      macroCycleSeconds: ov.macroCycleSeconds ?? s?.macro_cycle_seconds ?? 30,
+      noteCount: ov.noteCount ?? s?.note_count ?? 8,
+    };
+  }, []);
 
   /* ---- Phase-Zero scheduler binding ---------------------------------
    * The scheduler ticks on its own (25 ms setInterval) and pulls events
@@ -1003,6 +1052,7 @@ function PhaseApp() {
         globals: () => {
           const k = knobsRef.current;
           const c = canvasRef.current;
+          const cyc = resolveGlobalCycle();
           return {
             W: c?.clientWidth ?? 0,
             H: c?.clientHeight ?? 0,
@@ -1012,6 +1062,9 @@ function PhaseApp() {
             pitchSemis: k.pitch,
             audioNow: a.ctx.currentTime,
             globalTime: engineClock.t(),
+            baseLaps: cyc.baseLaps,
+            macroCycleSeconds: cyc.macroCycleSeconds,
+            noteCount: cyc.noteCount,
           };
         },
         audioCtx: a.ctx,
@@ -1027,6 +1080,7 @@ function PhaseApp() {
     else if (scene === "metatronLattice") bind(metatronLatticeScene, () => e.metatronLattice);
     else if (scene === "fractalNebula") bind(fractalNebulaScene, () => e.fractalNebula);
     else if (scene === "radialResonator") bind(radialResonatorScene, () => e.radialResonator);
+    else if (scene === "phaseAlignRings") bind(phaseAlignRingsScene, () => e.phaseAlignRings);
     else engineScheduler.setActive(null);
   }, [scene, playing, topo]);
 
@@ -1080,6 +1134,7 @@ function PhaseApp() {
     engineRef.current.metatronLattice = null;
     engineRef.current.fractalNebula = null;
     engineRef.current.radialResonator = null;
+    engineRef.current.phaseAlignRings = null;
     const eng = state.engine;
     if (eng) {
       // Defer until after first runScene init populates the state.
@@ -1555,6 +1610,7 @@ function PhaseApp() {
       // Engine scenes (Scene interface). New scenes share one dispatch path.
       const k = knobsRef.current;
       const gT = engineClock.t();
+      const cyc = resolveGlobalCycle();
       const globals = {
         W,
         H,
@@ -1564,6 +1620,9 @@ function PhaseApp() {
         pitchSemis: k.pitch,
         audioNow: a ? a.ctx.currentTime : 0,
         globalTime: gT,
+        baseLaps: cyc.baseLaps,
+        macroCycleSeconds: cyc.macroCycleSeconds,
+        noteCount: cyc.noteCount,
       };
       const runScene = <S,>(
         impl: typeof stringNetworkScene extends import("@/lib/engine/sceneTypes").Scene<infer _>
@@ -1599,6 +1658,8 @@ function PhaseApp() {
         runScene(fractalNebulaScene, () => e.fractalNebula, (s) => (e.fractalNebula = s));
       } else if (scene === "radialResonator") {
         runScene(radialResonatorScene, () => e.radialResonator, (s) => (e.radialResonator = s));
+      } else if (scene === "phaseAlignRings") {
+        runScene(phaseAlignRingsScene, () => e.phaseAlignRings, (s) => (e.phaseAlignRings = s));
       }
     }
     updateBursts(dt);
@@ -1850,7 +1911,14 @@ function PhaseApp() {
         onScene={setScene}
         multiply={knobs.multiply}
         onMultiply={(n) => setKnobs((k) => ({ ...k, multiply: n }))}
-        notesCount={resolveNotesCount(scene, knobs.multiply)}
+        notesCount={resolveNotesCount(scene, knobs.multiply, resolveGlobalCycle().noteCount)}
+        cycleOverride={cycleOverrideRef.current}
+        cycleActiveScene={{
+          baseLaps: getActiveScene()?.base_laps ?? 10,
+          macroCycleSeconds: getActiveScene()?.macro_cycle_seconds ?? 30,
+          noteCount: getActiveScene()?.note_count ?? 8,
+        }}
+        onCycleOverride={(o) => saveCycleOverride(o)}
         bpm={bpm}
         onBpm={setBpm}
         speed={knobs.speed}

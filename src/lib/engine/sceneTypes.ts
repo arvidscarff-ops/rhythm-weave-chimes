@@ -19,7 +19,8 @@ export type SceneId =
   | "mandalaMatrix"
   | "metatronLattice"
   | "fractalNebula"
-  | "radialResonator";
+  | "radialResonator"
+  | "phaseAlignRings";
 
 export type VoiceSlotIndex = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -73,6 +74,15 @@ export type SceneGlobals = {
    * field may ignore it until they're converted.
    */
   globalTime: number;
+  /**
+   * Phase-Alignment macro-cycle inputs. Every trigger engine derives
+   * cadence from these via `@/lib/engine/phaseAlign`. Resolution order:
+   *   dock override (session state) ?? active scene default ?? built-in.
+   * See `phaseAlign.resolveCycle` for the canonical clamp/round.
+   */
+  baseLaps: number;
+  macroCycleSeconds: number;
+  noteCount: number;
 };
 
 export interface Scene<TState = unknown> {

@@ -1669,6 +1669,8 @@ function PhaseApp() {
         runScene(radialResonatorScene, () => e.radialResonator, (s) => (e.radialResonator = s));
       } else if (scene === "phaseAlignRings") {
         runScene(phaseAlignRingsScene, () => e.phaseAlignRings, (s) => (e.phaseAlignRings = s));
+      } else if (scene === "custom") {
+        runScene(customScene, () => e.custom, (s) => (e.custom = s));
       }
     }
     updateBursts(dt);

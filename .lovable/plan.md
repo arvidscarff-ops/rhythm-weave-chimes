@@ -1,30 +1,48 @@
-## Plan
+# Fix fire sparks: per-particle meandering embers
 
-1. **Fix the overlay coordinate mismatch**
-   - The fire overlay canvas is mounted as a sibling over the scene canvas, but spawns are sent in the 2D scene canvas’ local coordinates.
-   - Update the fire layer to store the parent/canvas bounds and convert local spawn points into the overlay’s coordinate space reliably.
-   - Use the shorter canvas dimension for shader burst sizing so square and non-square previews behave consistently.
+## What's wrong now
 
-2. **Fix WebGL alpha compositing**
-   - Change the WebGL blend mode from `ONE, ONE` to a premultiplied-style alpha-safe blend so transparent areas stay transparent and bright sparks composite predictably over the 2D scene.
-   - Keep the CSS blend mode additive/screen so sparks read over dark backgrounds.
+The current `fireShaderLayer.ts` treats each note trigger as **one big fireball** — one emitter fills a whole voronoi-tiled disc with hundreds of static sparks + orange smoke. That's why your screenshot shows a giant crackling orange blob instead of a handful of tiny embers flying out.
 
-3. **Make the shader impossible to miss**
-   - Boost the localized shader output and remove remaining masks/falloffs that can zero out most spark cells inside a small burst.
-   - Raise the slider/default ceiling for intensity if needed, while keeping existing saved presets compatible.
+The reference shader's "fire sparks" are actually **individual small streaks** — each one is a single glowing dot with a soft bloom, drifting along its own curved trajectory, shrinking and fading as it ages.
 
-4. **Add a temporary visual verification path**
-   - Add a tiny internal debug hook on the fire layer for preview verification only, so I can spawn a fire burst directly and inspect pixel output without waiting for musical trigger timing.
-   - Do not expose debug controls in the UI.
+## What to build instead
 
-5. **Verify in the live preview**
-   - In the builder, select/force `Fire spark (shader)`, spawn a test burst, and confirm the overlay canvas contains visible non-transparent/bright pixels.
-   - Also confirm the main app custom scene still mounts the fire overlay and renders without console errors.
+One trigger → spawn N tiny spark particles (default ~15), each with:
+- its own emission angle (spread around an upward-biased cone)
+- its own initial velocity
+- gravity + drag + a small curl-noise wobble → produces the "winding path"
+- size and alpha both decay to zero over its lifetime
+- warm gradient tint (white-hot core → orange → deep red as it cools)
+- soft additive bloom halo
 
-## Technical notes
+## Approach
 
-- Likely issue: the WebGL canvas exists and is sized, but the shader either renders outside the visible area or produces too-low alpha/brightness after its masks and blending.
-- Files expected to change:
-  - `src/lib/visuals/fireShaderLayer.ts`
-  - possibly `src/lib/engine/pathTransformer.ts`
-  - possibly `src/routes/studio.builder.tsx` only if verification shows the preview wiring needs a small mount/order adjustment.
+Rewrite `fireShaderLayer.ts` as a **CPU-simulated particle system** rendered on a 2D canvas with additive blending. This is the right tool: dozens of independent trajectories with per-particle physics are awkward in a single fragment shader but trivial in JS, and the visual density we need (~15–30 particles per burst, a few bursts on screen) is well within Canvas2D budget.
+
+Keep the public API identical (`createFireLayer`, `spawnFire`, `hexToRgb01`, `FireSpawnOpts`) so `customScene.ts` and `pathTransformer.ts` don't change. Reinterpret the existing opts:
+- `intensity` → particle count multiplier (e.g. `round(8 + intensity * 6)`) and brightness
+- `size` → base spark radius + initial speed scale
+- `life` → max particle lifetime (with per-particle jitter)
+- `tint` → warm color the sparks cool toward
+
+Per frame:
+1. Integrate each particle (velocity += gravity·dt + curlNoise·dt; pos += velocity·dt; velocity *= drag)
+2. Compute `t = age/life`; radius = `r0 * (1 - t)`; alpha = `(1 - t)^1.5`
+3. Draw a radial gradient sprite (white core → tint → transparent) with `globalCompositeOperation = "lighter"`
+4. Reap when `t >= 1`
+
+Overlay canvas stays absolutely-positioned inside the scene parent, `mix-blend-mode: screen`, pointer-events none — same as today.
+
+## Files to change
+
+- `src/lib/visuals/fireShaderLayer.ts` — full rewrite (WebGL2 → Canvas2D particle system). Keep exports and signatures.
+- No changes needed in `pathTransformer.ts`, `customScene.ts`, `studio.builder.tsx`, or `__root.tsx`. Existing slider ranges (life 0.3–3s, size 0.05–0.6, intensity 0–6) map cleanly onto the new interpretation.
+
+## Out of scope for this pass
+
+- Background smoke (item 1 in your list). The reference smoke is a separate large-scale layered noise field; I'll leave the current subtle warm glow off and we can add a dedicated smoke pass afterwards if you want it. Focus this turn on getting the sparks right.
+
+## Verification
+
+After the rewrite, run a Playwright script that navigates to `/studio/builder`, selects the fire-spark visual, triggers a note, and screenshots the overlay canvas at t≈0.2s and t≈0.8s. Confirm visually: distinct point-like sparks with trails/bloom fanning outward, shrinking and fading, not one solid disc.

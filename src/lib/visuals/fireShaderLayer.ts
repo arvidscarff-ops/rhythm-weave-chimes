@@ -409,7 +409,7 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
       }
 
       // --- Emit occasional ash fleck for crackly high-freq detail ---
-      if (ash.length < MAX_ASH && Math.random() < 0.12 * (1 - t)) {
+      if (p.ashRate > 0 && ash.length < MAX_ASH && Math.random() < p.ashRate * (1 - t)) {
         const av = speed * 0.15;
         const aang = ang + (Math.random() - 0.5) * 1.4;
         ash.push({

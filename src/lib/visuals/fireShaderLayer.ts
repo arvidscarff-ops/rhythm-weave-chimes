@@ -27,6 +27,7 @@ export type FireSpawnOpts = {
   intensity: number; // 0..6
   tint: [number, number, number]; // 0..1 rgb
   speed?: number;    // 0.1..5
+  radius?: number;   // 0.1..5 — travel distance multiplier (independent of speed)
   ashRate?: number;  // 0..4
   // ---- color modes ----
   colorMode?: "single" | "rainbow" | "palette";

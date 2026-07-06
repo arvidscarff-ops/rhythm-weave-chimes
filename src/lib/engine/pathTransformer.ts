@@ -175,6 +175,7 @@ export const DEFAULT_AESTHETIC: AestheticConfig = {
     trailLength: 0,
   },
   pathPulse: { enabled: true, speed: 1.6, widthPx: 3, opacity: 0.9 },
+  fireSpark: { life: 1.6, size: 0.22, intensity: 1.2, tint: "#FF8A2B" },
   climax: {
     ambientFlash: true,
     stardust: true,
@@ -466,6 +467,15 @@ function mergeAesthetic(raw: unknown): AestheticConfig {
       blendMode: (br.blendMode === "source-over" ? "source-over" : "lighter") as BurstBlendMode,
       trailLength: clampRange(Number(br.trailLength ?? d.burst.trailLength), 0, 12),
     },
+    fireSpark: (() => {
+      const fs = (a.fireSpark ?? {}) as Record<string, unknown>;
+      return {
+        life: clampRange(Number(fs.life ?? d.fireSpark.life), 0.2, 6),
+        size: clampRange(Number(fs.size ?? d.fireSpark.size), 0.03, 0.8),
+        intensity: clampRange(Number(fs.intensity ?? d.fireSpark.intensity), 0, 3),
+        tint: typeof fs.tint === "string" ? fs.tint : d.fireSpark.tint,
+      };
+    })(),
     pathPulse: {
       enabled: Boolean(pp.enabled ?? d.pathPulse.enabled),
       speed: clampRange(Number(pp.speed ?? d.pathPulse.speed), 0.05, 8),

@@ -107,18 +107,6 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
   const ctx = canvas.getContext("2d", { alpha: true }) as CanvasRenderingContext2D | null;
   const particles: Particle[] = [];
 
-  // Sprites are baked lazily per-tint on first spawn (cache keyed by hex-ish key).
-  const spriteCache = new Map<string, TintedSprites>();
-  const getSprites = (tint: [number, number, number]): TintedSprites => {
-    const key = `${Math.round(tint[0] * 255)},${Math.round(tint[1] * 255)},${Math.round(tint[2] * 255)}`;
-    let s = spriteCache.get(key);
-    if (!s) {
-      s = bakeSprites(tint);
-      spriteCache.set(key, s);
-    }
-    return s;
-  };
-
   const layer: FireLayer = {
     canvas,
     gl: null,

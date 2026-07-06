@@ -75,7 +75,9 @@ uniform float uIntensity[${MAX_EMITTERS}];
 #define SMOKE_COLOR vec3(1.0, 0.43, 0.1) * 0.8
 #define SIZE_MOD 1.05
 #define ALPHA_MOD 0.9
-#define LAYERS_COUNT 4
+#define LAYERS_COUNT 6
+#define FIELD_SCALE 12.0
+#define SPARK_SIZE_BOOST 2.5
 
 float hash1_2(in vec2 x) {
   return fract(sin(dot(x, vec2(52.127, 61.2871))) * 521.582);
@@ -147,8 +149,9 @@ vec3 fireParticles(in vec2 uv, in vec2 originalUV, in float iTime) {
   float dist = length(rotate(tempUV - pointUV, 0.7) * randomAround2_2(PARTICLE_SCALE, PARTICLE_SCALE_VAR, rootUV));
   float distBloom = length(rotate(tempUV - pointUV, 0.7) * randomAround2_2(PARTICLE_BLOOM_SCALE, PARTICLE_BLOOM_SCALE_VAR, rootUV));
 
-  particles += (1.0 - smoothstep(PARTICLE_SIZE * 0.6, PARTICLE_SIZE * 3.0, dist)) * SPARK_COLOR;
-  particles += pow((1.0 - smoothstep(0.0, PARTICLE_SIZE * 6.0, distBloom)) * 1.0, 3.0) * BLOOM_COLOR;
+  float pSize = PARTICLE_SIZE * SPARK_SIZE_BOOST;
+  particles += (1.0 - smoothstep(pSize * 0.6, pSize * 3.0, dist)) * SPARK_COLOR;
+  particles += pow((1.0 - smoothstep(0.0, pSize * 12.0, distBloom)) * 1.0, 3.0) * BLOOM_COLOR;
 
   float border = (hash1_2(rootUV) - 0.5) * 2.0;
   float disappear = 1.0 - smoothstep(border, border + 0.5, originalUV.y);
@@ -176,11 +179,13 @@ vec3 layeredParticles(in vec2 uv, in float iTime) {
 
 vec3 sampleFire(vec2 uv, float iTime) {
   // uv here is centered at 0 with roughly [-1..1] range for the burst core.
-  uv *= 1.8;
-  vec3 particles = layeredParticles(uv, iTime);
-  vec3 col = particles + SMOKE_COLOR * 0.02;
-  col = smoothstep(-0.08, 1.0, col);
-  return col;
+  // Scale into the shader's "screen" UV space so voronoi grid produces many
+  // cells inside the localized burst. Feed a [0..1] originalUV so the
+  // built-in appear/disappear vertical masks work correctly.
+  vec2 suv = uv * FIELD_SCALE;
+  vec2 originalUV = uv * 0.5 + 0.5;
+  vec3 particles = layeredParticlesLocal(suv, originalUV, iTime);
+  return particles + SMOKE_COLOR * 0.02;
 }
 
 void main() {

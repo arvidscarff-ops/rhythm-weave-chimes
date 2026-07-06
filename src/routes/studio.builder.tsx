@@ -694,6 +694,8 @@ function FireSparkPanel({
       </div>
       <SliderRow label="Life" value={f.life} min={0.4} max={4} step={0.05} unit="s"
         onChange={(v) => set({ life: v })} />
+      <SliderRow label="Speed" value={f.speed} min={0.1} max={5} step={0.05} unit="×"
+        onChange={(v) => set({ speed: v })} />
       <SliderRow label="Size" value={f.size} min={0.05} max={0.6} step={0.01}
         onChange={(v) => set({ size: v })} />
       <SliderRow label="Intensity" value={f.intensity} min={0} max={6} step={0.05}

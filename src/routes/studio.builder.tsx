@@ -700,6 +700,8 @@ function FireSparkPanel({
         onChange={(v) => set({ size: v })} />
       <SliderRow label="Intensity" value={f.intensity} min={0} max={6} step={0.05}
         onChange={(v) => set({ intensity: v })} />
+      <SliderRow label="Small sparks" value={f.ashRate} min={0} max={4} step={0.05} unit="×"
+        onChange={(v) => set({ ashRate: v })} />
       <label className="flex items-center gap-2 text-xs text-foreground/60">
         Tint
         <input

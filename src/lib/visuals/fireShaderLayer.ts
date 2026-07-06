@@ -14,6 +14,7 @@ export type FireSpawnOpts = {
   intensity: number; // 0..6 — particle count multiplier + brightness
   tint: [number, number, number]; // 0..1 rgb — cool-down color
   speed?: number;    // 0.1..5 — outward velocity multiplier (independent of life)
+  ashRate?: number;  // 0..4 — how many small orb "ash" flecks are emitted per spark per frame
 };
 
 type Particle = {
@@ -38,6 +39,7 @@ type Particle = {
   haloScale: number; haloAlphaMul: number;
   // trail
   px: number; py: number;
+  ashRate: number;  // per-frame chance base (multiplied by (1-t))
 };
 
 type Ash = {
@@ -183,6 +185,7 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
     // the old "travel ~3× burstScale in ~1s" feel.
     const speedMul = Math.max(0.05, Math.min(8, opts.speed ?? 1));
     const baseSpeed = burstScale * 3.0 * speedMul;
+    const ashRateBase = Math.max(0, Math.min(4, opts.ashRate ?? 1)) * 0.12;
 
     for (let i = 0; i < count; i++) {
       const seed = tSec * 1000 + i * 17.31 + Math.random() * 1000;
@@ -229,6 +232,7 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
         curveAmp: (Math.random() * 0.14) - 0.02, // up to ~8°
         haloScale: 0.7 + Math.random() * 0.9,
         haloAlphaMul: 0.55 + Math.random() * 1.1,
+        ashRate: ashRateBase,
       });
     }
 
@@ -405,7 +409,7 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
       }
 
       // --- Emit occasional ash fleck for crackly high-freq detail ---
-      if (ash.length < MAX_ASH && Math.random() < 0.12 * (1 - t)) {
+      if (p.ashRate > 0 && ash.length < MAX_ASH && Math.random() < p.ashRate * (1 - t)) {
         const av = speed * 0.15;
         const aang = ang + (Math.random() - 0.5) * 1.4;
         ash.push({

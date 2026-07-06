@@ -1,78 +1,82 @@
-# Phase-Alignment Macro-Cycle Rule
+## Trigger Engine & Scene Creator (Custom Geometry Authoring)
 
-Establish one mathematical law shared by every trigger engine: every active note completes an integer number of laps per macro-cycle, so all notes fire in unison at t=0, phase into polyrhythmic chaos, and snap back to unison at cycle end. The "Big Bang" is emergent — it's simply every voice triggering on the same frame.
+Adds a new studio module that lets you compose brand-new trigger engines from primitive path types without touching TypeScript. Every custom scene stays fully bound to the Phase-Alignment macro-cycle (progress `0→1` per note, `laps_i = base + i`), so the "Big Bang" unison snap-back is preserved automatically.
 
-## The Rule (canonical, non-negotiable)
+### Where it lives
+- New dock entry **"Builder"** in `/studio` (sits next to Scenes / Scales / Packs).
+- Route: `src/routes/studio.builder.tsx` (passcode-gated like the other studio pages).
+- Runtime consumer: same `SceneBackground` / render loop already used by published scenes — a saved "custom scene" is just another `Scene` implementation fed by a JSON blueprint.
 
-For a scene with `N` active notes, base laps `B`, and macro-cycle duration `D` seconds:
+### JSON blueprint schema (`CustomSceneBlueprint`)
+```ts
+{
+  version: 1,
+  name: string,
+  path: {
+    type: "circle" | "line" | "polygon" | "lissajous",
+    // polygon
+    sides?: number,           // 3..12
+    // line
+    axis?: "x" | "y",
+    // lissajous
+    freqX?: number, freqY?: number, phase?: number,
+  },
+  layout: {
+    trackCount: number,               // = noteCount, but overridable
+    sizing: "linear" | "exponential" | "constant",
+    baseSize: number,                 // 0..1 of min(W,H)/2
+    step: number,                     // per-track increment / offset
+    rotationOffsetDeg: number,        // per-track starting angle offset
+  },
+  trigger: {
+    mode: "boundary" | "axisIntersect",
+    // axisIntersect
+    axis?: "x" | "y",
+    position?: number,                // -1..1 normalized from center
+  },
+  voice: { slot: 0..5, packOverride?: PackId },
+}
+```
 
-- Note `i` (0-indexed) completes `laps_i = B + i` full traversals per macro-cycle.
-- `progress_i(t) = ((t mod D) / D) * laps_i mod 1`
-- A trigger fires whenever `progress_i` wraps past 1 → 0.
-- At `t = k·D` for any integer k, every `progress_i = 0` simultaneously → unison.
+### Path transformer (core library)
+New pure module `src/lib/engine/pathTransformer.ts`:
+- `positionOn(path, progress) → {x, y}` in unit space (`-1..1`), one implementation per path type. Polygon evenly distributes progress across N perimeter segments.
+- `crossings(path, trigger, i, base, macroSec, t0, t1) → number[]` — scene-times in `(t0, t1]` where the moving dot crosses the trigger predicate. Boundary reuses `phaseAlign.crossings`; axisIntersect solves per path type analytically (circle/line/polygon closed form; Lissajous via bracketed root find over the note's laps in the window).
 
-Every engine must derive its motion from `progress_i` (or a deterministic function of it). No engine may keep its own free-running clock, use `Math.random()` per-frame, or set velocity from geometry length (which currently makes rings desync).
+### Runtime scene adapter
+New `src/lib/scenes/customScene.ts` implementing the `Scene` contract:
+- `sample()` walks `noteCount` tracks, computes `progress = phaseAlign.progress(t, i, base, D)`, maps through the path transformer using the per-track sizing/rotation rules, stores draw positions.
+- `eventsIn()` delegates to `pathTransformer.crossings` — audio stays scheduled through the existing `triggerBus` and pack system, so Big Bang alignment is untouched.
+- `draw()` renders tracks (light wireframe) + dots + optional axis-trigger line, themed via existing `ThemeColors`.
 
-## Shared module: `src/lib/engine/phaseAlign.ts` (new)
+### Registry integration
+- Extend `SceneId` with `"custom"` and register `customScene` in the render loop's scene table.
+- `SceneGlobals` gains an optional `blueprint?: CustomSceneBlueprint` field the loop injects when the active scene is a custom one.
+- `activeScene` store gets a companion `activeBlueprint` slot.
 
-Single source of truth. Exports:
+### Storage
+- **LocalStorage** first-class (as requested): key `sceneBuilder.presets.v1` → `Record<id, CustomSceneBlueprint>`. Save/Load/Rename/Delete/Duplicate/Export-JSON/Import-JSON.
+- **Cloud publish (optional)**: reuse `app_scenes` — add nullable `blueprint jsonb` column + set `trigger_engine_id = 'custom'`. Published custom scenes appear in `/studio/scenes` list and the main app's scene picker like any other engine. (One tiny migration.)
 
-- `computeProgress(t, i, B, D)` → `[0,1)`
-- `crossings(t0, t1, i, B, D)` → array of trigger scene-times in `(t0, t1]` (handles multiple wraps per frame for fast notes)
-- `lapsFor(i, B)` = `B + i`
-- Reads `engineClock.t()`; unaffected by pause/speed because `engineClock` already integrates those.
+### Builder UI (`/studio/builder`)
+Two-pane layout mirroring `/studio/scenes`:
+- **Sidebar (left)**: preset list from LocalStorage + New / Import buttons.
+- **Config panel (center)**: collapsible sections — Path Type, Layout & Spacing, Trigger, Voice, Cycle (base laps / macro seconds / note count sliders, same controls as scene creator), and Save/Publish actions.
+- **Live preview (right)**: `<PreviewCanvas>` running the exact `customScene` adapter on the current in-memory blueprint at real cycle timing, so what you see is what plays.
 
-The existing `speedCoeffs` / `phaseOffsets` in `src/lib/engine/polyrhythm.ts` become **deprecated** for cadence — kept only for visual jitter (hue offsets, initial angles), not for period math. Rewriting them would silently break scenes; the retrofit swaps call sites instead.
+### Build order
+1. `pathTransformer.ts` + unit sanity checks in a tiny dev harness.
+2. `customScene.ts` + register in scene table; add `blueprint` to `SceneGlobals`.
+3. `sceneBuilderStore.ts` (LocalStorage CRUD + Zod validate on load).
+4. `studio.builder.tsx` route with sidebar / config panels / live preview.
+5. Dock entry in `PhaseDock.tsx`.
+6. Optional: migration adding `blueprint jsonb` to `app_scenes` + wire publish path in `studio.scenes.tsx`.
+7. `tsgo` + visual verify: create a triangle preset, an axis-intersect Lissajous, confirm Big Bang unison at cycle end.
 
-## Engine retrofits (all 8)
+### Non-goals (this pass)
+- No new synth / audio path — reuses existing packs and scheduler.
+- No breaking changes to the 8 existing engines.
+- No multi-path composition in a single scene (single path type per preset for now; layered blueprints can come later).
 
-Each scene's `eventsIn(state, t0, t1, g)` and `sample(state, t, g)` are rewritten to consume `phaseAlign` for cadence. Geometry (angles, radii, lattice positions) stays; only the timing math changes.
-
-| Engine | What changes |
-|---|---|
-| `stringNetwork` | Node position along path = `progress_i`; trigger on wrap. |
-| `pendulumFan` | Replace `strandRatios` / sine-crossing math with `progress_i` sweep between ring endpoints; drop `RISING_PHASE` / `COOLDOWN` (cooldown obsolete — unison is now the design). |
-| `spiralArp` | Arm rotation = `progress_i * 2π`. |
-| `radialSweep` | Sweep angle per lane = `progress_i * 2π`. |
-| `mandalaMatrix` | Petal pulse phase = `progress_i`. |
-| `metatronLattice` | Node illumination cycle = `progress_i`. |
-| `fractalNebula` | Orbit angle = `progress_i * 2π`. |
-| `radialResonator` | Ring expansion phase = `progress_i`. |
-
-The Phase-Zero "Big Bang" chord already fires at `t=0`; with this rule it also naturally fires at every `t=k·D`.
-
-## Global controls: scene defaults + live overrides
-
-**Scene Creator (`app_scenes` new columns):**
-- `base_laps int not null default 10`
-- `macro_cycle_seconds numeric not null default 30`
-- `note_count int not null default 8` (range 4–24)
-
-Edited in `/studio/scenes` as three sliders in a new "Macro-Cycle" section of the editor.
-
-**Dock live override:** New "Cycle" panel in `PhaseDock` with the same three sliders. Overrides persist in `sessionUrl` (not DB). If unset, active scene's defaults apply. Reset button restores scene defaults.
-
-**Wiring:** `SceneGlobals` gains `baseLaps`, `macroCycleSeconds`, `noteCount`. `sceneOverlay` resolves the effective values (dock override ?? active scene ?? hardcoded fallback) per frame and passes them in.
-
-## UI: canonical proof-of-concept engine
-
-Add a 9th `SceneKind`: `phaseAlignRings` — nested concentric circles, one dot per note orbiting clockwise (0° = top). Renders directly from `computeProgress`, no bespoke state. Serves as the visual reference that the rule is working; also useful as a "debug scene" to sanity-check retrofits.
-
-## Build order
-
-1. `phaseAlign.ts` module + unit-verifiable pure functions.
-2. Extend `SceneGlobals` + `sceneOverlay` resolution logic.
-3. Retrofit engines one at a time (stringNetwork first as smallest), verifying unison at each `k·D` visually.
-4. Migration: add `base_laps`, `macro_cycle_seconds`, `note_count` to `app_scenes` (+ GRANTs already in place; column-level defaults, no policy changes).
-5. Scene Creator UI: Macro-Cycle section.
-6. Dock override panel + `sessionUrl` schema bump (v→2 with back-compat parse).
-7. Add `phaseAlignRings` scene + register in dock's Backdrop menu.
-8. `tsgo` clean; verify snapback visually on preview.
-
-## Technical notes
-
-- **Why kill `polyrhythm.ts` cadence use:** its coefficients are irrational-by-design (φ jitter) — they *guarantee* non-repeating cycles, which is the exact opposite of what we now want. Keep the file, mark cadence exports deprecated, migrate call sites.
-- **Fast notes crossing multiple times per frame:** at high `i`, `laps_i` can be ~34 (B=10, N=24) → up to 34/60·D wraps per frame at D=1s. `crossings()` enumerates all of them so no triggers are dropped.
-- **Pause/speed:** `engineClock` already integrates `speed` into `t()`. Macro-cycle math uses `t mod D` so slowing down stretches the cycle rather than breaking alignment.
-- **Big Bang amplification:** deferred. Rule naturally produces unison; amplification (compressor sidechain, reverb pre-delay, volume swell) is a separate later pass.
-- **`user_scenes` table** is untouched by this change.
+### Credit estimate
+Roughly **7–10 credits**: 1 migration (optional), 4 new files, 2–3 edits, one geometry-heavy module (Lissajous root-finding is the only tricky bit), plus a visual verification pass. Skipping Cloud publish (LocalStorage-only) drops it to ~6.

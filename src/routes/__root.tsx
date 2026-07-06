@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { NeuralNoise } from "../components/ui/neural-noise";
 import { Toaster } from "@/components/ui/sonner";
+import { SceneBackground } from "@/components/scenes/SceneBackground";
 import {
   loadNeuralSettings,
   presetById,
@@ -152,6 +153,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <NeuralNoise zIndex={2} blendMode="plus-lighter" />
+      <SceneBackground />
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
       <Toaster />

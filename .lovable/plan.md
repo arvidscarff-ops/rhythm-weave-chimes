@@ -1,36 +1,102 @@
-## Per-step strum in the filmstrip
+# Scene Creator — `/admin/scenes`
 
-Add a small strum button to each step block in the chord-progression filmstrip so the user can audition any step's assigned notes without having to select it, plus a "play all" that walks through every step back-to-back.
+A passcode-gated admin workspace to author "Scenes" (background media + engine + palette + audio-reactivity), preview them live, publish, and have the public app consume them from the database.
 
-### Per-step strum button
+## Credit estimate
 
-- Add a compact play/strum icon-button in the top-right of every `FilmstripBlock` (next to the trash icon area, always visible — not hover-only).
-- Clicking it:
-  - Calls `primeAudio()` once.
-  - Collects that step's assigned tones = union of `step.chord_tones` and `step.accent_tones`, mapped to their pitches via the scale, sorted low-to-high by MIDI (same logic used in `StrumBar`'s `sorted`).
-  - Fires `playPitch(pitch)` for each tone spaced by `STRUM_STEP_MS` (60ms), matching the handpan strum feel.
-  - Does not change `activeStepId` — the user keeps editing the current step while previewing others.
-  - `e.stopPropagation()` so the click doesn't also select the step.
-- Visual feedback: a subtle teal sweep line inside the block during playback (reuses the existing `strumFill` keyframe, duration = `tones * STRUM_STEP_MS`), plus a brief press state on the button. Disable the button while its own sweep is running.
-- If the step has zero assigned tones, render the button in a dimmed disabled state with tooltip "No chord/accent notes yet".
+Rough range: **~25–40 credits**, depending on iteration. Breakdown:
+- DB migration + storage bucket + RLS/grants: ~2–3
+- Server functions (CRUD + signed URL upload): ~3–5
+- Admin dashboard UI (split-screen, dropzone, engine selector, sliders, color pickers): ~10–15
+- Audio-reactive wiring into existing canvas engines: ~5–8
+- Public dock integration + smooth scene transition: ~4–6
+- Polish, typecheck, bug fixes: ~3
 
-### Play-all-steps button
+Actual cost depends on how many revision passes you request on the visual design and how deep the audio-reactive integration needs to go into each existing engine.
 
-- Add a "Play all" button next to the existing "Add step" button in the filmstrip toolbar row.
-- Sequentially strums each step in `step_order`. Between steps, wait `stepTones * STRUM_STEP_MS + 200ms` gap so the ear can separate them. Not tempo/bar-aware — this is a working preview, not a full playback engine.
-- While running, the button becomes "Stop" and cancels all pending timeouts on click. Steps light up their sweep line as they play (drive by passing an `isPlaying` prop into the currently-playing block, or a shared `playingStepId` state in `Filmstrip`).
+## 1. Data layer
 
-### Technical notes
+New table `public.app_scenes`:
+- `id uuid pk`, `name text`, `owner_id uuid` (nullable for built-ins)
+- `background_type text check in ('image','video')`
+- `background_path text` (storage key; resolve to signed/public URL client-side)
+- `trigger_engine_id text` (matches existing `SceneKind`: `stringNet | pendulumFan | spiralArp | radialSweep | mandalaMatrix | metatronLattice | fractalNebula | radialResonator`)
+- `ui_theme_colors jsonb` — `{ nodeGlow, wireframe, dockAccent, textAccent }`
+- `visual_fx jsonb` — `{ backgroundBlur, backgroundGlow, trailPersistence }`
+- `audio_reactive jsonb` — `{ amplitude, scalePulse, opacityPulse, blurPulse, threshold }`
+- `is_published bool default false`
+- `created_at`, `updated_at` + trigger
 
-- New helper inside `studio.scales.tsx`:
-  ```ts
-  function stepPitchesSorted(step, pitches): string[]
-  ```
-  returning the union of `chord_tones` + `accent_tones` resolved to pitches, sorted by `pitchToMidi` ascending, with a graceful fallback for unparsable pitches.
-- Lift audio calls into `Filmstrip`: pass `pitches: string[]` and `onStrikePitch: (pitch: string) => void` props down from the parent (same `primeAudio` + `playPitch` used by the main `StrumBar`). `FilmstripBlock` owns its own timer refs and clears them on unmount.
-- No changes to data model, server functions, or persisted state — this is playback-only.
-- Files touched: `src/routes/studio.scales.tsx` only.
+GRANTs: `authenticated` full; `anon` SELECT only where `is_published = true` (via policy) so the public dock can read without auth. `service_role` all.
 
-### Out of scope
+New storage bucket `scene-assets` (private). Uploads via signed upload URL from a server fn; reads via signed URL (short-lived) or public bucket if you prefer — I'll default to private + signed reads to keep it consistent with `samples`/`pack-covers`.
 
-- Tempo-aware or bars-aware playback, metronome sync, chord/accent volume differentiation, MIDI export, or a full progression sequencer. Just an ergonomic audition button.
+## 2. Server functions (`src/lib/admin/scenes.functions.ts`)
+
+- `listScenes`, `listPublishedScenes` (public, no auth)
+- `createScene`, `updateScene`, `renameScene`, `deleteScene`, `duplicateScene`
+- `publishScene(id, is_published)`
+- `createSceneAssetUploadUrl({ ext, mime })` → returns `{ path, token }` for direct browser upload
+- `getSceneAssetUrl(path)` → signed URL
+
+All admin mutations gated by existing `verifyAdminPasscode` pattern (mirrors `packs.functions.ts` / `scales.functions.ts`).
+
+## 3. Admin UI — `/admin/scenes`
+
+Split-screen layout using existing `ResizablePanelGroup`:
+
+```text
+┌─────────────────────────┬─────────────────────────┐
+│  Scene list + editor    │   Live preview canvas   │
+│  ─ Name                 │   (background media +   │
+│  ─ Media dropzone       │    selected engine +    │
+│  ─ Engine dropdown      │    palette + audio-fx   │
+│  ─ Palette pickers      │    applied in realtime) │
+│  ─ FX sliders           │                         │
+│  ─ Audio-reactive       │   [Play test tone] to   │
+│  ─ Publish toggle       │    exercise reactivity  │
+└─────────────────────────┴─────────────────────────┘
+```
+
+Components:
+- `SceneList` — sidebar of scenes with create/duplicate/delete.
+- `SceneEditorForm` — all controls; local draft state; debounced `updateScene`.
+- `MediaDropzone` — drag/drop, validates type + size (≤ ~15 MB video, ~5 MB image), uploads via signed URL, stores `background_path` + `background_type`.
+- `EngineSelector` — dropdown of the 8 existing `SceneKind`s.
+- `PaletteEditor` — 4 color inputs (native `<input type="color">` + hex text).
+- `FxSliders` — background blur (0–40px), background glow (0–1), trail persistence (0–0.5 clear-alpha).
+- `AudioReactivePanel` — amplitude 0–2×, plus per-channel toggles (scale/opacity/blur) and threshold.
+- `PreviewCanvas` — renders the selected background under a `<canvas>` that mounts the chosen engine via existing `sceneOverlay` + `sceneTypes` wiring, subscribing to `triggerBus` for reactive pulses.
+
+## 4. Audio-reactive plumbing
+
+- Extend `triggerBus` (or subscribe to existing note callbacks) to emit a normalized `intensity` per hit.
+- New helper `applyReactive(el, settings, intensity)` that mutates CSS custom properties `--scene-scale`, `--scene-opacity`, `--scene-blur` on the background wrapper via `requestAnimationFrame`, with exponential decay.
+- Preview canvas subscribes locally; public dock uses the same helper against the app-level background wrapper.
+
+## 5. Public sync
+
+- New `useActiveScene()` hook fetches `listPublishedScenes` (React Query) and reads/writes the selection to `sessionUrl` state (same pattern as `pack`).
+- Update `PhaseDock`'s Scenes menu to list published scenes from DB alongside/instead of hardcoded ones (kept as fallback).
+- Add `<SceneBackground />` in `__root.tsx` (or `routes/index.tsx`) rendering the media element + palette CSS vars scoped to a wrapper; engine canvas reads the same vars.
+- Palette applied by setting `--node-glow`, `--wire-color`, `--dock-accent`, `--text-accent` on the wrapper; existing engines updated minimally to read these vars where they currently use hardcoded colors.
+- Transition: cross-fade background (`opacity` + `filter`) over ~600ms when scene changes.
+
+## 6. Build order
+
+1. Migration + `scene-assets` bucket + RLS/grants.
+2. Server functions + signed upload flow.
+3. Admin route shell + list/create/delete.
+4. Editor form (metadata, engine, palette, FX).
+5. Media dropzone + upload.
+6. Live preview canvas (background + engine mount).
+7. Audio-reactive module + preview test-tone.
+8. Public dock integration + `<SceneBackground />` + palette CSS var wiring.
+9. Typecheck, polish transitions, verify publish→appears-in-app loop.
+
+## Open questions (answer before build, or I'll take the defaults noted)
+
+1. **Storage privacy**: private bucket + signed URLs (default) or public bucket for simpler `<video>` playback?
+2. **Video size cap**: default ≤ 15 MB, ≤ 20s loop. OK?
+3. **Should published scenes replace the current hardcoded scene list in the dock, or appear as an additional "Custom" group?** Default: additional group, hardcoded stays as fallback.
+4. **Palette scope**: apply to all 8 engines uniformly (default), or per-engine overrides later?

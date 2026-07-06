@@ -13,9 +13,11 @@ import { Route as StudioRouteImport } from './routes/studio'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
+import { Route as StudioScenesRouteImport } from './routes/studio.scenes'
 import { Route as StudioScalesRouteImport } from './routes/studio.scales'
 import { Route as StudioPacksRouteImport } from './routes/studio.packs'
 import { Route as AdminUnlockRouteImport } from './routes/admin.unlock'
+import { Route as AdminScenesRouteImport } from './routes/admin.scenes'
 import { Route as AdminScalesRouteImport } from './routes/admin.scales'
 import { Route as AdminPacksRouteImport } from './routes/admin.packs'
 
@@ -39,6 +41,11 @@ const StudioIndexRoute = StudioIndexRouteImport.update({
   path: '/',
   getParentRoute: () => StudioRoute,
 } as any)
+const StudioScenesRoute = StudioScenesRouteImport.update({
+  id: '/scenes',
+  path: '/scenes',
+  getParentRoute: () => StudioRoute,
+} as any)
 const StudioScalesRoute = StudioScalesRouteImport.update({
   id: '/scales',
   path: '/scales',
@@ -52,6 +59,11 @@ const StudioPacksRoute = StudioPacksRouteImport.update({
 const AdminUnlockRoute = AdminUnlockRouteImport.update({
   id: '/admin/unlock',
   path: '/admin/unlock',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminScenesRoute = AdminScenesRouteImport.update({
+  id: '/admin/scenes',
+  path: '/admin/scenes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminScalesRoute = AdminScalesRouteImport.update({
@@ -71,9 +83,11 @@ export interface FileRoutesByFullPath {
   '/studio': typeof StudioRouteWithChildren
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
+  '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
+  '/studio/scenes': typeof StudioScenesRoute
   '/studio/': typeof StudioIndexRoute
 }
 export interface FileRoutesByTo {
@@ -81,9 +95,11 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
+  '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
+  '/studio/scenes': typeof StudioScenesRoute
   '/studio': typeof StudioIndexRoute
 }
 export interface FileRoutesById {
@@ -93,9 +109,11 @@ export interface FileRoutesById {
   '/studio': typeof StudioRouteWithChildren
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
+  '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
+  '/studio/scenes': typeof StudioScenesRoute
   '/studio/': typeof StudioIndexRoute
 }
 export interface FileRouteTypes {
@@ -106,9 +124,11 @@ export interface FileRouteTypes {
     | '/studio'
     | '/admin/packs'
     | '/admin/scales'
+    | '/admin/scenes'
     | '/admin/unlock'
     | '/studio/packs'
     | '/studio/scales'
+    | '/studio/scenes'
     | '/studio/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -116,9 +136,11 @@ export interface FileRouteTypes {
     | '/auth'
     | '/admin/packs'
     | '/admin/scales'
+    | '/admin/scenes'
     | '/admin/unlock'
     | '/studio/packs'
     | '/studio/scales'
+    | '/studio/scenes'
     | '/studio'
   id:
     | '__root__'
@@ -127,9 +149,11 @@ export interface FileRouteTypes {
     | '/studio'
     | '/admin/packs'
     | '/admin/scales'
+    | '/admin/scenes'
     | '/admin/unlock'
     | '/studio/packs'
     | '/studio/scales'
+    | '/studio/scenes'
     | '/studio/'
   fileRoutesById: FileRoutesById
 }
@@ -139,6 +163,7 @@ export interface RootRouteChildren {
   StudioRoute: typeof StudioRouteWithChildren
   AdminPacksRoute: typeof AdminPacksRoute
   AdminScalesRoute: typeof AdminScalesRoute
+  AdminScenesRoute: typeof AdminScenesRoute
   AdminUnlockRoute: typeof AdminUnlockRoute
 }
 
@@ -172,6 +197,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioIndexRouteImport
       parentRoute: typeof StudioRoute
     }
+    '/studio/scenes': {
+      id: '/studio/scenes'
+      path: '/scenes'
+      fullPath: '/studio/scenes'
+      preLoaderRoute: typeof StudioScenesRouteImport
+      parentRoute: typeof StudioRoute
+    }
     '/studio/scales': {
       id: '/studio/scales'
       path: '/scales'
@@ -191,6 +223,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/unlock'
       fullPath: '/admin/unlock'
       preLoaderRoute: typeof AdminUnlockRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/scenes': {
+      id: '/admin/scenes'
+      path: '/admin/scenes'
+      fullPath: '/admin/scenes'
+      preLoaderRoute: typeof AdminScenesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/scales': {
@@ -213,12 +252,14 @@ declare module '@tanstack/react-router' {
 interface StudioRouteChildren {
   StudioPacksRoute: typeof StudioPacksRoute
   StudioScalesRoute: typeof StudioScalesRoute
+  StudioScenesRoute: typeof StudioScenesRoute
   StudioIndexRoute: typeof StudioIndexRoute
 }
 
 const StudioRouteChildren: StudioRouteChildren = {
   StudioPacksRoute: StudioPacksRoute,
   StudioScalesRoute: StudioScalesRoute,
+  StudioScenesRoute: StudioScenesRoute,
   StudioIndexRoute: StudioIndexRoute,
 }
 
@@ -231,6 +272,7 @@ const rootRouteChildren: RootRouteChildren = {
   StudioRoute: StudioRouteWithChildren,
   AdminPacksRoute: AdminPacksRoute,
   AdminScalesRoute: AdminScalesRoute,
+  AdminScenesRoute: AdminScenesRoute,
   AdminUnlockRoute: AdminUnlockRoute,
 }
 export const routeTree = rootRouteImport

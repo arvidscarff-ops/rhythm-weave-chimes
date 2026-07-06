@@ -25,6 +25,7 @@ import {
   Save,
   Shield,
   ListMusic,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -54,6 +55,13 @@ import { NEURAL_PRESETS, type NeuralSettings } from "@/lib/neural/palette";
 import type { RuntimePack } from "@/lib/sound/runtimePacks";
 import { ROOT_NAMES, type RootName } from "@/lib/music/scales";
 import { fetchPublishedScales } from "@/lib/music/scales.functions";
+import { listPublishedScenes, type SceneRow } from "@/lib/admin/scenes.functions";
+import {
+  getActiveScene,
+  setActiveScene,
+  subscribeActiveScene,
+} from "@/lib/scenes/activeScene";
+import { useEffect } from "react";
 import {
   type ComposerSettings,
   type SlotSettings,
@@ -181,6 +189,7 @@ export function PhaseDock(p: Props) {
         <ScalesMenu composer={p.composer} onComposer={p.onComposer} authed={p.authed} />
         <PacksMenu packs={p.packs} packId={p.packId} onPackId={p.onPackId} />
         <VisualsMenu neural={p.neural} onNeural={p.onNeural} />
+        <BackdropMenu />
 
         <Divider />
 
@@ -925,6 +934,61 @@ function PacksMenu({
 }
 
 /* =================== Visuals menu =================== */
+function BackdropMenu() {
+  const [open, setOpen] = useState(false);
+  const listFn = useServerFn(listPublishedScenes);
+  const scenesQ = useQuery({
+    queryKey: ["published-scenes"],
+    queryFn: () => listFn(),
+    staleTime: 60_000,
+  });
+  const scenes: SceneRow[] = scenesQ.data ?? [];
+  const [activeId, setActiveId] = useState<string>(() => getActiveScene()?.id ?? "");
+  useEffect(() => subscribeActiveScene((s) => setActiveId(s?.id ?? "")), []);
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger className={DOCK_BTN}>
+        <ImageIcon className="h-4 w-4" /> Backdrop
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="center">
+        <DropdownMenuPage id="main">
+          <DropdownMenuLabel>Scene backdrop</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={activeId}
+            onValueChange={(v) => {
+              if (!v) {
+                setActiveScene(null);
+                return;
+              }
+              const found = scenes.find((s) => s.id === v) ?? null;
+              setActiveScene(found);
+            }}
+          >
+            <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
+            {scenes.map((s) => (
+              <DropdownMenuRadioItem key={s.id} value={s.id}>
+                {s.name}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+          {scenes.length === 0 && (
+            <div className="px-4 py-2 text-[11px] uppercase tracking-[0.16em] text-foreground/50">
+              No published scenes
+            </div>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <Link to="/studio/scenes" className="flex w-full items-center gap-2">
+              <Wrench className="h-4 w-4" /> Create scenes
+            </Link>
+          </DropdownMenuItem>
+        </DropdownMenuPage>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function VisualsMenu({
   neural,
   onNeural,

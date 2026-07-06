@@ -696,8 +696,6 @@ function FireSparkPanel({
         onChange={(v) => set({ life: v })} />
       <SliderRow label="Speed" value={f.speed} min={0.1} max={5} step={0.05} unit="×"
         onChange={(v) => set({ speed: v })} />
-      <SliderRow label="Radius" value={f.radius} min={0.1} max={5} step={0.05} unit="×"
-        onChange={(v) => set({ radius: v })} />
       <SliderRow label="Size" value={f.size} min={0.05} max={0.6} step={0.01}
         onChange={(v) => set({ size: v })} />
       <SliderRow label="Intensity" value={f.intensity} min={0} max={6} step={0.05}
@@ -723,99 +721,15 @@ function FireSparkPanel({
         onChange={(v) => set({ glow: v })} />
       <SliderRow label="Chromatic" value={f.chroma} min={0} max={3} step={0.05} unit="px"
         onChange={(v) => set({ chroma: v })} />
-      <div className="pt-2 mt-1 border-t border-orange-500/15 text-[10px] uppercase tracking-wider text-orange-300/60">
-        Color
-      </div>
-      <div className="flex gap-1 rounded-md bg-black/30 p-0.5 text-xs">
-        {(["single", "rainbow", "palette"] as const).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => set({ colorMode: m })}
-            className={`flex-1 rounded px-2 py-1 capitalize transition-colors ${
-              f.colorMode === m
-                ? "bg-orange-500/30 text-orange-100"
-                : "text-foreground/50 hover:text-foreground/80"
-            }`}
-          >
-            {m}
-          </button>
-        ))}
-      </div>
-      {f.colorMode === "single" && (
-        <label className="flex items-center gap-2 text-xs text-foreground/60">
-          Tint
-          <input
-            type="color"
-            value={f.tint}
-            onChange={(e) => set({ tint: e.target.value })}
-            className="h-8 w-10 rounded border border-white/10 bg-transparent"
-          />
-        </label>
-      )}
-      {f.colorMode === "palette" && (
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-1">
-            {f.palette.map((c, i) => (
-              <div key={i} className="relative">
-                <input
-                  type="color"
-                  value={c}
-                  onChange={(e) => {
-                    const next = [...f.palette];
-                    next[i] = e.target.value;
-                    set({ palette: next });
-                  }}
-                  className="h-8 w-8 rounded border border-white/10 bg-transparent"
-                />
-                {f.palette.length > 2 && (
-                  <button
-                    type="button"
-                    aria-label="Remove color"
-                    onClick={() => set({ palette: f.palette.filter((_, j) => j !== i) })}
-                    className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-black/70 text-[10px] leading-none text-white/70 hover:bg-red-500/70 hover:text-white"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            ))}
-            {f.palette.length < 8 && (
-              <button
-                type="button"
-                onClick={() =>
-                  set({ palette: [...f.palette, f.palette[f.palette.length - 1] ?? "#FFFFFF"] })
-                }
-                className="h-8 w-8 rounded border border-dashed border-white/20 text-lg text-white/50 hover:border-white/40 hover:text-white/80"
-                aria-label="Add color"
-              >
-                +
-              </button>
-            )}
-          </div>
-          <div className="flex gap-1 text-[11px]">
-            {(["random", "sequential"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => set({ paletteMode: m })}
-                className={`rounded px-2 py-0.5 capitalize transition-colors ${
-                  f.paletteMode === m
-                    ? "bg-orange-500/25 text-orange-100"
-                    : "bg-white/5 text-foreground/50 hover:text-foreground/80"
-                }`}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {f.colorMode === "rainbow" && (
-        <div className="text-[11px] text-foreground/50">
-          Each spark gets a random hue at full saturation.
-        </div>
-      )}
+      <label className="flex items-center gap-2 text-xs text-foreground/60">
+        Tint
+        <input
+          type="color"
+          value={f.tint}
+          onChange={(e) => set({ tint: e.target.value })}
+          className="h-8 w-10 rounded border border-white/10 bg-transparent"
+        />
+      </label>
       <div className="text-[10px] text-foreground/40">
         Shader by Jan Mróz (jaszunio15) · CC BY 3.0
       </div>

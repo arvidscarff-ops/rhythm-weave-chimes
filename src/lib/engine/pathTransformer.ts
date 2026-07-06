@@ -85,11 +85,7 @@ export type AestheticConfig = {
     size: number;      // 0.05..0.6 — fraction of canvas width
     intensity: number; // 0..6
     tint: string;      // hex — multiplied over shader output
-    colorMode: "single" | "rainbow" | "palette";
-    palette: string[];      // hex colors, 2..8 entries (used in palette mode)
-    paletteMode: "random" | "sequential";
     speed: number;     // 0.1..5 — outward velocity multiplier (independent of life)
-    radius: number;    // 0.1..5 — travel distance multiplier (how far sparks reach)
     ashRate: number;   // 0..4 — how many small orb "ash" flecks are emitted
     bloom: number;       // 0..3   — HDR bloom strength
     shimmer: number;     // 0..2   — heat-shimmer distortion
@@ -191,10 +187,7 @@ export const DEFAULT_AESTHETIC: AestheticConfig = {
   pathPulse: { enabled: true, speed: 1.6, widthPx: 3, opacity: 0.9 },
   fireSpark: {
     life: 1.5, size: 0.34, intensity: 4.0, tint: "#FF8A2B",
-    colorMode: "single",
-    palette: ["#FF3B00", "#FF8A2B", "#FFD447", "#FF66C4", "#4DA6FF"],
-    paletteMode: "random",
-    speed: 1.0, radius: 1.0, ashRate: 1.0,
+    speed: 1.0, ashRate: 1.0,
     bloom: 1.2, shimmer: 0.9, trails: 0.35, turbulence: 0.9,
     wind: 40, afterglow: 1.0, glow: 0.9, chroma: 1.2,
   },
@@ -491,22 +484,12 @@ function mergeAesthetic(raw: unknown): AestheticConfig {
     },
     fireSpark: (() => {
       const fs = (a.fireSpark ?? {}) as Record<string, unknown>;
-      const rawPal = Array.isArray(fs.palette) ? (fs.palette as unknown[]) : d.fireSpark.palette;
-      const palette = rawPal
-        .filter((c): c is string => typeof c === "string" && /^#?[0-9a-f]{6}$/i.test(c.trim()))
-        .slice(0, 8);
       return {
         life: clampRange(Number(fs.life ?? d.fireSpark.life), 0.2, 6),
         size: clampRange(Number(fs.size ?? d.fireSpark.size), 0.03, 0.8),
         intensity: clampRange(Number(fs.intensity ?? d.fireSpark.intensity), 0, 6),
         tint: typeof fs.tint === "string" ? fs.tint : d.fireSpark.tint,
-        colorMode: (["single", "rainbow", "palette"].includes(fs.colorMode as string)
-          ? (fs.colorMode as "single" | "rainbow" | "palette")
-          : d.fireSpark.colorMode),
-        palette: palette.length >= 2 ? palette : d.fireSpark.palette,
-        paletteMode: (fs.paletteMode === "sequential" ? "sequential" : "random") as "random" | "sequential",
         speed: clampRange(Number(fs.speed ?? d.fireSpark.speed), 0.1, 5),
-        radius: clampRange(Number(fs.radius ?? d.fireSpark.radius), 0.1, 5),
         ashRate: clampRange(Number(fs.ashRate ?? d.fireSpark.ashRate), 0, 4),
         bloom:      clampRange(Number(fs.bloom      ?? d.fireSpark.bloom),      0, 3),
         shimmer:    clampRange(Number(fs.shimmer    ?? d.fireSpark.shimmer),    0, 2),

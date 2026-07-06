@@ -87,6 +87,14 @@ export type AestheticConfig = {
     tint: string;      // hex — multiplied over shader output
     speed: number;     // 0.1..5 — outward velocity multiplier (independent of life)
     ashRate: number;   // 0..4 — how many small orb "ash" flecks are emitted
+    bloom: number;       // 0..3   — HDR bloom strength
+    shimmer: number;     // 0..2   — heat-shimmer distortion
+    trails: number;      // 0..0.97 — motion-trail persistence
+    turbulence: number;  // 0..3   — curl-noise flow strength
+    wind: number;        // -200..200 — upward push (px/s)
+    afterglow: number;   // 0..2   — cooling-ember afterglow
+    glow: number;        // 0..2   — reactive underlay glow
+    chroma: number;      // 0..3   — chromatic aberration on hot cores (px)
   };
   pathPulse: {
     enabled: boolean;
@@ -177,7 +185,12 @@ export const DEFAULT_AESTHETIC: AestheticConfig = {
     trailLength: 0,
   },
   pathPulse: { enabled: true, speed: 1.6, widthPx: 3, opacity: 0.9 },
-  fireSpark: { life: 1.5, size: 0.34, intensity: 4.0, tint: "#FF8A2B", speed: 1.0, ashRate: 1.0 },
+  fireSpark: {
+    life: 1.5, size: 0.34, intensity: 4.0, tint: "#FF8A2B",
+    speed: 1.0, ashRate: 1.0,
+    bloom: 1.2, shimmer: 0.9, trails: 0.35, turbulence: 0.9,
+    wind: 40, afterglow: 1.0, glow: 0.9, chroma: 1.2,
+  },
   climax: {
     ambientFlash: true,
     stardust: true,
@@ -478,6 +491,14 @@ function mergeAesthetic(raw: unknown): AestheticConfig {
         tint: typeof fs.tint === "string" ? fs.tint : d.fireSpark.tint,
         speed: clampRange(Number(fs.speed ?? d.fireSpark.speed), 0.1, 5),
         ashRate: clampRange(Number(fs.ashRate ?? d.fireSpark.ashRate), 0, 4),
+        bloom:      clampRange(Number(fs.bloom      ?? d.fireSpark.bloom),      0, 3),
+        shimmer:    clampRange(Number(fs.shimmer    ?? d.fireSpark.shimmer),    0, 2),
+        trails:     clampRange(Number(fs.trails     ?? d.fireSpark.trails),     0, 0.97),
+        turbulence: clampRange(Number(fs.turbulence ?? d.fireSpark.turbulence), 0, 3),
+        wind:       clampRange(Number(fs.wind       ?? d.fireSpark.wind),      -200, 200),
+        afterglow:  clampRange(Number(fs.afterglow  ?? d.fireSpark.afterglow),  0, 2),
+        glow:       clampRange(Number(fs.glow       ?? d.fireSpark.glow),       0, 2),
+        chroma:     clampRange(Number(fs.chroma     ?? d.fireSpark.chroma),     0, 3),
       };
     })(),
     pathPulse: {

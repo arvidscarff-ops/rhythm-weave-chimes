@@ -17,6 +17,7 @@ import { Route as StudioScenesRouteImport } from './routes/studio.scenes'
 import { Route as StudioScalesRouteImport } from './routes/studio.scales'
 import { Route as StudioPacksRouteImport } from './routes/studio.packs'
 import { Route as AdminUnlockRouteImport } from './routes/admin.unlock'
+import { Route as AdminScenesRouteImport } from './routes/admin.scenes'
 import { Route as AdminScalesRouteImport } from './routes/admin.scales'
 import { Route as AdminPacksRouteImport } from './routes/admin.packs'
 
@@ -60,6 +61,11 @@ const AdminUnlockRoute = AdminUnlockRouteImport.update({
   path: '/admin/unlock',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminScenesRoute = AdminScenesRouteImport.update({
+  id: '/admin/scenes',
+  path: '/admin/scenes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminScalesRoute = AdminScalesRouteImport.update({
   id: '/admin/scales',
   path: '/admin/scales',
@@ -77,6 +83,7 @@ export interface FileRoutesByFullPath {
   '/studio': typeof StudioRouteWithChildren
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
+  '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
@@ -88,6 +95,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
+  '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
@@ -101,6 +109,7 @@ export interface FileRoutesById {
   '/studio': typeof StudioRouteWithChildren
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
+  '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
@@ -115,6 +124,7 @@ export interface FileRouteTypes {
     | '/studio'
     | '/admin/packs'
     | '/admin/scales'
+    | '/admin/scenes'
     | '/admin/unlock'
     | '/studio/packs'
     | '/studio/scales'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/admin/packs'
     | '/admin/scales'
+    | '/admin/scenes'
     | '/admin/unlock'
     | '/studio/packs'
     | '/studio/scales'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/studio'
     | '/admin/packs'
     | '/admin/scales'
+    | '/admin/scenes'
     | '/admin/unlock'
     | '/studio/packs'
     | '/studio/scales'
@@ -151,6 +163,7 @@ export interface RootRouteChildren {
   StudioRoute: typeof StudioRouteWithChildren
   AdminPacksRoute: typeof AdminPacksRoute
   AdminScalesRoute: typeof AdminScalesRoute
+  AdminScenesRoute: typeof AdminScenesRoute
   AdminUnlockRoute: typeof AdminUnlockRoute
 }
 
@@ -212,6 +225,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUnlockRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/scenes': {
+      id: '/admin/scenes'
+      path: '/admin/scenes'
+      fullPath: '/admin/scenes'
+      preLoaderRoute: typeof AdminScenesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/scales': {
       id: '/admin/scales'
       path: '/admin/scales'
@@ -252,6 +272,7 @@ const rootRouteChildren: RootRouteChildren = {
   StudioRoute: StudioRouteWithChildren,
   AdminPacksRoute: AdminPacksRoute,
   AdminScalesRoute: AdminScalesRoute,
+  AdminScenesRoute: AdminScenesRoute,
   AdminUnlockRoute: AdminUnlockRoute,
 }
 export const routeTree = rootRouteImport

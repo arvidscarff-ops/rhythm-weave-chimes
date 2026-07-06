@@ -168,7 +168,8 @@ export type SceneKind =
   | "metatronLattice"
   | "fractalNebula"
   | "radialResonator"
-  | "phaseAlignRings";
+  | "phaseAlignRings"
+  | "custom";
 
 type Knobs = {
   mainVol: number; // 0..1
@@ -285,6 +286,7 @@ const SCENES: SceneKind[] = [
   "fractalNebula",
   "radialResonator",
   "phaseAlignRings",
+  "custom",
 ];
 type VoiceSlot = "melo" | "bass" | "atmo";
 const VOICE_SLOTS: VoiceSlot[] = ["melo", "bass", "atmo"];

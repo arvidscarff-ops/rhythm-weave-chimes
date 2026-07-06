@@ -1013,11 +1013,15 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
       c.vy -= 8 * dt; // buoyant rise
       c.vx *= 0.985; c.vy *= 0.985;
       c.x += c.vx * dt; c.y += c.vy * dt;
-      // deep-red → smoke color ramp
-      const k2 = k;
-      const rr = Math.round(mix(200, 60, k2));
-      const gg = Math.round(mix(40, 20, k2));
-      const bb = Math.round(mix(20, 15, k2));
+      // Deep-saturated tint → dim smoke of the same hue. Start value scales
+      // the particle's own color down to a hot-coal darkness; end drifts to
+      // near-black so any tint fades cleanly.
+      const startScale = 0.75;  // "hot coal" luminance of the tint
+      const endScale   = 0.12;  // near-black smoke
+      const s = mix(startScale, endScale, k);
+      const rr = Math.round(Math.min(255, c.tint[0] * 255 * s));
+      const gg = Math.round(Math.min(255, c.tint[1] * 255 * s));
+      const bb = Math.round(Math.min(255, c.tint[2] * 255 * s));
       const al = (1 - k) * (1 - k) * 0.55 * cfg.afterglow;
       const r = c.r0 * dpr * (1 + k * 0.6);
       const cx = c.x * dpr, cy = c.y * dpr;

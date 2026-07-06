@@ -185,6 +185,7 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
     // the old "travel ~3× burstScale in ~1s" feel.
     const speedMul = Math.max(0.05, Math.min(8, opts.speed ?? 1));
     const baseSpeed = burstScale * 3.0 * speedMul;
+    const ashRateBase = Math.max(0, Math.min(4, opts.ashRate ?? 1)) * 0.12;
 
     for (let i = 0; i < count; i++) {
       const seed = tSec * 1000 + i * 17.31 + Math.random() * 1000;
@@ -231,6 +232,7 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
         curveAmp: (Math.random() * 0.14) - 0.02, // up to ~8°
         haloScale: 0.7 + Math.random() * 0.9,
         haloAlphaMul: 0.55 + Math.random() * 1.1,
+        ashRate: ashRateBase,
       });
     }
 

@@ -28,6 +28,10 @@ export type FireSpawnOpts = {
   tint: [number, number, number]; // 0..1 rgb
   speed?: number;    // 0.1..5
   ashRate?: number;  // 0..4
+  // ---- color modes ----
+  colorMode?: "single" | "rainbow" | "palette";
+  palette?: Array<[number, number, number]>; // 0..1 rgb entries (palette mode)
+  paletteMode?: "random" | "sequential";
   // ---- post-fx knobs (layer-global; last spawn wins) ----
   bloom?: number;        // 0..3       — bloom strength
   shimmer?: number;      // 0..2       — heat-distortion amp
@@ -107,6 +111,27 @@ export function spawnFire(cssX: number, cssY: number, tSec: number, opts: FireSp
 // ---- helpers ---------------------------------------------------------------
 
 function mix(a: number, b: number, t: number): number { return a + (b - a) * t; }
+
+// HSV → RGB (all 0..1). Used for rainbow color mode.
+function hsv2rgb(h: number, s: number, v: number): [number, number, number] {
+  const i = Math.floor(h * 6);
+  const f = h * 6 - i;
+  const p = v * (1 - s);
+  const q = v * (1 - f * s);
+  const t = v * (1 - (1 - f) * s);
+  switch (i % 6) {
+    case 0: return [v, t, p];
+    case 1: return [q, v, p];
+    case 2: return [p, v, t];
+    case 3: return [p, q, v];
+    case 4: return [t, p, v];
+    default: return [v, p, q];
+  }
+}
+
+// Sequential-mode palette cursor is layer-global so consecutive bursts continue
+// the walk rather than restarting each spawn.
+let paletteCursor = 0;
 
 // Cheap smooth 2D noise using summed sinusoids. Not simplex, but visually
 // coherent and fast (no lookup tables). Range ~[-1.5, 1.5].
@@ -622,16 +647,24 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
 
     // Register a reactive glow burst for warm ambient underlay.
     if (cfg.glow > 0) {
+      // Glow tint: for rainbow/palette bursts use a neutral bright anchor of
+      // the burst tint so the underlay doesn't lock to just one hue; for
+      // single mode it matches the tint exactly.
+      const glowTint: [number, number, number] = opts.tint;
       glows.push({
         x: x0, y: y0,
         born: tSec,
         radius: burstScale * 2.4,
-        tint: opts.tint,
+        tint: glowTint,
         decay: Math.max(0.4, life * 0.9),
         strength: cfg.glow * (0.4 + intensity * 0.08),
       });
       if (glows.length > MAX_GLOWS) glows.splice(0, glows.length - MAX_GLOWS);
     }
+
+    const colorMode = opts.colorMode ?? "single";
+    const palette = opts.palette && opts.palette.length >= 1 ? opts.palette : [opts.tint];
+    const paletteMode = opts.paletteMode ?? "random";
 
     for (let i = 0; i < count; i++) {
       const seed = tSec * 1000 + i * 17.31 + Math.random() * 1000;
@@ -639,6 +672,19 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
       const speed = baseSpeed * (0.5 + Math.random() * 0.9);
       const vx = Math.cos(ang) * speed;
       const vy = Math.sin(ang) * speed - baseSpeed * 0.35 * Math.random();
+
+      // Per-particle tint by color mode.
+      let pTint: [number, number, number];
+      if (colorMode === "rainbow") {
+        pTint = hsv2rgb(Math.random(), 0.9, 1.0);
+      } else if (colorMode === "palette") {
+        const idx = paletteMode === "sequential"
+          ? (paletteCursor++ % palette.length)
+          : Math.floor(Math.random() * palette.length);
+        pTint = palette[idx];
+      } else {
+        pTint = opts.tint;
+      }
 
       const jitter = 0.6 + Math.random() * 0.8;
       const lenRoll = Math.pow(Math.random(), 1.8);
@@ -652,7 +698,7 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
         life: life * (0.55 + Math.random() * 0.9),
         r0: Math.max(1.2, burstScale * 0.055 * jitter),
         bright: 0.7 + Math.random() * 0.6,
-        tint: opts.tint,
+        tint: pTint,
         seed,
         ph1: Math.random() * Math.PI * 2,
         ph2: Math.random() * Math.PI * 2,
@@ -967,11 +1013,15 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
       c.vy -= 8 * dt; // buoyant rise
       c.vx *= 0.985; c.vy *= 0.985;
       c.x += c.vx * dt; c.y += c.vy * dt;
-      // deep-red → smoke color ramp
-      const k2 = k;
-      const rr = Math.round(mix(200, 60, k2));
-      const gg = Math.round(mix(40, 20, k2));
-      const bb = Math.round(mix(20, 15, k2));
+      // Deep-saturated tint → dim smoke of the same hue. Start value scales
+      // the particle's own color down to a hot-coal darkness; end drifts to
+      // near-black so any tint fades cleanly.
+      const startScale = 0.75;  // "hot coal" luminance of the tint
+      const endScale   = 0.12;  // near-black smoke
+      const s = mix(startScale, endScale, k);
+      const rr = Math.round(Math.min(255, c.tint[0] * 255 * s));
+      const gg = Math.round(Math.min(255, c.tint[1] * 255 * s));
+      const bb = Math.round(Math.min(255, c.tint[2] * 255 * s));
       const al = (1 - k) * (1 - k) * 0.55 * cfg.afterglow;
       const r = c.r0 * dpr * (1 + k * 0.6);
       const cx = c.x * dpr, cy = c.y * dpr;

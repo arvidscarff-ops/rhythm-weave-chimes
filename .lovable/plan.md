@@ -1,39 +1,53 @@
-# Fix square sprite halos + add real meandering
+# Fix: tiny cigar-shaped ember sparks (no sprite baking)
 
-## Bug 1: rectangular "squares" around each spark
+## What went wrong before
 
-Cause: the baked sprite has a nonzero alpha floor almost everywhere in the 128×64 rectangle. My alpha formula was
-`shape^1.6 * (0.55 + 0.55*noise) * (0.75 + 0.35*fbm) + tip`
-where `shape` only decays to zero at the ellipse boundary (d=1), but noise and streak factors have hard floors of 0.55 and 0.75. So at d=0.9 the sprite still writes alpha ≈ 0.025, and `globalCompositeOperation="lighter"` stacks the resulting rectangular halos into the checkerboard the user sees.
+I built 128×64 pre-baked sprites with noise texture, then stretched them to 60–100px streaks. That's why you see the checkerboard of soft rectangles — any residual alpha at the sprite's rectangular edge stacks visibly with additive blending. Even with envelope fixes, `putImageData` in Canvas2D is spec'd as un-premultiplied so the RGB × alpha trick doesn't work the way I hoped.
 
-Fix:
-- Compute a hard sprite envelope: `env = smoothstep(1.05, 0.75, d)` (0 outside the ellipse, 1 near center) and multiply it into final alpha as the outermost factor.
-- Drop the noise floors: `mask = max(0, 0.15 + 1.0 * (n - 0.35))`, `streak = max(0, 0.35 + 0.9 * (fbm - 0.4))` so wispy edges genuinely thin out to zero.
-- Apply an extra edge-safety multiplier `pow(env, 0.6)` to guarantee alpha = 0 at the exact rectangle boundary.
+The reference sparks are much simpler: **small elongated ellipses** (roughly 4–8 px minor axis × 12–20 px major axis on a ~440×300 image), soft warm gradient inside, no visible noise texture, no visible rectangular boundary. Just small cigars.  
+  
+USER NOTE: Well yeah, they are cigar shaped, but also vary a bit in shape. Goal is basically to make these look as close to realistic fire sparks as possible.
 
-Additionally use a **premultiplied-alpha-safe fill**: store RGB × alpha in the ImageData bytes so additive blending doesn't leak the flat tint color into "empty" pixels near the edges.
+## What to build
 
-## Bug 2: sparks fly in straight lines
+Replace the sprite-stamping renderer with **direct ellipse drawing per particle** — no sprites, no offscreen canvases, no ImageData:
 
-Cause: `wobble()` returns world-space sinusoids of position. Adding those to `(vx, vy)` mostly modulates speed along whatever axis the particle already travels; the heading barely changes. Also the magnitude (`CURL = 95` px/s²) is small next to typical initial speeds (several hundred px/s).
+For each particle:
 
-Fix — real curl-style meander:
-- Give each particle a **phase-drifting angular offset** `theta(t) = A * sin(w1*t + s1) + B * sin(w2*t + s2)` — a slow low-frequency noise sampled from two sines with per-particle seeds. Low frequencies (~0.7 Hz and ~1.9 Hz) so the path curves over its lifetime instead of jittering.
-- Each frame compute the current velocity heading `h = atan2(vy, vx)`, then apply a **perpendicular** acceleration `a_perp` of magnitude `CURL_STRENGTH * theta_dot` (or just `CURL_STRENGTH * dtheta/dt` numerically). Because the force is perpendicular, it steers rather than modulates speed → S-curves.
-- Increase magnitude so heading actually turns: aim for the perpendicular acceleration to rotate the velocity by ~1–2 rad over the particle's lifetime. Roughly `CURL_STRENGTH ≈ 0.8 * initialSpeed`.
-- Keep the drag as-is so sparks still slow down; keep gravity subtle.
+1. Compute heading `theta = atan2(vy, vx)`.
+2. `ctx.save()`, translate to `(p.x, p.y)`, rotate to `theta`, non-uniformly scale so a unit ellipse becomes the target cigar (long axis ≈ 12–20 px + small speed contribution, short axis ≈ 3–6 px).
+3. Draw a radial gradient in local unit-circle space (radius 1): white-hot core at ~30% radius offset toward the leading tip → warm tint mid → transparent at radius 1. Because the transform scaled the circle into an ellipse, this renders as a cigar-shaped soft blob whose alpha genuinely reaches zero at the ellipse edge.
+4. `ctx.restore()`.
+5. Optional tiny bloom halo: a small round radial gradient (radius ≈ 2× cigar length, very low alpha) at the particle position — but keep it small and dim.
 
-Optional polish: also add a small tangential wobble (component parallel to velocity) so speed oscillates slightly — this reads as flicker of streak length, which sells the "living ember" feel.
+Sizing (in css px):
+
+- Long axis: `L = clamp(8, 24, r0 * 6 + speed * 0.012)` — always small.
+- Short axis: `W = clamp(2.5, 6, r0 * 1.4)`.
+- No sprite → no rectangle → no checkerboard.
+
+Ember color ramp stays the same (life-t → white-hot / warm / cool), but applied as gradient stops in a single radial gradient rather than picking a pre-baked tinted sprite.
+
+## Meander stays
+
+The perpendicular-curl physics I added last turn stays. If it still reads as too straight, bump `curlAmp` per particle by another ~1.5× — but see it live before tuning further.
 
 ## Files to change
 
-- `src/lib/visuals/fireShaderLayer.ts` only:
-  - `bakeSprite()`: new alpha formula with hard envelope + premultiplied RGB write.
-  - `Particle` type: add per-particle noise phase seeds (`ph1`, `ph2`) — or derive from existing `seed`.
-  - `layer.render()` physics block: replace the axis-aligned wobble with perpendicular-heading curl force; bump `CURL_STRENGTH`.
+Only `src/lib/visuals/fireShaderLayer.ts`:
 
-No API or caller changes.
+- Delete `bakeSprite`, `bakeSprites`, `TintedSprites`, `spriteCache`, `getSprites`, `SPRITE_W`, `SPRITE_H`, `smooth`, `hash2`, `valueNoise`, `fbm` — all dead once sprites are gone.
+- Keep `Particle`, `emberColor`, `hexToRgb01`, spawn logic, physics.
+- Rewrite the per-particle draw block in `layer.render` to translate/rotate/scale + one radial gradient fill.
+
+No API changes, no caller changes.
 
 ## Verification
 
-After the edit, run Playwright: navigate to `/studio/builder`, force-select the fire-spark visual, trigger 3–4 notes at different positions, screenshot at t≈0.15s and t≈0.7s. Confirm (a) no visible rectangular halos around individual streaks, (b) trajectories visibly curve rather than radiating in straight rays. If either check fails, tune envelope thresholds / CURL_STRENGTH and re-verify before ending the turn.
+Playwright: navigate to `/studio/builder`, force-select the fire-spark visual, trigger 3–4 notes. Screenshot at t≈0.15s and t≈0.7s. Confirm:
+
+- Sparks are small elongated warm cigars, not large blobs, not rectangles.
+- Trajectories curve.
+- No visible sprite/tile artifacts anywhere on the canvas.
+
+If the sparks look too soft/gaussian and not "sharp enough like real embers," tighten the gradient stops (move the white-hot core to ~15% radius, cool tail dropping off at ~85%) rather than adding sprite noise back.

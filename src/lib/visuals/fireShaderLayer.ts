@@ -633,7 +633,8 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
     const y0 = Number.isFinite(cssY) ? cssY : cssH / 2;
 
     const speedMul = Math.max(0.05, Math.min(8, opts.speed ?? 1));
-    const baseSpeed = burstScale * 3.0 * speedMul;
+    const radiusMul = Math.max(0.05, Math.min(8, opts.radius ?? 1));
+    const baseSpeed = burstScale * 3.0 * speedMul * radiusMul;
     const ashRateBase = Math.max(0, Math.min(4, opts.ashRate ?? 1)) * 0.12;
 
     // Update layer-global post-fx settings from the latest spawn opts.

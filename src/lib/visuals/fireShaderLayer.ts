@@ -24,6 +24,10 @@ type Particle = {
   bright: number;              // 0..1
   tint: [number, number, number];
   seed: number;                // per-particle noise seed
+  ph1: number; ph2: number;    // meander phase offsets
+  wFreq1: number; wFreq2: number; // meander frequencies
+  curlAmp: number;             // per-particle perpendicular curl strength (px/s²)
+  prevTheta: number;           // previous meander angle (for numerical derivative)
 };
 
 type FireLayer = {
@@ -160,23 +164,33 @@ function bakeSprite(
       const core = Math.max(0, 1 - d * tailBoost);
       const shape = Math.pow(core, 1.6);
 
-      // Noise mask: crackly edges. Sample fbm in sprite-local coords.
+      // Hard envelope: 0 outside the ellipse, 1 well inside. Guarantees the
+      // sprite alpha is truly 0 at the rectangle boundary so additive stacks
+      // of sprites don't produce visible rectangular halos.
+      const env = d >= 1.05 ? 0 : d <= 0.75 ? 1 : smooth((1.05 - d) / 0.30);
+
+      // Noise mask: crackly edges that actually go to zero.
       const n = fbm(x * 0.08, y * 0.16, seed);
-      const mask = 0.55 + 0.55 * n;
+      const mask = Math.max(0, 0.15 + 1.0 * (n - 0.35));
 
-      // Extra wispy stringy detail along the length
-      const streak = 0.75 + 0.35 * fbm(x * 0.05, y * 0.35 + 5.2, seed + 17);
+      // Wispy stringy detail along the length (also floors at 0).
+      const streakN = fbm(x * 0.05, y * 0.35 + 5.2, seed + 17);
+      const streak = Math.max(0, 0.35 + 0.9 * (streakN - 0.4));
 
-      let a = shape * mask * streak;
-      // Bright leading tip
+      // Bright leading tip (Gaussian at the head)
       const tip = Math.exp(-((x - SPRITE_W * 0.72) ** 2) / (2 * 90) - ((y - cy) ** 2) / (2 * 55));
-      a = Math.min(1, a + tip * 0.55);
 
+      let a = (shape * (mask + streak * 0.6) + tip * 0.55) * env;
+      // Extra edge safety
+      a = Math.min(1, Math.max(0, a * Math.pow(env, 0.5)));
+
+      // Premultiplied-alpha write: RGB × a. With additive compositing this
+      // eliminates any tint bleed in near-zero-alpha pixels.
       const idx = (y * SPRITE_W + x) * 4;
-      data[idx + 0] = Math.round(r * 255);
-      data[idx + 1] = Math.round(g * 255);
-      data[idx + 2] = Math.round(b * 255);
-      data[idx + 3] = Math.round(Math.max(0, Math.min(1, a)) * 255);
+      data[idx + 0] = Math.round(r * 255 * a);
+      data[idx + 1] = Math.round(g * 255 * a);
+      data[idx + 2] = Math.round(b * 255 * a);
+      data[idx + 3] = Math.round(a * 255);
     }
   }
   c.putImageData(img, 0, 0);
@@ -306,6 +320,15 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
         bright: 0.7 + Math.random() * 0.6,
         tint: opts.tint,
         seed,
+        ph1: Math.random() * Math.PI * 2,
+        ph2: Math.random() * Math.PI * 2,
+        // Low frequencies → path curves over the whole lifetime, not per-frame jitter.
+        wFreq1: 0.6 + Math.random() * 0.7,   // ~0.6..1.3 Hz
+        wFreq2: 1.7 + Math.random() * 1.4,   // ~1.7..3.1 Hz
+        // Perpendicular curl strength scales with initial speed so heading
+        // actually turns ~1–2 rad over the particle's lifetime.
+        curlAmp: speed * (0.9 + Math.random() * 0.7),
+        prevTheta: 0,
       });
     }
 
@@ -328,9 +351,8 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
     ctx.globalCompositeOperation = "lighter";
 
     // Physics tuned so sparks travel and curve visibly (needed for streaks).
-    const GRAV = 20;     // css px / s²
-    const DRAG = 0.55;   // per-second drag factor (much lower → longer flights)
-    const CURL = 95;     // wobble acceleration
+    const GRAV = 25;     // css px / s²
+    const DRAG = 0.5;    // per-second drag factor
 
     const dragK = Math.pow(DRAG, dt);
 
@@ -343,10 +365,30 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
         continue;
       }
 
-      // Wobble force (curl-ish)
-      const [wx, wy] = wobble(p.x, p.y, tSec, p.seed);
-      p.vx += wx * CURL * dt;
-      p.vy += (wy * CURL + GRAV * 0.3) * dt; // faint downward drift late in life
+      // Meander: perpendicular curl force driven by a low-frequency angular
+      // noise sampled per particle. Perpendicular (not axis-aligned) so it
+      // steers heading → S-curves rather than modulating speed.
+      const theta =
+        0.75 * Math.sin(p.wFreq1 * age * 2 * Math.PI + p.ph1) +
+        0.35 * Math.sin(p.wFreq2 * age * 2 * Math.PI + p.ph2);
+      const dTheta = theta - p.prevTheta;
+      p.prevTheta = theta;
+
+      const sp = Math.hypot(p.vx, p.vy);
+      if (sp > 0.01) {
+        // unit perpendicular to velocity
+        const px_ = -p.vy / sp;
+        const py_ = p.vx / sp;
+        // Fade curl as spark dies so tails settle into straighter drift.
+        const curlFade = 1 - t * 0.4;
+        const aCurl = p.curlAmp * dTheta / Math.max(dt, 1e-3) * curlFade;
+        // Clamp so a huge dTheta from spawn (prevTheta=0 → theta≠0) doesn't
+        // launch the first frame.
+        const aCurlClamped = Math.max(-p.curlAmp * 4, Math.min(p.curlAmp * 4, aCurl));
+        p.vx += px_ * aCurlClamped * dt;
+        p.vy += py_ * aCurlClamped * dt;
+      }
+      p.vy += GRAV * 0.3 * dt;
       p.vx *= dragK;
       p.vy *= dragK;
       p.x += p.vx * dt;

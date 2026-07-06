@@ -1,50 +1,39 @@
-# Fire sparks: streaks + noisy edges
+# Fix square sprite halos + add real meandering
 
-## Why they came out as orbs
+## Bug 1: rectangular "squares" around each spark
 
-The reference shader encodes spark shape in three lines I skipped:
+Cause: the baked sprite has a nonzero alpha floor almost everywhere in the 128×64 rectangle. My alpha formula was
+`shape^1.6 * (0.55 + 0.55*noise) * (0.75 + 0.35*fbm) + tip`
+where `shape` only decays to zero at the ellipse boundary (d=1), but noise and streak factors have hard floors of 0.55 and 0.75. So at d=0.9 the sprite still writes alpha ≈ 0.025, and `globalCompositeOperation="lighter"` stacks the resulting rectangular halos into the checkerboard the user sees.
 
-1. **`PARTICLE_SCALE = vec2(0.5, 1.6)`** — anisotropic distance metric → ellipse, ~3× taller than wide.
-2. **`rotate(tempUV - pointUV, 0.7)`** — rotates the ellipse ~40°.
-3. **Two `noise2_2` UV perturbations** applied to `tempUV` — jitters the coordinates fed into the distance calc, which is what gives the sparks their crackly/wispy silhouette instead of a clean gradient.
+Fix:
+- Compute a hard sprite envelope: `env = smoothstep(1.05, 0.75, d)` (0 outside the ellipse, 1 near center) and multiply it into final alpha as the outermost factor.
+- Drop the noise floors: `mask = max(0, 0.15 + 1.0 * (n - 0.35))`, `streak = max(0, 0.35 + 0.9 * (fbm - 0.4))` so wispy edges genuinely thin out to zero.
+- Apply an extra edge-safety multiplier `pow(env, 0.6)` to guarantee alpha = 0 at the exact rectangle boundary.
 
-My rewrite used `createRadialGradient` circles, which is rotationally symmetric by construction. No aspect ratio, no rotation, no noise → orbs.
+Additionally use a **premultiplied-alpha-safe fill**: store RGB × alpha in the ImageData bytes so additive blending doesn't leak the flat tint color into "empty" pixels near the edges.
 
-## What to build
+## Bug 2: sparks fly in straight lines
 
-Each spark = a **motion streak with a noisy, feathery silhouette**.
+Cause: `wobble()` returns world-space sinusoids of position. Adding those to `(vx, vy)` mostly modulates speed along whatever axis the particle already travels; the heading barely changes. Also the magnitude (`CURL = 95` px/s²) is small next to typical initial speeds (several hundred px/s).
 
-**Shape (streak):**
-- Draw each particle as an ellipse whose long axis aligns with its velocity vector.
-- Long-axis length scales with speed and shrinks as the spark dies; short axis stays small. Head-heavy (bright leading tip, soft trailing tail).
-- Implemented in Canvas2D by translating to the particle, rotating by `atan2(vy, vx)`, non-uniform scaling, then stamping a pre-baked sprite.
+Fix — real curl-style meander:
+- Give each particle a **phase-drifting angular offset** `theta(t) = A * sin(w1*t + s1) + B * sin(w2*t + s2)` — a slow low-frequency noise sampled from two sines with per-particle seeds. Low frequencies (~0.7 Hz and ~1.9 Hz) so the path curves over its lifetime instead of jittering.
+- Each frame compute the current velocity heading `h = atan2(vy, vx)`, then apply a **perpendicular** acceleration `a_perp` of magnitude `CURL_STRENGTH * theta_dot` (or just `CURL_STRENGTH * dtheta/dt` numerically). Because the force is perpendicular, it steers rather than modulates speed → S-curves.
+- Increase magnitude so heading actually turns: aim for the perpendicular acceleration to rotate the velocity by ~1–2 rad over the particle's lifetime. Roughly `CURL_STRENGTH ≈ 0.8 * initialSpeed`.
+- Keep the drag as-is so sparks still slow down; keep gravity subtle.
 
-**Texture (noisy edges):**
-- Generate one offscreen 128×64 "spark sprite" once per layer using value-noise on a CPU (small, cached) — a bright core with feathered, crackly edges. Colored white; we tint it at draw time via `globalCompositeOperation` + a colored overlay, or by using multiple pre-baked sprites in white and letting additive blending pick up the tint from a second colored ellipse pass.
-- Simpler concrete plan: bake a single grayscale RGBA sprite where alpha = `radialFalloff * (0.6 + 0.4 * valueNoise)`. At draw time, set `ctx.fillStyle` to the tint color, draw a filled rect, then use `globalCompositeOperation = "destination-in"` with the sprite. Or use `drawImage` of the sprite followed by a tinted `source-atop` pass on a small offscreen buffer.
-- To avoid per-particle offscreen buffers, bake **three sprites at spawn-layer init**: a "hot" (white-yellow), "warm" (orange), and "cool" (deep red) variant. Pick the one closest to the particle's current life-t and draw with additive blend. Cheap, produces the color ramp implicitly, and keeps all noise texture without per-frame offscreen work.
-
-**Trail feel:**
-- The streak IS the trail — no separate trail primitive needed. Length ≈ `speed * 0.06s`, clamped, so fast sparks feel like short comet tails and slow/dying sparks compress back into a dot.
-
-## Physics tweaks (small)
-
-- Slightly lower drag so sparks travel visible distances before slowing (needed for the streak to read).
-- Slightly higher wobble amplitude so trajectories curve more, matching the reference's "meandering" feel.
+Optional polish: also add a small tangential wobble (component parallel to velocity) so speed oscillates slightly — this reads as flicker of streak length, which sells the "living ember" feel.
 
 ## Files to change
 
-- `src/lib/visuals/fireShaderLayer.ts` — replace radial-gradient blob draw with:
-  - one-time sprite baking (3 pre-tinted noisy-ellipse sprites, ~128×64) in `createFireLayer`
-  - per-particle transform + `drawImage` in `render`
-  - keep the halo pass as a large soft radial gradient for the bloom (that part reads correctly and matches the reference `distBloom` term)
+- `src/lib/visuals/fireShaderLayer.ts` only:
+  - `bakeSprite()`: new alpha formula with hard envelope + premultiplied RGB write.
+  - `Particle` type: add per-particle noise phase seeds (`ph1`, `ph2`) — or derive from existing `seed`.
+  - `layer.render()` physics block: replace the axis-aligned wobble with perpendicular-heading curl force; bump `CURL_STRENGTH`.
 
-No API changes; no callers touched.
+No API or caller changes.
 
 ## Verification
 
-Playwright: navigate to `/studio/builder`, select the fire-spark visual, trigger notes, screenshot at t≈0.1s / 0.4s / 0.8s. Confirm elongated streaks fanning outward with visibly non-circular, textured silhouettes, cooling from white-yellow → orange → red.
-
-## Why streaks + noisy edges from a shader don't "just work" in Canvas2D
-
-The shader gets its look almost for free: every pixel independently evaluates a distance-to-ellipse plus noise, so shape and texture emerge from math. Canvas2D has no fragment programmability, so the equivalent is baking that math into a bitmap once and stamping the bitmap with transforms. That's the whole gap — the reference logic is intact, it's just moved from per-pixel GPU eval to per-particle CPU stamping.
+After the edit, run Playwright: navigate to `/studio/builder`, force-select the fire-spark visual, trigger 3–4 notes at different positions, screenshot at t≈0.15s and t≈0.7s. Confirm (a) no visible rectangular halos around individual streaks, (b) trajectories visibly curve rather than radiating in straight rays. If either check fails, tune envelope thresholds / CURL_STRENGTH and re-verify before ending the turn.

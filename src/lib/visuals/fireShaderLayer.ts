@@ -28,6 +28,10 @@ export type FireSpawnOpts = {
   tint: [number, number, number]; // 0..1 rgb
   speed?: number;    // 0.1..5
   ashRate?: number;  // 0..4
+  // ---- color modes ----
+  colorMode?: "single" | "rainbow" | "palette";
+  palette?: Array<[number, number, number]>; // 0..1 rgb entries (palette mode)
+  paletteMode?: "random" | "sequential";
   // ---- post-fx knobs (layer-global; last spawn wins) ----
   bloom?: number;        // 0..3       — bloom strength
   shimmer?: number;      // 0..2       — heat-distortion amp

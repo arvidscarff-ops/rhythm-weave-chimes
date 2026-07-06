@@ -23,7 +23,7 @@ import {
   savePreset,
   type PresetMap,
 } from "@/lib/studio/sceneBuilderStore";
-import { setActiveBlueprint } from "@/lib/scenes/activeBlueprint";
+import { getActiveBlueprint, setActiveBlueprint } from "@/lib/scenes/activeBlueprint";
 import { customScene, type CustomSceneState } from "@/lib/scenes/customScene";
 import type { SceneGlobals } from "@/lib/engine/sceneTypes";
 
@@ -469,14 +469,6 @@ function PreviewCanvas({ bp }: { bp: CustomSceneBlueprint }) {
     ro.observe(canvas);
     startRef.current = performance.now();
     let raf = 0;
-
-    // Point activeBlueprint at the preview so customScene reads from it.
-    // We restore on unmount so the app's active blueprint isn't clobbered.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const {
-      getActiveBlueprint,
-      setActiveBlueprint,
-    } = require("@/lib/scenes/activeBlueprint") as typeof import("@/lib/scenes/activeBlueprint");
     const prevActive = getActiveBlueprint();
 
     const loop = () => {

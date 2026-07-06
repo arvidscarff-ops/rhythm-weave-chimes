@@ -19,6 +19,7 @@ import {
   Download,
   Expand,
   Minimize,
+  Pause,
   Play,
   Plus,
   Save,

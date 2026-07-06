@@ -236,6 +236,7 @@ type EngineState = {
   fractalNebula: FractalNebulaState | null;
   radialResonator: RadialResonatorState | null;
   phaseAlignRings: PhaseAlignRingsState | null;
+  custom: CustomSceneState | null;
 };
 
 type AudioGraph = {

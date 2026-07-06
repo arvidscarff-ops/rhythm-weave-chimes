@@ -264,43 +264,53 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
       const speed = Math.hypot(p.vx, p.vy);
       const ang = speed > 0.1 ? Math.atan2(p.vy, p.vx) : (p.seed % (Math.PI * 2));
 
-      // Streak length grows with speed, capped; shrinks with age.
-      const baseLen = Math.max(3, p.r0 * 2.4);
-      const streakLen = Math.max(baseLen, Math.min(baseLen * 5.5, speed * 0.055 + baseLen));
-      const streakThk = Math.max(1.4, p.r0 * shrink * 1.1);
+      // Small cigar-shaped ember. Sized like the reference photo (~4-8px
+      // short × 12-24px long), grows slightly with speed, shrinks with age.
+      // Long axis has a small per-particle variance so the burst reads as
+      // varied ember shapes rather than uniform ellipses.
+      const lenVar = 0.75 + ((p.seed * 0.317) % 1) * 0.7; // 0.75..1.45
+      const L = Math.max(6, Math.min(22, (p.r0 * 5 + speed * 0.012) * lenVar)) * shrink;
+      const W = Math.max(2, Math.min(6, p.r0 * 1.35)) * shrink;
 
-      // Pick tint variant by life-t. Additive blend gives the color ramp.
-      const sprites = getSprites(p.tint);
-      const sprite = t < 0.25 ? sprites.hot : t < 0.65 ? sprites.warm : sprites.cool;
-
-      // Sprite is 128×64 with head at the right edge; scale so its length →
-      // streakLen and thickness → streakThk, then rotate to velocity dir.
-      const sx = streakLen / SPRITE_W;
-      const sy = streakThk / SPRITE_H * 2.2; // *2.2 because sprite core is thin
-
-      ctx.setTransform(
-        dpr * Math.cos(ang) * sx, dpr * Math.sin(ang) * sx,
-        -dpr * Math.sin(ang) * sy, dpr * Math.cos(ang) * sy,
-        p.x * dpr, p.y * dpr,
-      );
-
-      // Soft bloom halo (round, in local sprite space) — draw first, dimmer.
       const [cr, cg, cb] = emberColor(p.tint[0], p.tint[1], p.tint[2], t);
-      const haloA = a * 0.35;
-      if (haloA > 0.01) {
-        const haloR = SPRITE_W * 0.6;
-        const halo = ctx.createRadialGradient(SPRITE_W * 0.72, SPRITE_H / 2, 0, SPRITE_W * 0.72, SPRITE_H / 2, haloR);
+
+      // Bloom halo — small, round, dim. Drawn in world space (before the
+      // cigar transform) so it doesn't inherit anisotropic scaling.
+      const haloA = a * 0.22;
+      if (haloA > 0.005) {
+        const haloR = L * 1.4;
+        const halo = ctx.createRadialGradient(p.x * dpr, p.y * dpr, 0, p.x * dpr, p.y * dpr, haloR * dpr);
         halo.addColorStop(0, `rgba(${cr},${cg},${cb},${haloA.toFixed(3)})`);
-        halo.addColorStop(0.45, `rgba(${cr},${cg},${cb},${(haloA * 0.35).toFixed(3)})`);
+        halo.addColorStop(0.5, `rgba(${cr},${cg},${cb},${(haloA * 0.3).toFixed(3)})`);
         halo.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.fillStyle = halo;
-        ctx.fillRect(-SPRITE_W * 0.2, -SPRITE_H * 0.5, SPRITE_W * 1.4, SPRITE_H * 2);
+        ctx.beginPath();
+        ctx.arc(p.x * dpr, p.y * dpr, haloR * dpr, 0, Math.PI * 2);
+        ctx.fill();
       }
 
-      // Streak sprite
-      ctx.globalAlpha = a;
-      ctx.drawImage(sprite, 0, -SPRITE_H / 2);
-      ctx.globalAlpha = 1;
+      // Cigar core: transform so a unit circle → ellipse of size L × W,
+      // rotated to heading. Radial gradient with head-offset white-hot core
+      // gives a soft ember silhouette whose alpha reaches zero at r=1.
+      const cos = Math.cos(ang), sin = Math.sin(ang);
+      ctx.setTransform(
+        dpr * cos * (L * 0.5), dpr * sin * (L * 0.5),
+        -dpr * sin * (W * 0.5), dpr * cos * (W * 0.5),
+        p.x * dpr, p.y * dpr,
+      );
+      // In this local space the ellipse occupies unit circle r=1.
+      // Offset the hot core toward the leading tip (+x).
+      const hotX = 0.35;
+      const grad = ctx.createRadialGradient(hotX, 0, 0, 0, 0, 1);
+      grad.addColorStop(0.00, `rgba(255,248,225,${Math.min(1, a * 1.1).toFixed(3)})`);
+      grad.addColorStop(0.18, `rgba(${cr},${cg},${cb},${(a * 0.95).toFixed(3)})`);
+      grad.addColorStop(0.55, `rgba(${cr},${cg},${cb},${(a * 0.55).toFixed(3)})`);
+      grad.addColorStop(1.00, `rgba(${cr},${cg},${cb},0)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(0, 0, 1, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);

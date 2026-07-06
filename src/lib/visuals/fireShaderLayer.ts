@@ -160,23 +160,33 @@ function bakeSprite(
       const core = Math.max(0, 1 - d * tailBoost);
       const shape = Math.pow(core, 1.6);
 
-      // Noise mask: crackly edges. Sample fbm in sprite-local coords.
+      // Hard envelope: 0 outside the ellipse, 1 well inside. Guarantees the
+      // sprite alpha is truly 0 at the rectangle boundary so additive stacks
+      // of sprites don't produce visible rectangular halos.
+      const env = d >= 1.05 ? 0 : d <= 0.75 ? 1 : smooth((1.05 - d) / 0.30);
+
+      // Noise mask: crackly edges that actually go to zero.
       const n = fbm(x * 0.08, y * 0.16, seed);
-      const mask = 0.55 + 0.55 * n;
+      const mask = Math.max(0, 0.15 + 1.0 * (n - 0.35));
 
-      // Extra wispy stringy detail along the length
-      const streak = 0.75 + 0.35 * fbm(x * 0.05, y * 0.35 + 5.2, seed + 17);
+      // Wispy stringy detail along the length (also floors at 0).
+      const streakN = fbm(x * 0.05, y * 0.35 + 5.2, seed + 17);
+      const streak = Math.max(0, 0.35 + 0.9 * (streakN - 0.4));
 
-      let a = shape * mask * streak;
-      // Bright leading tip
+      // Bright leading tip (Gaussian at the head)
       const tip = Math.exp(-((x - SPRITE_W * 0.72) ** 2) / (2 * 90) - ((y - cy) ** 2) / (2 * 55));
-      a = Math.min(1, a + tip * 0.55);
 
+      let a = (shape * (mask + streak * 0.6) + tip * 0.55) * env;
+      // Extra edge safety
+      a = Math.min(1, Math.max(0, a * Math.pow(env, 0.5)));
+
+      // Premultiplied-alpha write: RGB × a. With additive compositing this
+      // eliminates any tint bleed in near-zero-alpha pixels.
       const idx = (y * SPRITE_W + x) * 4;
-      data[idx + 0] = Math.round(r * 255);
-      data[idx + 1] = Math.round(g * 255);
-      data[idx + 2] = Math.round(b * 255);
-      data[idx + 3] = Math.round(Math.max(0, Math.min(1, a)) * 255);
+      data[idx + 0] = Math.round(r * 255 * a);
+      data[idx + 1] = Math.round(g * 255 * a);
+      data[idx + 2] = Math.round(b * 255 * a);
+      data[idx + 3] = Math.round(a * 255);
     }
   }
   c.putImageData(img, 0, 0);

@@ -86,18 +86,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Rhythmic Echoes generates ambient music using browser-based polyrhythms and a minimalist visual interface." },
+      { title: "Phase — Generative Polyrhythm Engine" },
+      { name: "description", content: "Phase generates ambient music with browser-based polyrhythms, reactive particle scenes, and live sound controls." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Rhythmic Echoes generates ambient music using browser-based polyrhythms and a minimalist visual interface." },
+      { property: "og:title", content: "Phase — Generative Polyrhythm Engine" },
+      { property: "og:description", content: "Phase generates ambient music with browser-based polyrhythms, reactive particle scenes, and live sound controls." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "Lovable App" },
-      { name: "twitter:description", content: "Rhythmic Echoes generates ambient music using browser-based polyrhythms and a minimalist visual interface." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/62e9c9eb-3d8c-4256-ae13-431fc2157015/id-preview-75ce1740--f0cf0e52-c3b3-4dff-93d0-fedcaf1b3239.lovable.app-1782380316092.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/62e9c9eb-3d8c-4256-ae13-431fc2157015/id-preview-75ce1740--f0cf0e52-c3b3-4dff-93d0-fedcaf1b3239.lovable.app-1782380316092.png" },
+      { name: "twitter:title", content: "Phase — Generative Polyrhythm Engine" },
+      { name: "twitter:description", content: "Phase generates ambient music with browser-based polyrhythms, reactive particle scenes, and live sound controls." },
     ],
     links: [
       {
@@ -124,11 +122,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
-      <body className="dark">
+      <body className="dark" suppressHydrationWarning>
         {children}
         <Scripts />
       </body>

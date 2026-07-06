@@ -696,7 +696,7 @@ function FireSparkPanel({
         onChange={(v) => set({ life: v })} />
       <SliderRow label="Size" value={f.size} min={0.05} max={0.6} step={0.01}
         onChange={(v) => set({ size: v })} />
-      <SliderRow label="Intensity" value={f.intensity} min={0} max={3} step={0.05}
+      <SliderRow label="Intensity" value={f.intensity} min={0} max={6} step={0.05}
         onChange={(v) => set({ intensity: v })} />
       <label className="flex items-center gap-2 text-xs text-foreground/60">
         Tint

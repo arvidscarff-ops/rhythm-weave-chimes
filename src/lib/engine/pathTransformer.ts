@@ -83,7 +83,7 @@ export type AestheticConfig = {
   fireSpark: {
     life: number;      // 0.4..4 s
     size: number;      // 0.05..0.6 — fraction of canvas width
-    intensity: number; // 0..3
+    intensity: number; // 0..6
     tint: string;      // hex — multiplied over shader output
   };
   pathPulse: {
@@ -175,7 +175,7 @@ export const DEFAULT_AESTHETIC: AestheticConfig = {
     trailLength: 0,
   },
   pathPulse: { enabled: true, speed: 1.6, widthPx: 3, opacity: 0.9 },
-  fireSpark: { life: 1.4, size: 0.28, intensity: 2.0, tint: "#FF8A2B" },
+  fireSpark: { life: 1.5, size: 0.34, intensity: 4.0, tint: "#FF8A2B" },
   climax: {
     ambientFlash: true,
     stardust: true,
@@ -472,7 +472,7 @@ function mergeAesthetic(raw: unknown): AestheticConfig {
       return {
         life: clampRange(Number(fs.life ?? d.fireSpark.life), 0.2, 6),
         size: clampRange(Number(fs.size ?? d.fireSpark.size), 0.03, 0.8),
-        intensity: clampRange(Number(fs.intensity ?? d.fireSpark.intensity), 0, 3),
+        intensity: clampRange(Number(fs.intensity ?? d.fireSpark.intensity), 0, 6),
         tint: typeof fs.tint === "string" ? fs.tint : d.fireSpark.tint,
       };
     })(),

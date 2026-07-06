@@ -455,7 +455,7 @@ function mergeAesthetic(raw: unknown): AestheticConfig {
       sizeStartPx: clampRange(Number(br.sizeStartPx ?? d.burst.sizeStartPx), 0.2, 24),
       sizeEndPx: clampRange(Number(br.sizeEndPx ?? d.burst.sizeEndPx), 0, 24),
       sizeVariance: clampRange(Number(br.sizeVariance ?? d.burst.sizeVariance), 0, 6),
-      shape: (["dot", "ring", "spark", "streak", "glow"].includes(br.shape as string)
+      shape: (["dot", "ring", "spark", "streak", "glow", "fireSpark"].includes(br.shape as string)
         ? (br.shape as BurstShape)
         : d.burst.shape),
       colorMode: (["palette", "fixed", "rainbow"].includes(br.colorMode as string)

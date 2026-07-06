@@ -598,7 +598,11 @@ function BurstPanel({
         <option value="ring">Ring</option>
         <option value="spark">Spark (+)</option>
         <option value="streak">Streak</option>
+        <option value="fireSpark">Fire spark (shader)</option>
       </Select>
+      {b.shape === "fireSpark" && (
+        <FireSparkPanel a={a} onPatch={onPatch} />
+      )}
       <Select
         value={b.blendMode}
         onChange={(v) => set({ blendMode: v as AestheticConfig["burst"]["blendMode"] })}
@@ -668,6 +672,47 @@ function BurstPanel({
       <SliderRow label="Motion blur" value={b.trailLength} min={0} max={12} step={1}
         onChange={(v) => set({ trailLength: Math.round(v) })} />
     </>
+  );
+}
+
+/* ---------- Path Pulse ---------- */
+
+/* ---------- Fire Spark (WebGL shader burst) ---------- */
+
+function FireSparkPanel({
+  a,
+  onPatch,
+}: {
+  a: AestheticConfig;
+  onPatch: (p: Partial<AestheticConfig>) => void;
+}) {
+  const f = a.fireSpark;
+  const set = (patch: Partial<AestheticConfig["fireSpark"]>) =>
+    onPatch({ fireSpark: { ...f, ...patch } });
+  return (
+    <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 p-3 space-y-2">
+      <div className="text-[11px] uppercase tracking-wider text-orange-300/80">
+        Fire spark · shader burst
+      </div>
+      <SliderRow label="Life" value={f.life} min={0.4} max={4} step={0.05} unit="s"
+        onChange={(v) => set({ life: v })} />
+      <SliderRow label="Size" value={f.size} min={0.05} max={0.6} step={0.01}
+        onChange={(v) => set({ size: v })} />
+      <SliderRow label="Intensity" value={f.intensity} min={0} max={3} step={0.05}
+        onChange={(v) => set({ intensity: v })} />
+      <label className="flex items-center gap-2 text-xs text-foreground/60">
+        Tint
+        <input
+          type="color"
+          value={f.tint}
+          onChange={(e) => set({ tint: e.target.value })}
+          className="h-8 w-10 rounded border border-white/10 bg-transparent"
+        />
+      </label>
+      <div className="text-[10px] text-foreground/40">
+        Shader by Jan Mróz (jaszunio15) · CC BY 3.0
+      </div>
+    </div>
   );
 }
 

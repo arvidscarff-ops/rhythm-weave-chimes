@@ -39,19 +39,6 @@ type FireLayer = {
 
 const registry = new Set<FireLayer>();
 
-const DEBUG_FIRE_DEFAULTS: FireSpawnOpts = {
-  life: 1.6,
-  size: 0.34,
-  intensity: 4.5,
-  tint: [1.0, 0.55, 0.15],
-};
-
-declare global {
-  interface Window {
-    __phaseFireDebug?: (x?: number, y?: number, opts?: Partial<FireSpawnOpts>) => void;
-  }
-}
-
 /** Broadcast a spawn to every mounted layer (typically only one). */
 export function spawnFire(cssX: number, cssY: number, tSec: number, opts: FireSpawnOpts): void {
   for (const l of registry) l.spawn(cssX, cssY, tSec, opts);
@@ -351,7 +338,6 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
   const bufI = new Float32Array(MAX_EMITTERS);
 
   let dpr = window.devicePixelRatio || 1;
-  let lastRenderTime = 0;
 
   const resize = () => {
     dpr = window.devicePixelRatio || 1;
@@ -389,7 +375,6 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
   };
 
   layer.render = (tSec) => {
-    lastRenderTime = tSec;
     resize();
     // Reap dead emitters (small ring buffer, cheap).
     for (let i = emitters.length - 1; i >= 0; i--) {
@@ -434,19 +419,6 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
   };
 
   layer.resize = resize;
-  if (typeof window !== "undefined") {
-    window.__phaseFireDebug = (x, y, opts) => {
-      const rect = canvas.getBoundingClientRect();
-      const t = lastRenderTime;
-      layer.spawn(
-        x ?? rect.width / 2,
-        y ?? rect.height / 2,
-        t,
-        { ...DEBUG_FIRE_DEFAULTS, ...opts },
-      );
-      layer.render(t + 0.08);
-    };
-  }
   layer.destroy = () => {
     ro.disconnect();
     registry.delete(layer);
@@ -455,9 +427,6 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
       if (vao) gl.deleteVertexArray(vao);
     } catch {
       /* noop */
-    }
-    if (typeof window !== "undefined" && window.__phaseFireDebug) {
-      delete window.__phaseFireDebug;
     }
     canvas.remove();
   };

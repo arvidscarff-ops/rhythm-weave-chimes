@@ -40,6 +40,7 @@ import { metatronLatticeScene, type MetatronLatticeState } from "@/lib/scenes/me
 import { fractalNebulaScene, type FractalNebulaState } from "@/lib/scenes/fractalNebula";
 import { radialResonatorScene, type RadialResonatorState } from "@/lib/scenes/radialResonator";
 import { phaseAlignRingsScene, type PhaseAlignRingsState } from "@/lib/scenes/phaseAlignRings";
+import { customScene, type CustomSceneState } from "@/lib/scenes/customScene";
 import { engineClock } from "@/lib/engine/clock";
 import { engineScheduler } from "@/lib/engine/scheduler";
 import {
@@ -87,6 +88,8 @@ function resolveNotesCount(scene: SceneKind, density: number, noteCount: number 
       return 24;
     case "phaseAlignRings":
       return Math.max(4, Math.min(24, noteCount));
+    case "custom":
+      return Math.max(4, Math.min(48, noteCount));
     case "wheel":
     case "pendulum":
     case "bars":

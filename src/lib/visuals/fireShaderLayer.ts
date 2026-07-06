@@ -3,7 +3,7 @@
 // emitter (position + lifetime + radial falloff) so each note trigger
 // spawns a localized fire burst that fades out over `life` seconds.
 //
-// Layer count is reduced from 15 → 4 so we can render up to 16 emitters
+// Layer count is reduced from 15 → 6 so we can render up to 16 emitters
 // per frame without collapsing perf. Everything else (voronoi sparks,
 // layered particles, smoke wisps, bloom, movement direction) is intact.
 
@@ -38,6 +38,19 @@ type FireLayer = {
 };
 
 const registry = new Set<FireLayer>();
+
+const DEBUG_FIRE_DEFAULTS: FireSpawnOpts = {
+  life: 1.6,
+  size: 0.34,
+  intensity: 4.5,
+  tint: [1.0, 0.55, 0.15],
+};
+
+declare global {
+  interface Window {
+    __phaseFireDebug?: (x?: number, y?: number, opts?: Partial<FireSpawnOpts>) => void;
+  }
+}
 
 /** Broadcast a spawn to every mounted layer (typically only one). */
 export function spawnFire(cssX: number, cssY: number, tSec: number, opts: FireSpawnOpts): void {
@@ -77,7 +90,8 @@ uniform float uIntensity[${MAX_EMITTERS}];
 #define ALPHA_MOD 0.9
 #define LAYERS_COUNT 6
 #define FIELD_SCALE 12.0
-#define SPARK_SIZE_BOOST 2.5
+#define SPARK_SIZE_BOOST 5.5
+#define OUTPUT_GAIN 4.0
 
 float hash1_2(in vec2 x) {
   return fract(sin(dot(x, vec2(52.127, 61.2871))) * 521.582);
@@ -158,7 +172,10 @@ vec3 fireParticles(in vec2 uv, in vec2 originalUV, in float iTime) {
   border = (hash1_2(rootUV + 0.214) - 1.8) * 0.7;
   float appear = smoothstep(border, border + 0.4, originalUV.y);
 
-  return particles * disappear * appear;
+  // The original full-screen shader uses vertical reveal masks. Localized
+  // bursts can land in regions where those masks almost entirely zero a cell,
+  // so keep their texture but never let them hide the spark field completely.
+  return particles * (0.25 + 0.75 * disappear * appear);
 }
 
 vec3 layeredParticlesLocal(in vec2 uv, in vec2 originalUV, in float iTime) {
@@ -185,7 +202,8 @@ vec3 sampleFire(vec2 uv, float iTime) {
   vec2 suv = uv * FIELD_SCALE;
   vec2 originalUV = uv * 0.5 + 0.5;
   vec3 particles = layeredParticlesLocal(suv, originalUV, iTime);
-  return particles + SMOKE_COLOR * 0.02;
+  float core = 1.0 - smoothstep(0.0, 1.1, length(uv));
+  return particles * 1.8 + SMOKE_COLOR * (0.035 + core * 0.18);
 }
 
 void main() {
@@ -207,7 +225,7 @@ void main() {
 
     // Emitter position: a.xy stored bottom-up-flipped so distance math matches shader y-up.
     vec2 duvPx = fc - a.xy;
-    float sizePx = max(1.0, b.w * uResolution.x);
+    float sizePx = max(1.0, b.w * min(uResolution.x, uResolution.y));
     vec2 uv = duvPx / sizePx;
 
     // Radial falloff so the burst is localized.
@@ -221,8 +239,10 @@ void main() {
 
   // Additive output; alpha derived from luminance so the layer composites
   // cleanly with the Canvas2D scene below.
+  col *= OUTPUT_GAIN;
   float lum = max(max(col.r, col.g), col.b);
-  fragColor = vec4(col, clamp(lum, 0.0, 1.0));
+  float alpha = smoothstep(0.002, 0.08, lum);
+  fragColor = vec4(col, alpha);
 }`;
 
 function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader | null {
@@ -316,9 +336,13 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
   const uRes = gl.getUniformLocation(program, "uResolution");
   const uTime = gl.getUniformLocation(program, "uTime");
   const uCount = gl.getUniformLocation(program, "uCount");
-  const uEmitA = gl.getUniformLocation(program, "uEmitA");
-  const uEmitB = gl.getUniformLocation(program, "uEmitB");
-  const uIntensity = gl.getUniformLocation(program, "uIntensity");
+  const uEmitA = gl.getUniformLocation(program, "uEmitA[0]");
+  const uEmitB = gl.getUniformLocation(program, "uEmitB[0]");
+  const uIntensity = gl.getUniformLocation(program, "uIntensity[0]");
+
+  if (!uRes || !uTime || !uCount || !uEmitA || !uEmitB || !uIntensity) {
+    console.warn("[fireShaderLayer] missing shader uniforms; fire-spark burst will be a no-op.");
+  }
 
   const bufA = new Float32Array(MAX_EMITTERS * 4);
   const bufB = new Float32Array(MAX_EMITTERS * 4);
@@ -342,9 +366,13 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
   ro.observe(canvas);
 
   layer.spawn = (cssX, cssY, tSec, opts) => {
+    resize();
+    const rect = canvas.getBoundingClientRect();
+    const localX = Number.isFinite(cssX) ? cssX : rect.width / 2;
+    const localY = Number.isFinite(cssY) ? cssY : rect.height / 2;
     // Store position in device pixels, top-down origin. Shader flips y.
-    const px = cssX * dpr;
-    const py = cssY * dpr;
+    const px = localX * dpr;
+    const py = localY * dpr;
     const e: Emitter = {
       x: px, y: py,
       born: tSec,
@@ -358,6 +386,7 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
   };
 
   layer.render = (tSec) => {
+    resize();
     // Reap dead emitters (small ring buffer, cheap).
     for (let i = emitters.length - 1; i >= 0; i--) {
       if (tSec - emitters[i].born > emitters[i].life) emitters.splice(i, 1);
@@ -369,9 +398,10 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
 
     if (emitters.length === 0) return;
 
-    // Additive on top of transparent clear.
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE);
+    // The shader already sums all emitters in one full-screen pass. Avoid
+    // framebuffer alpha blending here so low-alpha sparks don't get dimmed
+    // before the browser composites the transparent overlay.
+    gl.disable(gl.BLEND);
 
     gl.useProgram(program);
     gl.uniform2f(uRes, canvas.width, canvas.height);
@@ -400,6 +430,19 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
   };
 
   layer.resize = resize;
+  if (typeof window !== "undefined") {
+    window.__phaseFireDebug = (x, y, opts) => {
+      const rect = canvas.getBoundingClientRect();
+      const t = performance.now() / 1000;
+      layer.spawn(
+        x ?? rect.width / 2,
+        y ?? rect.height / 2,
+        t,
+        { ...DEBUG_FIRE_DEFAULTS, ...opts },
+      );
+      layer.render(t + 0.08);
+    };
+  }
   layer.destroy = () => {
     ro.disconnect();
     registry.delete(layer);
@@ -408,6 +451,9 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
       if (vao) gl.deleteVertexArray(vao);
     } catch {
       /* noop */
+    }
+    if (typeof window !== "undefined" && window.__phaseFireDebug) {
+      delete window.__phaseFireDebug;
     }
     canvas.remove();
   };

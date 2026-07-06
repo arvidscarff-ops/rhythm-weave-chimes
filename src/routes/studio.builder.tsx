@@ -451,6 +451,10 @@ function NotesPanel({
         onChange={(v) => onPatch({ notes: { ...n, breathHz: v } })} />
       <SliderRow label="Breath depth" value={n.breathDepth} min={0} max={0.6} step={0.01}
         onChange={(v) => onPatch({ notes: { ...n, breathDepth: v } })} />
+      <SliderRow label="Core opacity" value={n.noteOpacity} min={0} max={1} step={0.01}
+        onChange={(v) => onPatch({ notes: { ...n, noteOpacity: v } })} />
+      <SliderRow label="Glow opacity" value={n.glowOpacity} min={0} max={1} step={0.01}
+        onChange={(v) => onPatch({ notes: { ...n, glowOpacity: v } })} />
     </>
   );
 }
@@ -541,6 +545,30 @@ function PalettePanel({
           <div key={i} style={{ background: c }} className="flex-1" />
         ))}
       </div>
+
+      <SectionLabel>Wireframe lines</SectionLabel>
+      <SwitchRow
+        label="Override line color"
+        checked={p.lineColorEnabled}
+        onChange={(v) => onPatch({ palette: { ...p, lineColorEnabled: v } })}
+      />
+      {p.lineColorEnabled && (
+        <label className="flex items-center gap-2 text-xs text-foreground/60">
+          Line color
+          <input
+            type="color"
+            value={p.lineColor}
+            onChange={(e) => onPatch({ palette: { ...p, lineColor: e.target.value } })}
+            className="h-8 w-10 rounded border border-white/10 bg-transparent"
+          />
+        </label>
+      )}
+      <SliderRow
+        label="Line opacity"
+        value={p.lineOpacity}
+        min={0} max={1} step={0.01}
+        onChange={(v) => onPatch({ palette: { ...p, lineOpacity: v } })}
+      />
     </>
   );
 }
@@ -555,19 +583,89 @@ function BurstPanel({
   onPatch: (p: Partial<AestheticConfig>) => void;
 }) {
   const b = a.burst;
+  const set = (patch: Partial<AestheticConfig["burst"]>) =>
+    onPatch({ burst: { ...b, ...patch } });
   return (
     <>
-      <SectionLabel>Particle burst</SectionLabel>
-      <SliderRow label="Count" value={b.count} min={0} max={120} step={1}
-        onChange={(v) => onPatch({ burst: { ...b, count: Math.round(v) } })} />
-      <SliderRow label="Base speed" value={b.baseSpeed} min={20} max={400} step={5} unit="px/s"
-        onChange={(v) => onPatch({ burst: { ...b, baseSpeed: v } })} />
-      <SliderRow label="Lifespan" value={b.lifespanMs} min={200} max={2000} step={20} unit="ms"
-        onChange={(v) => onPatch({ burst: { ...b, lifespanMs: v } })} />
-      <SliderRow label="Drag" value={b.drag} min={0} max={8} step={0.05}
-        onChange={(v) => onPatch({ burst: { ...b, drag: v } })} />
+      <SectionLabel>Shape & blend</SectionLabel>
+      <Select
+        value={b.shape}
+        onChange={(v) => set({ shape: v as AestheticConfig["burst"]["shape"] })}
+      >
+        <option value="glow">Glow orb</option>
+        <option value="dot">Solid dot</option>
+        <option value="ring">Ring</option>
+        <option value="spark">Spark (+)</option>
+        <option value="streak">Streak</option>
+      </Select>
+      <Select
+        value={b.blendMode}
+        onChange={(v) => set({ blendMode: v as AestheticConfig["burst"]["blendMode"] })}
+      >
+        <option value="lighter">Additive (lighter)</option>
+        <option value="source-over">Normal</option>
+      </Select>
+
+      <SectionLabel>Emission</SectionLabel>
+      <SliderRow label="Count" value={b.count} min={0} max={200} step={1}
+        onChange={(v) => set({ count: Math.round(v) })} />
+      <SliderRow label="Direction" value={b.directionDeg} min={0} max={360} step={1} unit="°"
+        onChange={(v) => set({ directionDeg: v })} />
+      <SliderRow label="Spread" value={b.angleSpreadDeg} min={0} max={360} step={1} unit="°"
+        onChange={(v) => set({ angleSpreadDeg: v })} />
+
+      <SectionLabel>Motion</SectionLabel>
+      <SliderRow label="Base speed" value={b.baseSpeed} min={0} max={800} step={5} unit="px/s"
+        onChange={(v) => set({ baseSpeed: v })} />
+      <SliderRow label="Speed variance" value={b.speedVariance} min={0} max={1} step={0.01}
+        onChange={(v) => set({ speedVariance: v })} />
+      <SliderRow label="Drag" value={b.drag} min={0} max={12} step={0.05}
+        onChange={(v) => set({ drag: v })} />
+      <SliderRow label="Gravity" value={b.gravity} min={-800} max={800} step={5} unit="px/s²"
+        onChange={(v) => set({ gravity: v })} />
+
+      <SectionLabel>Life</SectionLabel>
+      <SliderRow label="Lifespan" value={b.lifespanMs} min={50} max={4000} step={20} unit="ms"
+        onChange={(v) => set({ lifespanMs: v })} />
+      <SliderRow label="Life variance" value={b.lifespanVariance} min={0} max={1} step={0.01}
+        onChange={(v) => set({ lifespanVariance: v })} />
+
+      <SectionLabel>Size</SectionLabel>
+      <SliderRow label="Start size" value={b.sizeStartPx} min={0.5} max={12} step={0.1} unit="px"
+        onChange={(v) => set({ sizeStartPx: v })} />
+      <SliderRow label="End size" value={b.sizeEndPx} min={0} max={12} step={0.1} unit="px"
+        onChange={(v) => set({ sizeEndPx: v })} />
       <SliderRow label="Size variance" value={b.sizeVariance} min={0} max={3} step={0.05}
-        onChange={(v) => onPatch({ burst: { ...b, sizeVariance: v } })} />
+        onChange={(v) => set({ sizeVariance: v })} />
+
+      <SectionLabel>Color & opacity</SectionLabel>
+      <Select
+        value={b.colorMode}
+        onChange={(v) => set({ colorMode: v as AestheticConfig["burst"]["colorMode"] })}
+      >
+        <option value="palette">From palette</option>
+        <option value="fixed">Fixed color</option>
+        <option value="rainbow">Rainbow</option>
+      </Select>
+      {b.colorMode === "fixed" && (
+        <label className="flex items-center gap-2 text-xs text-foreground/60">
+          Particle color
+          <input
+            type="color"
+            value={b.fixedColor}
+            onChange={(e) => set({ fixedColor: e.target.value })}
+            className="h-8 w-10 rounded border border-white/10 bg-transparent"
+          />
+        </label>
+      )}
+      <SliderRow label="Opacity (start)" value={b.opacityStart} min={0} max={1} step={0.01}
+        onChange={(v) => set({ opacityStart: v })} />
+      <SliderRow label="Opacity (end)" value={b.opacityEnd} min={0} max={1} step={0.01}
+        onChange={(v) => set({ opacityEnd: v })} />
+
+      <SectionLabel>Trail</SectionLabel>
+      <SliderRow label="Motion blur" value={b.trailLength} min={0} max={12} step={1}
+        onChange={(v) => set({ trailLength: Math.round(v) })} />
     </>
   );
 }
@@ -590,6 +688,8 @@ function PulsePanel({
         onChange={(v) => onPatch({ pathPulse: { ...pp, speed: v } })} />
       <SliderRow label="Width" value={pp.widthPx} min={1} max={8} step={0.5} unit="px"
         onChange={(v) => onPatch({ pathPulse: { ...pp, widthPx: v } })} />
+      <SliderRow label="Opacity" value={pp.opacity} min={0} max={1} step={0.01}
+        onChange={(v) => onPatch({ pathPulse: { ...pp, opacity: v } })} />
     </>
   );
 }
@@ -613,6 +713,10 @@ function ClimaxPanel({
         onChange={(v) => onPatch({ climax: { ...c, stardust: v } })} />
       <SliderRow label="Stardust count" value={c.stardustCount} min={0} max={80} step={1}
         onChange={(v) => onPatch({ climax: { ...c, stardustCount: Math.round(v) } })} />
+      <SliderRow label="Flash opacity" value={c.flashOpacity} min={0} max={1} step={0.01}
+        onChange={(v) => onPatch({ climax: { ...c, flashOpacity: v } })} />
+      <SliderRow label="Stardust opacity" value={c.stardustOpacity} min={0} max={1} step={0.01}
+        onChange={(v) => onPatch({ climax: { ...c, stardustOpacity: v } })} />
     </>
   );
 }

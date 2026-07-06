@@ -25,6 +25,7 @@ import {
   Save,
   Shield,
   ListMusic,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -54,6 +55,13 @@ import { NEURAL_PRESETS, type NeuralSettings } from "@/lib/neural/palette";
 import type { RuntimePack } from "@/lib/sound/runtimePacks";
 import { ROOT_NAMES, type RootName } from "@/lib/music/scales";
 import { fetchPublishedScales } from "@/lib/music/scales.functions";
+import { listPublishedScenes, type SceneRow } from "@/lib/admin/scenes.functions";
+import {
+  getActiveScene,
+  setActiveScene,
+  subscribeActiveScene,
+} from "@/lib/scenes/activeScene";
+import { useEffect } from "react";
 import {
   type ComposerSettings,
   type SlotSettings,
@@ -181,6 +189,7 @@ export function PhaseDock(p: Props) {
         <ScalesMenu composer={p.composer} onComposer={p.onComposer} authed={p.authed} />
         <PacksMenu packs={p.packs} packId={p.packId} onPackId={p.onPackId} />
         <VisualsMenu neural={p.neural} onNeural={p.onNeural} />
+        <BackdropMenu />
 
         <Divider />
 

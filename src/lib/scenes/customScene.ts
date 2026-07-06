@@ -455,6 +455,7 @@ export const customScene: Scene<CustomSceneState> = {
               size: fs.size,
               intensity: fs.intensity,
               tint: hexToRgb01(fs.tint),
+              speed: fs.speed,
             });
           } else {
             spawnBurst(state, px.x, px.y, color, t, A.burst);

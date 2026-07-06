@@ -13,6 +13,7 @@ export type FireSpawnOpts = {
   size: number;      // 0.02..0.8 — burst scale (fraction of shorter canvas dim)
   intensity: number; // 0..6 — particle count multiplier + brightness
   tint: [number, number, number]; // 0..1 rgb — cool-down color
+  speed?: number;    // 0.1..5 — outward velocity multiplier (independent of life)
 };
 
 type Particle = {
@@ -177,9 +178,11 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
     const x0 = Number.isFinite(cssX) ? cssX : cssW / 2;
     const y0 = Number.isFinite(cssY) ? cssY : cssH / 2;
 
-    // Base speed derived from burst scale so bigger bursts fly farther.
-    // Sparks should travel roughly `burstScale * 3` over their lifetime.
-    const baseSpeed = (burstScale * 3.0) / life;
+    // Base speed is a pure velocity (px/s), independent of life so users can
+    // tune "how fast" and "how long" separately. Default speedMul=1 matches
+    // the old "travel ~3× burstScale in ~1s" feel.
+    const speedMul = Math.max(0.05, Math.min(8, opts.speed ?? 1));
+    const baseSpeed = burstScale * 3.0 * speedMul;
 
     for (let i = 0; i < count; i++) {
       const seed = tSec * 1000 + i * 17.31 + Math.random() * 1000;

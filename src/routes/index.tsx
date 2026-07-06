@@ -1197,7 +1197,10 @@ function PhaseApp() {
         if (typeof a.densityOverride === "number" && a.densityOverride >= 2) {
           next.multiply = a.densityOverride;
         }
-        if (typeof a.speedMultiplier === "number") next.speed = a.speedMultiplier;
+        if (typeof a.speedMultiplier === "number") {
+          // Global slowdown: cap any scripted speed override at the new max (0.25×).
+          next.speed = Math.min(0.25, Math.max(0.0625, a.speedMultiplier));
+        }
         if (typeof a.pitchOffset === "number") next.pitch = a.pitchOffset;
         return next;
       });

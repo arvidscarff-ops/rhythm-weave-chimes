@@ -20,7 +20,8 @@ export type SceneId =
   | "metatronLattice"
   | "fractalNebula"
   | "radialResonator"
-  | "phaseAlignRings";
+  | "phaseAlignRings"
+  | "custom";
 
 export type VoiceSlotIndex = 0 | 1 | 2 | 3 | 4 | 5;
 

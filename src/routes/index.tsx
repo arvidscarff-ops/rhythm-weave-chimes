@@ -40,6 +40,7 @@ import { metatronLatticeScene, type MetatronLatticeState } from "@/lib/scenes/me
 import { fractalNebulaScene, type FractalNebulaState } from "@/lib/scenes/fractalNebula";
 import { radialResonatorScene, type RadialResonatorState } from "@/lib/scenes/radialResonator";
 import { phaseAlignRingsScene, type PhaseAlignRingsState } from "@/lib/scenes/phaseAlignRings";
+import { customScene, type CustomSceneState } from "@/lib/scenes/customScene";
 import { engineClock } from "@/lib/engine/clock";
 import { engineScheduler } from "@/lib/engine/scheduler";
 import {
@@ -87,6 +88,8 @@ function resolveNotesCount(scene: SceneKind, density: number, noteCount: number 
       return 24;
     case "phaseAlignRings":
       return Math.max(4, Math.min(24, noteCount));
+    case "custom":
+      return Math.max(4, Math.min(48, noteCount));
     case "wheel":
     case "pendulum":
     case "bars":
@@ -165,7 +168,8 @@ export type SceneKind =
   | "metatronLattice"
   | "fractalNebula"
   | "radialResonator"
-  | "phaseAlignRings";
+  | "phaseAlignRings"
+  | "custom";
 
 type Knobs = {
   mainVol: number; // 0..1
@@ -232,6 +236,7 @@ type EngineState = {
   fractalNebula: FractalNebulaState | null;
   radialResonator: RadialResonatorState | null;
   phaseAlignRings: PhaseAlignRingsState | null;
+  custom: CustomSceneState | null;
 };
 
 type AudioGraph = {
@@ -282,6 +287,7 @@ const SCENES: SceneKind[] = [
   "fractalNebula",
   "radialResonator",
   "phaseAlignRings",
+  "custom",
 ];
 type VoiceSlot = "melo" | "bass" | "atmo";
 const VOICE_SLOTS: VoiceSlot[] = ["melo", "bass", "atmo"];
@@ -984,6 +990,7 @@ function PhaseApp() {
     fractalNebula: null,
     radialResonator: null,
     phaseAlignRings: null,
+    custom: null,
   });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const grainPatternRef = useRef<CanvasPattern | null>(null);
@@ -1081,6 +1088,7 @@ function PhaseApp() {
     else if (scene === "fractalNebula") bind(fractalNebulaScene, () => e.fractalNebula);
     else if (scene === "radialResonator") bind(radialResonatorScene, () => e.radialResonator);
     else if (scene === "phaseAlignRings") bind(phaseAlignRingsScene, () => e.phaseAlignRings);
+    else if (scene === "custom") bind(customScene, () => e.custom);
     else engineScheduler.setActive(null);
   }, [scene, playing, topo]);
 
@@ -1135,6 +1143,7 @@ function PhaseApp() {
     engineRef.current.fractalNebula = null;
     engineRef.current.radialResonator = null;
     engineRef.current.phaseAlignRings = null;
+    engineRef.current.custom = null;
     const eng = state.engine;
     if (eng) {
       // Defer until after first runScene init populates the state.
@@ -1660,6 +1669,8 @@ function PhaseApp() {
         runScene(radialResonatorScene, () => e.radialResonator, (s) => (e.radialResonator = s));
       } else if (scene === "phaseAlignRings") {
         runScene(phaseAlignRingsScene, () => e.phaseAlignRings, (s) => (e.phaseAlignRings = s));
+      } else if (scene === "custom") {
+        runScene(customScene, () => e.custom, (s) => (e.custom = s));
       }
     }
     updateBursts(dt);

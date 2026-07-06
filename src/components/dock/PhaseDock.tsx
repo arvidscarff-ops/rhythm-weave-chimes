@@ -83,7 +83,8 @@ export type SceneKind =
   | "metatronLattice"
   | "fractalNebula"
   | "radialResonator"
-  | "phaseAlignRings";
+  | "phaseAlignRings"
+  | "custom";
 
 type Props = {
   playing: boolean;
@@ -272,6 +273,7 @@ const ENGINE_SCENES: { id: SceneKind; label: string; short: string }[] = [
   { id: "fractalNebula", label: "Fractal Nebula", short: "NEB" },
   { id: "radialResonator", label: "Radial Resonator", short: "RES" },
   { id: "phaseAlignRings", label: "Phase-Align Rings", short: "PHZ" },
+  { id: "custom", label: "Custom (Builder)", short: "CST" },
 ];
 
 function SceneChips({
@@ -377,6 +379,7 @@ function SceneMenu({
             <DropdownMenuRadioItem value="fractalNebula">Fractal Nebula</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="radialResonator">Radial Resonator</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="phaseAlignRings">Phase-Align Rings</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="custom">Custom (Builder)</DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-foreground/40">Classic</DropdownMenuLabel>

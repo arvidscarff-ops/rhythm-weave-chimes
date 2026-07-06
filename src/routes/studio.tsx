@@ -57,6 +57,7 @@ function Shell() {
     { to: "/studio/packs", label: "Packs" },
     { to: "/studio/scales", label: "Scales" },
     { to: "/studio/scenes", label: "Scenes" },
+    { to: "/studio/builder", label: "Builder" },
   ] as const;
   return (
     <div className="min-h-screen bg-background text-foreground">

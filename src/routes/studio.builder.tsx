@@ -810,6 +810,11 @@ function PreviewCanvas({
   bpRef.current = bp;
 
   const [cycle, setCycle] = useState({ baseLaps: 10, macroCycleSeconds: 12, noteCount: 8 });
+  const [playing, setPlaying] = useState(true);
+  const playingRef = useRef(true);
+  playingRef.current = playing;
+  // Frozen scene-time while paused; resumed by shifting startRef.
+  const pausedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -835,7 +840,20 @@ function PreviewCanvas({
 
     const loop = () => {
       const now = performance.now();
-      const t = (now - startRef.current) / 1000;
+      let t: number;
+      if (!playingRef.current) {
+        // Freeze scene time — record the moment we paused, then keep
+        // returning the same t. On resume the effect below shifts
+        // startRef so t continues seamlessly.
+        if (pausedAtRef.current == null) pausedAtRef.current = now;
+        t = (pausedAtRef.current - startRef.current) / 1000;
+      } else {
+        if (pausedAtRef.current != null) {
+          startRef.current += now - pausedAtRef.current;
+          pausedAtRef.current = null;
+        }
+        t = (now - startRef.current) / 1000;
+      }
       const W = canvas.clientWidth;
       const H = canvas.clientHeight;
       setActiveBlueprint(bpRef.current);
@@ -852,10 +870,12 @@ function PreviewCanvas({
         noteCount: cycle.noteCount,
       };
       if (!stateRef.current) stateRef.current = customScene.init(globals);
-      // Fade previous frame (trail decay).
-      customScene.preClear?.(ctx, globals);
-      customScene.sample?.(stateRef.current, t, globals);
-      customScene.draw(stateRef.current, ctx, globals);
+      if (playingRef.current) {
+        // Fade previous frame (trail decay).
+        customScene.preClear?.(ctx, globals);
+        customScene.sample?.(stateRef.current, t, globals);
+        customScene.draw(stateRef.current, ctx, globals);
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -904,14 +924,24 @@ function PreviewCanvas({
         )}
         <canvas ref={ref} className="absolute inset-0 h-full w-full" />
 
-        {/* Theater toggle */}
-        <button
-          onClick={onToggleTheater}
-          className="absolute right-3 top-3 rounded-md border border-white/10 bg-black/40 p-2 text-white/80 backdrop-blur hover:text-white"
-          title={theater ? "Exit theater (Esc)" : "Theater mode"}
-        >
-          {theater ? <Minimize className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
-        </button>
+        {/* Play / pause + theater toggles */}
+        <div className="absolute right-3 top-3 flex gap-2">
+          <button
+            onClick={() => setPlaying((v) => !v)}
+            className="rounded-md border border-white/10 bg-black/40 p-2 text-white/80 backdrop-blur hover:text-white"
+            title={playing ? "Pause preview" : "Play preview"}
+            aria-label={playing ? "Pause preview" : "Play preview"}
+          >
+            {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          </button>
+          <button
+            onClick={onToggleTheater}
+            className="rounded-md border border-white/10 bg-black/40 p-2 text-white/80 backdrop-blur hover:text-white"
+            title={theater ? "Exit theater (Esc)" : "Theater mode"}
+          >
+            {theater ? <Minimize className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
+          </button>
+        </div>
         {theater && (
           <button
             onClick={onToggleTheater}

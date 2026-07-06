@@ -47,10 +47,14 @@ const SEMIS = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31, 33, 36, 38, 40
 type Particle = {
   x: number; y: number;
   vx: number; vy: number;
-  born: number;      // scene time seconds
-  life: number;      // seconds
-  size: number;
-  color: string;     // rgb
+  born: number;         // scene time seconds
+  life: number;         // seconds
+  sizeStart: number;    // px at birth
+  sizeEnd: number;      // px at death
+  color: string;        // hex
+  /** Optional short position ring buffer for motion trails. */
+  trail?: Array<{ x: number; y: number }>;
+  trailLen?: number;
 };
 
 type PulseTrace = {
@@ -120,22 +124,62 @@ function spawnBurst(
   cfg: CustomSceneBlueprint["aesthetic"]["burst"],
 ): void {
   const count = Math.floor(cfg.count);
+  if (count <= 0) return;
+  // Emission cone: `directionDeg` is 0 = up (-y). Spread is total width.
+  const dirRad = (cfg.directionDeg - 90) * (Math.PI / 180);
+  const spreadRad = (cfg.angleSpreadDeg * Math.PI) / 180;
+  const trailLen = Math.floor(cfg.trailLength);
   for (let k = 0; k < count; k++) {
-    const a = Math.random() * Math.PI * 2;
-    const spd = cfg.baseSpeed * (0.5 + Math.random());
-    const life = (cfg.lifespanMs / 1000) * (0.6 + Math.random() * 0.8);
+    const a = dirRad + (Math.random() - 0.5) * spreadRad;
+    const spd =
+      cfg.baseSpeed *
+      (1 + (Math.random() * 2 - 1) * cfg.speedVariance);
+    const lifeBase = cfg.lifespanMs / 1000;
+    const life = Math.max(
+      0.02,
+      lifeBase * (1 + (Math.random() * 2 - 1) * cfg.lifespanVariance),
+    );
+    const vr = 1 + (Math.random() * 2 - 1) * Math.min(1, cfg.sizeVariance / 3);
+    const c = pickBurstColor(cfg, color, k);
     state.particles.push({
       x: cx, y: cy,
       vx: Math.cos(a) * spd,
       vy: Math.sin(a) * spd,
       born: now,
       life,
-      size: 1 + Math.random() * (1 + cfg.sizeVariance),
-      color,
+      sizeStart: Math.max(0.1, cfg.sizeStartPx * vr),
+      sizeEnd: Math.max(0, cfg.sizeEndPx * vr),
+      color: c,
+      trail: trailLen > 0 ? [] : undefined,
+      trailLen: trailLen > 0 ? trailLen : undefined,
     });
   }
-  // Cap runaway growth.
-  if (state.particles.length > 2000) state.particles.splice(0, state.particles.length - 2000);
+  // Hard cap.
+  if (state.particles.length > 2500) {
+    state.particles.splice(0, state.particles.length - 2500);
+  }
+}
+
+function pickBurstColor(
+  cfg: CustomSceneBlueprint["aesthetic"]["burst"],
+  paletteColor: string,
+  seed: number,
+): string {
+  if (cfg.colorMode === "fixed") return cfg.fixedColor;
+  if (cfg.colorMode === "rainbow") {
+    const h = ((seed * 47) % 360);
+    return hslHex(h, 90, 60);
+  }
+  return paletteColor;
+}
+
+function hslHex(h: number, s: number, l: number): string {
+  const S = s / 100, L = l / 100;
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = S * Math.min(L, 1 - L);
+  const f = (n: number) => L - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const to = (x: number) => Math.round(x * 255).toString(16).padStart(2, "0");
+  return `#${to(f(0))}${to(f(8))}${to(f(4))}`;
 }
 
 function spawnStardust(
@@ -162,6 +206,26 @@ function spawnStardust(
 }
 
 function updateParticles(list: Particle[], now: number, drag: number): void {
+  updateParticlesDt(list, now, drag, 0, 0.016);
+}
+
+function updateParticlesDt(
+  list: Particle[],
+  now: number,
+  drag: number,
+  gravity: number,
+  dt: number,
+): void {
+  const clampedDt = Math.min(0.05, Math.max(0, dt)); // avoid tab-restore jumps
+  if (clampedDt === 0) {
+    // Still reap dead particles so runaway lists get cleared even if paused.
+    for (let i = list.length - 1; i >= 0; i--) {
+      const p = list[i];
+      if (now - p.born >= p.life) list.splice(i, 1);
+    }
+    return;
+  }
+  const decay = Math.exp(-drag * clampedDt);
   for (let i = list.length - 1; i >= 0; i--) {
     const p = list[i];
     const age = now - p.born;
@@ -169,12 +233,14 @@ function updateParticles(list: Particle[], now: number, drag: number): void {
       list.splice(i, 1);
       continue;
     }
-    // Simple exponential drag (per-second).
-    const decay = Math.exp(-drag * 0.016);
     p.vx *= decay;
-    p.vy *= decay;
-    p.x += p.vx * 0.016;
-    p.y += p.vy * 0.016;
+    p.vy = p.vy * decay + gravity * clampedDt;
+    if (p.trail && p.trailLen && p.trailLen > 0) {
+      p.trail.push({ x: p.x, y: p.y });
+      if (p.trail.length > p.trailLen) p.trail.shift();
+    }
+    p.x += p.vx * clampedDt;
+    p.y += p.vy * clampedDt;
   }
 }
 
@@ -183,14 +249,112 @@ function drawParticles(
   list: Particle[],
   now: number,
 ): void {
+  // Legacy stardust path — simple soft dot.
   for (const p of list) {
     const age = now - p.born;
-    const alpha = Math.max(0, 1 - age / p.life);
-    ctx.fillStyle = withAlpha(p.color, alpha * 0.9);
+    const t = Math.max(0, Math.min(1, age / p.life));
+    const alpha = (1 - t) * 0.9;
+    const r = p.sizeStart + (p.sizeEnd - p.sizeStart) * t;
+    ctx.fillStyle = withAlpha(p.color, alpha);
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, Math.max(0.1, r), 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+/**
+ * Rich burst renderer. Draws by shape and interpolates alpha/size over
+ * lifetime. Uses per-particle trails when configured.
+ */
+function drawBurst(
+  ctx: CanvasRenderingContext2D,
+  list: Particle[],
+  now: number,
+  cfg: CustomSceneBlueprint["aesthetic"]["burst"],
+): void {
+  if (list.length === 0) return;
+  const prev = ctx.globalCompositeOperation;
+  ctx.globalCompositeOperation = cfg.blendMode;
+  for (const p of list) {
+    const age = now - p.born;
+    const t = Math.max(0, Math.min(1, age / p.life));
+    const alpha = cfg.opacityStart + (cfg.opacityEnd - cfg.opacityStart) * t;
+    if (alpha <= 0.001) continue;
+    const r = Math.max(0.1, p.sizeStart + (p.sizeEnd - p.sizeStart) * t);
+
+    // Optional motion trail — draw first so head sits on top.
+    if (p.trail && p.trail.length > 1) {
+      ctx.strokeStyle = withAlpha(p.color, alpha * 0.6);
+      ctx.lineWidth = Math.max(0.5, r);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(p.trail[0].x, p.trail[0].y);
+      for (let i = 1; i < p.trail.length; i++) {
+        ctx.lineTo(p.trail[i].x, p.trail[i].y);
+      }
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    }
+
+    switch (cfg.shape) {
+      case "dot": {
+        ctx.fillStyle = withAlpha(p.color, alpha);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+      case "ring": {
+        ctx.strokeStyle = withAlpha(p.color, alpha);
+        ctx.lineWidth = Math.max(0.5, r * 0.35);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        break;
+      }
+      case "spark": {
+        // 4-point sparkle: cross-shaped line.
+        ctx.strokeStyle = withAlpha(p.color, alpha);
+        ctx.lineWidth = Math.max(0.5, r * 0.5);
+        ctx.lineCap = "round";
+        const l = r * 2.2;
+        ctx.beginPath();
+        ctx.moveTo(p.x - l, p.y); ctx.lineTo(p.x + l, p.y);
+        ctx.moveTo(p.x, p.y - l); ctx.lineTo(p.x, p.y + l);
+        ctx.stroke();
+        break;
+      }
+      case "streak": {
+        // Elongated in direction of velocity.
+        const spd = Math.hypot(p.vx, p.vy);
+        if (spd < 0.01) break;
+        const nx = p.vx / spd, ny = p.vy / spd;
+        const len = r * 4;
+        ctx.strokeStyle = withAlpha(p.color, alpha);
+        ctx.lineWidth = Math.max(0.5, r * 0.8);
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(p.x - nx * len, p.y - ny * len);
+        ctx.lineTo(p.x + nx * 0.5, p.y + ny * 0.5);
+        ctx.stroke();
+        break;
+      }
+      case "glow":
+      default: {
+        const glow = r * 3;
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glow);
+        g.addColorStop(0, withAlpha(p.color, alpha));
+        g.addColorStop(0.4, withAlpha(p.color, alpha * 0.5));
+        g.addColorStop(1, withAlpha(p.color, 0));
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, glow, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+    }
+  }
+  ctx.globalCompositeOperation = prev;
 }
 
 /* ------------------------------------------------------------------ */
@@ -263,6 +427,8 @@ export const customScene: Scene<CustomSceneState> = {
     const B = g.baseLaps;
     const D = g.macroCycleSeconds;
     const t = g.globalTime;
+    // Real frame dt (seconds), clamped for tab-visibility jumps.
+    const dt = state.lastTime > 0 ? Math.max(0, t - state.lastTime) : 1 / 60;
 
     // ---- Detect new triggers since last draw (drives visuals only).
     const t0 = state.lastEventsScanUntil > 0 ? state.lastEventsScanUntil : Math.max(0, t - 0.05);
@@ -312,8 +478,10 @@ export const customScene: Scene<CustomSceneState> = {
     for (let i = 0; i < N; i++) {
       const scale = trackScale(bp.layout, i, N);
       const rot = trackRotation(bp.layout, i);
-      const color = paletteAt(A.palette, i, N);
-      ctx.strokeStyle = withAlpha(color, 0.22);
+      const stroke = A.palette.lineColorEnabled
+        ? A.palette.lineColor
+        : paletteAt(A.palette, i, N);
+      ctx.strokeStyle = withAlpha(stroke, A.palette.lineOpacity);
       ctx.beginPath();
       for (let k = 0; k < polyline.length; k++) {
         const p = polyline[k];
@@ -365,7 +533,7 @@ export const customScene: Scene<CustomSceneState> = {
         const steps = 20;
         ctx.lineCap = "round";
         ctx.lineWidth = A.pathPulse.widthPx;
-        ctx.strokeStyle = withAlpha(pu.color, alpha * 0.9);
+        ctx.strokeStyle = withAlpha(pu.color, alpha * A.pathPulse.opacity);
         ctx.beginPath();
         for (let s = 0; s <= steps; s++) {
           const pn = tail + ((head - tail) * s) / steps;
@@ -399,7 +567,7 @@ export const customScene: Scene<CustomSceneState> = {
       // Glow halo.
       const glowR = baseR * 4;
       const grad = ctx.createRadialGradient(px.x, px.y, 0, px.x, px.y, glowR);
-      grad.addColorStop(0, withAlpha(color, Math.min(1, alpha)));
+      grad.addColorStop(0, withAlpha(color, Math.min(1, alpha) * A.notes.glowOpacity));
       grad.addColorStop(1, withAlpha(color, 0));
       ctx.fillStyle = grad;
       ctx.beginPath();
@@ -407,25 +575,25 @@ export const customScene: Scene<CustomSceneState> = {
       ctx.fill();
 
       // Solid core.
-      ctx.fillStyle = withAlpha(color, Math.min(1, alpha + 0.15));
+      ctx.fillStyle = withAlpha(color, Math.min(1, alpha + 0.15) * A.notes.noteOpacity);
       ctx.beginPath();
       ctx.arc(px.x, px.y, baseR, 0, Math.PI * 2);
       ctx.fill();
     }
 
     // ---- Bursts.
-    updateParticles(state.particles, t, A.burst.drag);
-    drawParticles(ctx, state.particles, t);
+    updateParticlesDt(state.particles, t, A.burst.drag, A.burst.gravity, dt);
+    drawBurst(ctx, state.particles, t, A.burst);
 
     // ---- Stardust (climax field). Twinkle via sine.
-    updateParticles(state.stardust, t, 0.4);
+    updateParticlesDt(state.stardust, t, 0.4, 0, dt);
     for (const p of state.stardust) {
       const age = t - p.born;
       const alphaBase = Math.max(0, 1 - age / p.life);
       const twinkle = 0.6 + 0.4 * Math.sin(t * 6 + p.x * 0.05 + p.y * 0.05);
-      ctx.fillStyle = withAlpha(p.color, alphaBase * twinkle);
+      ctx.fillStyle = withAlpha(p.color, alphaBase * twinkle * A.climax.stardustOpacity);
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, p.sizeStart, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -437,7 +605,7 @@ export const customScene: Scene<CustomSceneState> = {
         g.W / 2, g.H / 2, 0,
         g.W / 2, g.H / 2, Math.max(g.W, g.H) * 0.7,
       );
-      grad.addColorStop(0, withAlpha(state.climaxColor, flash * 0.35));
+      grad.addColorStop(0, withAlpha(state.climaxColor, flash * A.climax.flashOpacity));
       grad.addColorStop(1, withAlpha(state.climaxColor, 0));
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, g.W, g.H);

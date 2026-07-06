@@ -1,53 +1,57 @@
-# Fix: tiny cigar-shaped ember sparks (no sprite baking)
+# More organic, varied fire sparks
 
-## What went wrong before
+Goal: break the "identical cigars" look and push toward realistic, alive embers. All changes in `src/lib/visuals/fireShaderLayer.ts` (rendering only, meander physics untouched).
 
-I built 128×64 pre-baked sprites with noise texture, then stretched them to 60–100px streaks. That's why you see the checkerboard of soft rectangles — any residual alpha at the sprite's rectangular edge stacks visibly with additive blending. Even with envelope fixes, `putImageData` in Canvas2D is spec'd as un-premultiplied so the RGB × alpha trick doesn't work the way I hoped.
+## 1. Per-particle shape variance (fixes "same shape")
 
-The reference sparks are much simpler: **small elongated ellipses** (roughly 4–8 px minor axis × 12–20 px major axis on a ~440×300 image), soft warm gradient inside, no visible noise texture, no visible rectangular boundary. Just small cigars.  
-  
-USER NOTE: Well yeah, they are cigar shaped, but also vary a bit in shape. Goal is basically to make these look as close to realistic fire sparks as possible.
+Give each particle a persistent `shape` object at spawn:
+- `baseL`, `baseW` sampled from wider ranges (L: 5–26px, W: 1.8–6.5px) with a power-law bias so most are small and a few are long.
+- `aspectPhase`, `aspectFreq` — the L/W ratio breathes over lifetime: `L *= 1 + 0.35*sin(t*freq+phase)`, `W *= 1 + 0.25*sin(t*freq*1.7+phase)` out of phase, so a spark stretches thin then puffs shorter/thicker as it travels.
+- `hotShift` — the hot-core offset inside the ellipse drifts (`hotX = 0.15 + 0.4*sin(...)`) so the bright head slides along the body.
+- `flicker` — alpha gets a fast low-amp noise (`a *= 0.75 + 0.25*fbm(t)`) so intensity twinkles instead of a smooth fade.
+- `curvature` — tiny per-frame rotation offset from velocity heading (±8°) using a slow sin, so the cigar isn't perfectly axis-aligned with motion.
 
-## What to build
+## 2. Shape richer than a single ellipse
 
-Replace the sprite-stamping renderer with **direct ellipse drawing per particle** — no sprites, no offscreen canvases, no ImageData:
+Instead of one radial-gradient ellipse, composite 2–3 offset gradients per particle in the same transform:
+- Main body ellipse (current).
+- Small hot nucleus (0.15× size) offset toward the head — sharper white-hot point.
+- Faint tail smear (1.3× length, 0.6× width, lower alpha) trailing behind the head — gives a comet feel without being a streak.
 
-For each particle:
+Cheap (3 fills per particle, all in one `setTransform`).
 
-1. Compute heading `theta = atan2(vy, vx)`.
-2. `ctx.save()`, translate to `(p.x, p.y)`, rotate to `theta`, non-uniformly scale so a unit ellipse becomes the target cigar (long axis ≈ 12–20 px + small speed contribution, short axis ≈ 3–6 px).
-3. Draw a radial gradient in local unit-circle space (radius 1): white-hot core at ~30% radius offset toward the leading tip → warm tint mid → transparent at radius 1. Because the transform scaled the circle into an ellipse, this renders as a cigar-shaped soft blob whose alpha genuinely reaches zero at the ellipse edge.
-4. `ctx.restore()`.
-5. Optional tiny bloom halo: a small round radial gradient (radius ≈ 2× cigar length, very low alpha) at the particle position — but keep it small and dim.
+## 3. Micro-sparks and debris
 
-Sizing (in css px):
+On each render, ~15% chance per active particle to emit a 1px "ash" pixel at its position with tiny random velocity and 120–250ms life. Adds the crackly, high-frequency detail real fire has without heavy cost.
 
-- Long axis: `L = clamp(8, 24, r0 * 6 + speed * 0.012)` — always small.
-- Short axis: `W = clamp(2.5, 6, r0 * 1.4)`.
-- No sprite → no rectangle → no checkerboard.
+## 4. Color temperature over life
 
-Ember color ramp stays the same (life-t → white-hot / warm / cool), but applied as gradient stops in a single radial gradient rather than picking a pre-baked tinted sprite.
+Currently tint is static per burst. Make each particle interpolate:
+- Age 0–0.2: near-white (2500K-ish, `#fff2c8`)
+- Age 0.2–0.6: user tint (orange/amber)
+- Age 0.6–1.0: deep red → smoke gray (`#3a1a0a` fading to transparent)
 
-## Meander stays
+Uses one lerp per particle per frame — negligible cost, huge realism win.
 
-The perpendicular-curl physics I added last turn stays. If it still reads as too straight, bump `curlAmp` per particle by another ~1.5× — but see it live before tuning further.
+## 5. Halo variance
 
-## Files to change
+Current halo is uniform `a*0.22`. Make halo radius and opacity per-particle (`haloScale` 0.7–1.6, `haloAlpha` 0.12–0.3) and pulse slowly. Prevents the "row of identical glows" look.
 
-Only `src/lib/visuals/fireShaderLayer.ts`:
+## 6. High-DPI crispness
 
-- Delete `bakeSprite`, `bakeSprites`, `TintedSprites`, `spriteCache`, `getSprites`, `SPRITE_W`, `SPRITE_H`, `smooth`, `hash2`, `valueNoise`, `fbm` — all dead once sprites are gone.
-- Keep `Particle`, `emberColor`, `hexToRgb01`, spawn logic, physics.
-- Rewrite the per-particle draw block in `layer.render` to translate/rotate/scale + one radial gradient fill.
+Confirm `ctx.setTransform` uses `dpr` throughout (it does). Add a subtle 0.5px sub-pixel jitter per frame so ellipses don't lock to the pixel grid — reads as higher resolution / less digital.
 
-No API changes, no caller changes.
+## 7. Optional (ask before doing)
+
+- **Motion blur trail**: draw each particle's previous position as a low-alpha copy, giving true streaks without changing shape. ~2× draw cost.
+- **Turbulence field**: add a low-freq curl-noise perturbation to velocity (in addition to current meander) so paths curl in gusts, not just sine-wave meanders. Small physics change.
+
+Recommend doing 1–6 in one pass; ask about 7 after you see the result.
 
 ## Verification
 
-Playwright: navigate to `/studio/builder`, force-select the fire-spark visual, trigger 3–4 notes. Screenshot at t≈0.15s and t≈0.7s. Confirm:
+Playwright screenshot at t≈0.15s and t≈0.7s of a burst; compare against reference. Confirm: varied lengths, some fat/some thin, hot-point drift visible, color shift to red at end of life, tiny ash flecks present, no rectangular artifacts.
 
-- Sparks are small elongated warm cigars, not large blobs, not rectangles.
-- Trajectories curve.
-- No visible sprite/tile artifacts anywhere on the canvas.
+## Files
 
-If the sparks look too soft/gaussian and not "sharp enough like real embers," tighten the gradient stops (move the white-hot core to ~15% radius, cool tail dropping off at ~85%) rather than adding sprite noise back.
+- `src/lib/visuals/fireShaderLayer.ts` — spawn (add shape params), render loop (multi-gradient composite, color lerp, halo variance, sub-pixel jitter), plus small ash-emission block.

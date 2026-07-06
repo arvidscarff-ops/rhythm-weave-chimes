@@ -21,7 +21,7 @@ export type PalettePresetId =
   | "autumnHorizon"
   | "phosphorLime"
   | "violetDusk";
-export type BurstShape = "dot" | "ring" | "spark" | "streak" | "glow";
+export type BurstShape = "dot" | "ring" | "spark" | "streak" | "glow" | "fireSpark";
 export type BurstColorMode = "palette" | "fixed" | "rainbow";
 export type BurstBlendMode = "lighter" | "source-over";
 
@@ -75,6 +75,16 @@ export type AestheticConfig = {
     opacityEnd: number;          // 0..1
     blendMode: BurstBlendMode;
     trailLength: number;         // 0..12 — motion-blur segments (0 = off)
+  };
+  /**
+   * Fire-Spark shader (Jan Mróz, jaszunio15 — CC BY 3.0). Only used when
+   * `burst.shape === "fireSpark"`. Rendered by a WebGL2 overlay layer.
+   */
+  fireSpark: {
+    life: number;      // 0.4..4 s
+    size: number;      // 0.05..0.6 — fraction of canvas width
+    intensity: number; // 0..3
+    tint: string;      // hex — multiplied over shader output
   };
   pathPulse: {
     enabled: boolean;

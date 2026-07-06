@@ -42,6 +42,7 @@ import { radialResonatorScene, type RadialResonatorState } from "@/lib/scenes/ra
 import { phaseAlignRingsScene, type PhaseAlignRingsState } from "@/lib/scenes/phaseAlignRings";
 import { customScene, type CustomSceneState } from "@/lib/scenes/customScene";
 import { engineClock } from "@/lib/engine/clock";
+import { createFireLayer } from "@/lib/visuals/fireShaderLayer";
 import { engineScheduler } from "@/lib/engine/scheduler";
 import {
   composerAdvance,
@@ -1540,6 +1541,11 @@ function PhaseApp() {
     onResize();
     window.addEventListener("resize", onResize);
 
+    // WebGL fire-spark overlay lives as a sibling of the main canvas,
+    // covers it 1:1, and blends additively via CSS mix-blend-mode.
+    const parent = canvasRef.current?.parentElement ?? null;
+    const fireLayer = parent ? createFireLayer(parent) : null;
+
     // seed dust
     const dust = engineRef.current.dust;
     for (let i = 0; i < 90; i++) {
@@ -1557,6 +1563,7 @@ function PhaseApp() {
       const dt = Math.min(0.05, (t - last) / 1000);
       last = t;
       render(dt);
+      fireLayer?.render(engineClock.t());
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -1564,6 +1571,7 @@ function PhaseApp() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
+      fireLayer?.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -459,6 +459,7 @@ export const customScene: Scene<CustomSceneState> = {
               palette: fs.palette.map((c) => hexToRgb01(c)),
               paletteMode: fs.paletteMode,
               speed: fs.speed,
+              radius: fs.radius,
               ashRate: fs.ashRate,
               bloom: fs.bloom,
               shimmer: fs.shimmer,

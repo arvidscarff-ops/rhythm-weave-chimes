@@ -89,6 +89,7 @@ export type AestheticConfig = {
     palette: string[];      // hex colors, 2..8 entries (used in palette mode)
     paletteMode: "random" | "sequential";
     speed: number;     // 0.1..5 — outward velocity multiplier (independent of life)
+    radius: number;    // 0.1..5 — travel distance multiplier (how far sparks reach)
     ashRate: number;   // 0..4 — how many small orb "ash" flecks are emitted
     bloom: number;       // 0..3   — HDR bloom strength
     shimmer: number;     // 0..2   — heat-shimmer distortion
@@ -193,7 +194,7 @@ export const DEFAULT_AESTHETIC: AestheticConfig = {
     colorMode: "single",
     palette: ["#FF3B00", "#FF8A2B", "#FFD447", "#FF66C4", "#4DA6FF"],
     paletteMode: "random",
-    speed: 1.0, ashRate: 1.0,
+    speed: 1.0, radius: 1.0, ashRate: 1.0,
     bloom: 1.2, shimmer: 0.9, trails: 0.35, turbulence: 0.9,
     wind: 40, afterglow: 1.0, glow: 0.9, chroma: 1.2,
   },
@@ -505,6 +506,7 @@ function mergeAesthetic(raw: unknown): AestheticConfig {
         palette: palette.length >= 2 ? palette : d.fireSpark.palette,
         paletteMode: (fs.paletteMode === "sequential" ? "sequential" : "random") as "random" | "sequential",
         speed: clampRange(Number(fs.speed ?? d.fireSpark.speed), 0.1, 5),
+        radius: clampRange(Number(fs.radius ?? d.fireSpark.radius), 0.1, 5),
         ashRate: clampRange(Number(fs.ashRate ?? d.fireSpark.ashRate), 0, 4),
         bloom:      clampRange(Number(fs.bloom      ?? d.fireSpark.bloom),      0, 3),
         shimmer:    clampRange(Number(fs.shimmer    ?? d.fireSpark.shimmer),    0, 2),

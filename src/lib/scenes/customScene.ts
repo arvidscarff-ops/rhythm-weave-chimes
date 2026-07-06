@@ -199,7 +199,8 @@ function spawnStardust(
       vy: Math.sin(a) * spd,
       born: now,
       life: 2.5 + Math.random() * 2.5,
-      size: 0.6 + Math.random() * 1.4,
+      sizeStart: 0.6 + Math.random() * 1.4,
+      sizeEnd: 0.6 + Math.random() * 1.4,
       color,
     });
   }

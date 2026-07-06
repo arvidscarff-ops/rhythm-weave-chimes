@@ -92,12 +92,6 @@ function emberColor(
 
 const MAX_PARTICLES = 2000;
 
-// ---- Sprite baking --------------------------------------------------------
-// One-time offscreen sprites: elongated (streak) shape with feathered, noisy
-// edges. Three tint variants (hot / warm / cool) so we can pick per-particle
-// based on life-t and let additive compositing produce the color ramp.
-
-const SPRITE_W = 128;
 const SPRITE_H = 64;
 
 function smooth(t: number): number { return t * t * (3 - 2 * t); }

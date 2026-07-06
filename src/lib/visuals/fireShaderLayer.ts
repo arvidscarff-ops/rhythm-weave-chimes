@@ -201,8 +201,8 @@ void main() {
     if (age < 0.0 || age > a.w) continue;
 
     float lifeT = age / a.w;
-    // Fast attack, long decay.
-    float env = smoothstep(0.0, 0.06, lifeT) * (1.0 - smoothstep(0.55, 1.0, lifeT));
+    // Sharp attack so bursts flash immediately, decay over the rest of life.
+    float env = smoothstep(0.0, 0.04, lifeT) * (1.0 - smoothstep(0.4, 1.0, lifeT));
     if (env <= 0.001) continue;
 
     // Emitter position: a.xy stored bottom-up-flipped so distance math matches shader y-up.

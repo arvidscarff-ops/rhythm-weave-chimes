@@ -56,6 +56,7 @@ function Shell() {
   const tabs = [
     { to: "/studio/packs", label: "Packs" },
     { to: "/studio/scales", label: "Scales" },
+    { to: "/studio/scenes", label: "Scenes" },
   ] as const;
   return (
     <div className="min-h-screen bg-background text-foreground">

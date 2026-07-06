@@ -915,7 +915,7 @@ function PhaseApp() {
     pitch: 0,
     revMix: 0.45,
     revSize: 0.55,
-    speed: 1,
+    speed: 0.25,
     multiply: 5,
     fx1: 2400,
     fx2: 8,

@@ -854,6 +854,9 @@ function PreviewCanvas({
         }
         t = (now - startRef.current) / 1000;
       }
+      // Global slowdown: preview runs at the same 0.25× cap as the main player.
+      const PREVIEW_SPEED = 0.25;
+      t = t * PREVIEW_SPEED;
       const W = canvas.clientWidth;
       const H = canvas.clientHeight;
       setActiveBlueprint(bpRef.current);

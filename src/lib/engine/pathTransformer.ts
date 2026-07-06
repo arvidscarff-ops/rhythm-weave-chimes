@@ -175,7 +175,7 @@ export const DEFAULT_AESTHETIC: AestheticConfig = {
     trailLength: 0,
   },
   pathPulse: { enabled: true, speed: 1.6, widthPx: 3, opacity: 0.9 },
-  fireSpark: { life: 1.6, size: 0.22, intensity: 1.2, tint: "#FF8A2B" },
+  fireSpark: { life: 1.4, size: 0.28, intensity: 2.0, tint: "#FF8A2B" },
   climax: {
     ambientFlash: true,
     stardust: true,

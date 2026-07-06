@@ -13,6 +13,7 @@ import { Route as StudioRouteImport } from './routes/studio'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
+import { Route as StudioScenesRouteImport } from './routes/studio.scenes'
 import { Route as StudioScalesRouteImport } from './routes/studio.scales'
 import { Route as StudioPacksRouteImport } from './routes/studio.packs'
 import { Route as AdminUnlockRouteImport } from './routes/admin.unlock'
@@ -37,6 +38,11 @@ const IndexRoute = IndexRouteImport.update({
 const StudioIndexRoute = StudioIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => StudioRoute,
+} as any)
+const StudioScenesRoute = StudioScenesRouteImport.update({
+  id: '/scenes',
+  path: '/scenes',
   getParentRoute: () => StudioRoute,
 } as any)
 const StudioScalesRoute = StudioScalesRouteImport.update({
@@ -74,6 +80,7 @@ export interface FileRoutesByFullPath {
   '/admin/unlock': typeof AdminUnlockRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
+  '/studio/scenes': typeof StudioScenesRoute
   '/studio/': typeof StudioIndexRoute
 }
 export interface FileRoutesByTo {
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/admin/unlock': typeof AdminUnlockRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
+  '/studio/scenes': typeof StudioScenesRoute
   '/studio': typeof StudioIndexRoute
 }
 export interface FileRoutesById {
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/admin/unlock': typeof AdminUnlockRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
+  '/studio/scenes': typeof StudioScenesRoute
   '/studio/': typeof StudioIndexRoute
 }
 export interface FileRouteTypes {
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/admin/unlock'
     | '/studio/packs'
     | '/studio/scales'
+    | '/studio/scenes'
     | '/studio/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -119,6 +129,7 @@ export interface FileRouteTypes {
     | '/admin/unlock'
     | '/studio/packs'
     | '/studio/scales'
+    | '/studio/scenes'
     | '/studio'
   id:
     | '__root__'
@@ -130,6 +141,7 @@ export interface FileRouteTypes {
     | '/admin/unlock'
     | '/studio/packs'
     | '/studio/scales'
+    | '/studio/scenes'
     | '/studio/'
   fileRoutesById: FileRoutesById
 }
@@ -170,6 +182,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/studio/'
       preLoaderRoute: typeof StudioIndexRouteImport
+      parentRoute: typeof StudioRoute
+    }
+    '/studio/scenes': {
+      id: '/studio/scenes'
+      path: '/scenes'
+      fullPath: '/studio/scenes'
+      preLoaderRoute: typeof StudioScenesRouteImport
       parentRoute: typeof StudioRoute
     }
     '/studio/scales': {
@@ -213,12 +232,14 @@ declare module '@tanstack/react-router' {
 interface StudioRouteChildren {
   StudioPacksRoute: typeof StudioPacksRoute
   StudioScalesRoute: typeof StudioScalesRoute
+  StudioScenesRoute: typeof StudioScenesRoute
   StudioIndexRoute: typeof StudioIndexRoute
 }
 
 const StudioRouteChildren: StudioRouteChildren = {
   StudioPacksRoute: StudioPacksRoute,
   StudioScalesRoute: StudioScalesRoute,
+  StudioScenesRoute: StudioScenesRoute,
   StudioIndexRoute: StudioIndexRoute,
 }
 

@@ -188,8 +188,9 @@ function SceneEditor({ scene, onDelete }: { scene: SceneRow; onDelete: () => voi
     };
   }, [bgPath, signRead]);
 
+  type SavePatch = Omit<Parameters<typeof update>[0]["data"], "passcode">;
   const saveMut = useMutation({
-    mutationFn: async (patch: Parameters<typeof update>[0]["data"]) => {
+    mutationFn: async (patch: SavePatch) => {
       const pass = getPass() || (await ensure());
       return update({ data: { ...patch, passcode: pass } });
     },

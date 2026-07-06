@@ -21,6 +21,7 @@ import {
   DEFAULT_THEME,
   DEFAULT_FX,
   DEFAULT_REACTIVE,
+  DEFAULT_CYCLE,
   type SceneRow,
   type SceneEngineId,
   type ThemeColors,
@@ -168,6 +169,11 @@ function SceneEditor({ scene, onDelete }: { scene: SceneRow; onDelete: () => voi
   const [bgType, setBgType] = useState<"image" | "video">(scene.background_type);
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [baseLaps, setBaseLaps] = useState<number>(scene.base_laps ?? DEFAULT_CYCLE.base_laps);
+  const [macroCycle, setMacroCycle] = useState<number>(
+    scene.macro_cycle_seconds ?? DEFAULT_CYCLE.macro_cycle_seconds,
+  );
+  const [noteCount, setNoteCount] = useState<number>(scene.note_count ?? DEFAULT_CYCLE.note_count);
 
   // Resolve signed URL for preview
   useEffect(() => {
@@ -215,11 +221,14 @@ function SceneEditor({ scene, onDelete }: { scene: SceneRow; onDelete: () => voi
         audio_reactive: reactive,
         background_type: bgType,
         background_path: bgPath,
+        base_laps: baseLaps,
+        macro_cycle_seconds: macroCycle,
+        note_count: noteCount,
       });
     }, 500);
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, engine, theme, fx, reactive, bgPath, bgType]);
+  }, [name, engine, theme, fx, reactive, bgPath, bgType, baseLaps, macroCycle, noteCount]);
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -389,6 +398,42 @@ function SceneEditor({ scene, onDelete }: { scene: SceneRow; onDelete: () => voi
             label="Blur pulse"
             value={reactive.blurPulse}
             onChange={(v) => setReactive({ ...reactive, blurPulse: v })}
+          />
+        </section>
+
+        <section className="space-y-3">
+          <Label className="text-[10px] uppercase tracking-[0.2em] text-foreground/60">
+            Macro-cycle (Phase-Alignment)
+          </Label>
+          <div className="text-[10px] leading-relaxed text-foreground/50">
+            Every note completes an integer number of laps per macro-cycle
+            (laps<sub>i</sub> = base + i) so all notes snap back to unison at
+            the end of every cycle. All eight engines obey this rule.
+          </div>
+          <SliderRow
+            label="Base laps"
+            value={baseLaps}
+            min={1}
+            max={40}
+            step={1}
+            onChange={(v) => setBaseLaps(Math.round(v))}
+          />
+          <SliderRow
+            label="Macro-cycle"
+            value={macroCycle}
+            min={2}
+            max={180}
+            step={1}
+            unit="s"
+            onChange={(v) => setMacroCycle(Math.round(v))}
+          />
+          <SliderRow
+            label="Notes"
+            value={noteCount}
+            min={4}
+            max={24}
+            step={1}
+            onChange={(v) => setNoteCount(Math.round(v))}
           />
         </section>
       </div>

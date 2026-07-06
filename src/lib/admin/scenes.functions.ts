@@ -51,6 +51,10 @@ export type SceneRow = {
   audio_reactive: AudioReactive;
   is_published: boolean;
   updated_at: string;
+  /** Phase-Alignment defaults. Live dock overrides may replace these per session. */
+  base_laps: number;
+  macro_cycle_seconds: number;
+  note_count: number;
 };
 
 export const DEFAULT_THEME: ThemeColors = {
@@ -71,6 +75,12 @@ export const DEFAULT_REACTIVE: AudioReactive = {
   blurPulse: false,
   threshold: 0,
 };
+
+export const DEFAULT_CYCLE = {
+  base_laps: 10,
+  macro_cycle_seconds: 30,
+  note_count: 8,
+} as const;
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -93,6 +103,9 @@ function normalize(row: {
   audio_reactive: unknown;
   is_published: boolean;
   updated_at: string;
+  base_laps?: number | null;
+  macro_cycle_seconds?: number | string | null;
+  note_count?: number | null;
 }): SceneRow {
   const engine = (SCENE_ENGINES as readonly string[]).includes(row.trigger_engine_id)
     ? (row.trigger_engine_id as SceneEngineId)
@@ -108,6 +121,14 @@ function normalize(row: {
     audio_reactive: { ...DEFAULT_REACTIVE, ...(row.audio_reactive as Partial<AudioReactive> | null) },
     is_published: row.is_published,
     updated_at: row.updated_at,
+    base_laps:
+      typeof row.base_laps === "number" ? row.base_laps : DEFAULT_CYCLE.base_laps,
+    macro_cycle_seconds:
+      row.macro_cycle_seconds != null
+        ? Number(row.macro_cycle_seconds)
+        : DEFAULT_CYCLE.macro_cycle_seconds,
+    note_count:
+      typeof row.note_count === "number" ? row.note_count : DEFAULT_CYCLE.note_count,
   };
 }
 
@@ -119,7 +140,7 @@ export const listAdminScenes = createServerFn({ method: "POST" })
     const { data: rows, error } = await supa
       .from("app_scenes")
       .select(
-        "id,name,background_type,background_path,trigger_engine_id,ui_theme_colors,visual_fx,audio_reactive,is_published,updated_at",
+        "id,name,background_type,background_path,trigger_engine_id,ui_theme_colors,visual_fx,audio_reactive,is_published,updated_at,base_laps,macro_cycle_seconds,note_count",
       )
       .order("updated_at", { ascending: false });
     if (error) throw new Error(error.message);
@@ -137,7 +158,7 @@ export const listPublishedScenes = createServerFn({ method: "GET" }).handler(
     const { data: rows, error } = await supa
       .from("app_scenes")
       .select(
-        "id,name,background_type,background_path,trigger_engine_id,ui_theme_colors,visual_fx,audio_reactive,is_published,updated_at",
+        "id,name,background_type,background_path,trigger_engine_id,ui_theme_colors,visual_fx,audio_reactive,is_published,updated_at,base_laps,macro_cycle_seconds,note_count",
       )
       .eq("is_published", true)
       .order("updated_at", { ascending: false });
@@ -173,6 +194,9 @@ export const updateAdminScene = createServerFn({ method: "POST" })
       visual_fx?: VisualFx;
       audio_reactive?: AudioReactive;
       is_published?: boolean;
+      base_laps?: number;
+      macro_cycle_seconds?: number;
+      note_count?: number;
     }) => data,
   )
   .handler(async ({ data }) => {
@@ -190,6 +214,10 @@ export const updateAdminScene = createServerFn({ method: "POST" })
     if (data.audio_reactive !== undefined)
       patch.audio_reactive = data.audio_reactive as unknown as TablesUpdate<"app_scenes">["audio_reactive"];
     if (data.is_published !== undefined) patch.is_published = data.is_published;
+    if (data.base_laps !== undefined) patch.base_laps = data.base_laps;
+    if (data.macro_cycle_seconds !== undefined)
+      patch.macro_cycle_seconds = data.macro_cycle_seconds;
+    if (data.note_count !== undefined) patch.note_count = data.note_count;
     const { error } = await supa.from("app_scenes").update(patch).eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };

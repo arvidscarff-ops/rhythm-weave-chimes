@@ -61,6 +61,7 @@ import {
   setActiveScene,
   subscribeActiveScene,
 } from "@/lib/scenes/activeScene";
+import type { CycleOverride } from "@/lib/engine/cycleOverride";
 import { useEffect } from "react";
 import {
   type ComposerSettings,
@@ -81,7 +82,8 @@ export type SceneKind =
   | "mandalaMatrix"
   | "metatronLattice"
   | "fractalNebula"
-  | "radialResonator";
+  | "radialResonator"
+  | "phaseAlignRings";
 
 type Props = {
   playing: boolean;
@@ -118,6 +120,11 @@ type Props = {
   onShare: () => void;
   /** Snap scene time to t=0 — every node fires its Big Bang chord. */
   onBigBang: () => void;
+
+  /** Phase-Alignment override + resolved active-scene defaults + writer. */
+  cycleOverride: CycleOverride;
+  cycleActiveScene: { baseLaps: number; macroCycleSeconds: number; noteCount: number };
+  onCycleOverride: (o: CycleOverride) => void;
 };
 
 const DOCK_BTN =
@@ -190,6 +197,11 @@ export function PhaseDock(p: Props) {
         <PacksMenu packs={p.packs} packId={p.packId} onPackId={p.onPackId} />
         <VisualsMenu neural={p.neural} onNeural={p.onNeural} />
         <BackdropMenu />
+        <CycleMenu
+          override={p.cycleOverride}
+          defaults={p.cycleActiveScene}
+          onOverride={p.onCycleOverride}
+        />
 
         <Divider />
 
@@ -259,6 +271,7 @@ const ENGINE_SCENES: { id: SceneKind; label: string; short: string }[] = [
   { id: "metatronLattice", label: "Metatron Lattice", short: "MTN" },
   { id: "fractalNebula", label: "Fractal Nebula", short: "NEB" },
   { id: "radialResonator", label: "Radial Resonator", short: "RES" },
+  { id: "phaseAlignRings", label: "Phase-Align Rings", short: "PHZ" },
 ];
 
 function SceneChips({
@@ -363,6 +376,7 @@ function SceneMenu({
             <DropdownMenuRadioItem value="metatronLattice">Metatron Lattice</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="fractalNebula">Fractal Nebula</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="radialResonator">Radial Resonator</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="phaseAlignRings">Phase-Align Rings</DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-foreground/40">Classic</DropdownMenuLabel>
@@ -392,6 +406,151 @@ function SceneMenu({
         </DropdownMenuPage>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/* =================== Cycle (Phase-Alignment) menu =================== */
+function CycleMenu({
+  override,
+  defaults,
+  onOverride,
+}: {
+  override: CycleOverride;
+  defaults: { baseLaps: number; macroCycleSeconds: number; noteCount: number };
+  onOverride: (o: CycleOverride) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const effB = override.baseLaps ?? defaults.baseLaps;
+  const effD = override.macroCycleSeconds ?? defaults.macroCycleSeconds;
+  const effN = override.noteCount ?? defaults.noteCount;
+  const overridden =
+    override.baseLaps !== null || override.macroCycleSeconds !== null || override.noteCount !== null;
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger className={DOCK_BTN}>
+        <Sparkles className="h-4 w-4" /> Cycle
+        {overridden && (
+          <span className="ml-1 h-1.5 w-1.5 rounded-full bg-emerald-400/80" aria-hidden />
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="center">
+        <DropdownMenuPage id="main">
+          <DropdownMenuLabel>Phase-Alignment cycle</DropdownMenuLabel>
+          <div className="m3-item-enter px-3 pb-2 pt-1 text-[10px] leading-relaxed text-foreground/55">
+            Every note completes an integer number of laps per macro-cycle
+            and snaps back to unison at the end. All engines obey this rule.
+          </div>
+          <div className="space-y-3 px-3 pb-3">
+            <CycleSlider
+              label="Base laps"
+              value={effB}
+              min={1}
+              max={40}
+              step={1}
+              suffix=""
+              muted={override.baseLaps === null}
+              onChange={(v) => onOverride({ ...override, baseLaps: v })}
+              onReset={
+                override.baseLaps !== null
+                  ? () => onOverride({ ...override, baseLaps: null })
+                  : undefined
+              }
+            />
+            <CycleSlider
+              label="Macro-cycle"
+              value={effD}
+              min={2}
+              max={180}
+              step={1}
+              suffix="s"
+              muted={override.macroCycleSeconds === null}
+              onChange={(v) => onOverride({ ...override, macroCycleSeconds: v })}
+              onReset={
+                override.macroCycleSeconds !== null
+                  ? () => onOverride({ ...override, macroCycleSeconds: null })
+                  : undefined
+              }
+            />
+            <CycleSlider
+              label="Notes"
+              value={effN}
+              min={4}
+              max={24}
+              step={1}
+              suffix=""
+              muted={override.noteCount === null}
+              onChange={(v) => onOverride({ ...override, noteCount: v })}
+              onReset={
+                override.noteCount !== null
+                  ? () => onOverride({ ...override, noteCount: null })
+                  : undefined
+              }
+            />
+          </div>
+          {overridden && (
+            <DropdownMenuItem
+              onSelect={() =>
+                onOverride({ baseLaps: null, macroCycleSeconds: null, noteCount: null })
+              }
+            >
+              Reset to scene defaults
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuPage>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function CycleSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  suffix,
+  muted,
+  onChange,
+  onReset,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  suffix: string;
+  muted: boolean;
+  onChange: (n: number) => void;
+  onReset?: () => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em]">
+        <span className={muted ? "text-foreground/45" : "text-foreground/80"}>{label}</span>
+        <span className="flex items-center gap-2 tabular-nums text-foreground/70">
+          {value}
+          {suffix}
+          {onReset && (
+            <button
+              onClick={onReset}
+              className="text-[9px] text-foreground/40 hover:text-foreground/70"
+              title="Reset to scene default"
+            >
+              reset
+            </button>
+          )}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="dock-range h-1 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-foreground"
+      />
+    </div>
   );
 }
 

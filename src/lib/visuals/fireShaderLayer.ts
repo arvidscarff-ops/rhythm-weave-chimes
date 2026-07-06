@@ -88,6 +88,121 @@ function emberColor(
 
 const MAX_PARTICLES = 2000;
 
+// ---- Sprite baking --------------------------------------------------------
+// One-time offscreen sprites: elongated (streak) shape with feathered, noisy
+// edges. Three tint variants (hot / warm / cool) so we can pick per-particle
+// based on life-t and let additive compositing produce the color ramp.
+
+const SPRITE_W = 128;
+const SPRITE_H = 64;
+
+function smooth(t: number): number { return t * t * (3 - 2 * t); }
+
+function hash2(ix: number, iy: number, seed: number): number {
+  const s = Math.sin(ix * 127.1 + iy * 311.7 + seed * 74.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+function valueNoise(x: number, y: number, seed: number): number {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const v00 = hash2(ix, iy, seed);
+  const v10 = hash2(ix + 1, iy, seed);
+  const v01 = hash2(ix, iy + 1, seed);
+  const v11 = hash2(ix + 1, iy + 1, seed);
+  const ux = smooth(fx), uy = smooth(fy);
+  return (v00 * (1 - ux) + v10 * ux) * (1 - uy) + (v01 * (1 - ux) + v11 * ux) * uy;
+}
+
+function fbm(x: number, y: number, seed: number): number {
+  let a = 0.5, f = 1.0, sum = 0.0, norm = 0.0;
+  for (let o = 0; o < 3; o++) {
+    sum += a * valueNoise(x * f, y * f, seed + o * 13.31);
+    norm += a;
+    a *= 0.5; f *= 2.05;
+  }
+  return sum / norm;
+}
+
+/**
+ * Bake a horizontal streak sprite. The "head" (bright tip) is at the RIGHT
+ * edge so at draw time we rotate to align with +velocity and the tip leads.
+ * Alpha = anisotropic radial falloff × noise mask. RGB = tint color, so
+ * additive compositing produces the ember color naturally.
+ */
+function bakeSprite(
+  r: number, g: number, b: number,
+  seed: number,
+  headBias: number, // 0..1 — how strongly the bright core skews toward the head
+): HTMLCanvasElement {
+  const cv = document.createElement("canvas");
+  cv.width = SPRITE_W;
+  cv.height = SPRITE_H;
+  const c = cv.getContext("2d")!;
+  const img = c.createImageData(SPRITE_W, SPRITE_H);
+  const data = img.data;
+
+  const cx = SPRITE_W * (0.35 + headBias * 0.25); // core position skewed toward head
+  const cy = SPRITE_H * 0.5;
+  const rx = SPRITE_W * 0.48;                     // long semi-axis
+  const ry = SPRITE_H * 0.42;                     // short semi-axis
+
+  for (let y = 0; y < SPRITE_H; y++) {
+    for (let x = 0; x < SPRITE_W; x++) {
+      // Anisotropic distance: ellipse-normalized so d=1 at the edge.
+      const nx = (x - cx) / rx;
+      const ny = (y - cy) / ry;
+      const d = Math.sqrt(nx * nx + ny * ny);
+
+      // Head-heavy falloff: brighter core, longer soft tail toward the LEFT
+      // (tail direction). Behind-head samples fall off faster than ahead.
+      const tailBoost = x < cx ? 1.0 : 0.55; // sharper drop past the head
+      const core = Math.max(0, 1 - d * tailBoost);
+      const shape = Math.pow(core, 1.6);
+
+      // Noise mask: crackly edges. Sample fbm in sprite-local coords.
+      const n = fbm(x * 0.08, y * 0.16, seed);
+      const mask = 0.55 + 0.55 * n;
+
+      // Extra wispy stringy detail along the length
+      const streak = 0.75 + 0.35 * fbm(x * 0.05, y * 0.35 + 5.2, seed + 17);
+
+      let a = shape * mask * streak;
+      // Bright leading tip
+      const tip = Math.exp(-((x - SPRITE_W * 0.72) ** 2) / (2 * 90) - ((y - cy) ** 2) / (2 * 55));
+      a = Math.min(1, a + tip * 0.55);
+
+      const idx = (y * SPRITE_W + x) * 4;
+      data[idx + 0] = Math.round(r * 255);
+      data[idx + 1] = Math.round(g * 255);
+      data[idx + 2] = Math.round(b * 255);
+      data[idx + 3] = Math.round(Math.max(0, Math.min(1, a)) * 255);
+    }
+  }
+  c.putImageData(img, 0, 0);
+  return cv;
+}
+
+type TintedSprites = { hot: HTMLCanvasElement; warm: HTMLCanvasElement; cool: HTMLCanvasElement };
+
+function bakeSprites(tint: [number, number, number]): TintedSprites {
+  // Hot = near-white with tint bias. Warm = tint. Cool = deep red-brown.
+  const hot = bakeSprite(
+    Math.min(1, tint[0] * 0.4 + 0.9),
+    Math.min(1, tint[1] * 0.35 + 0.85),
+    Math.min(1, tint[2] * 0.3 + 0.65),
+    3.1, 0.9,
+  );
+  const warm = bakeSprite(tint[0], tint[1] * 0.9 + 0.05, tint[2] * 0.8, 11.7, 0.7);
+  const cool = bakeSprite(
+    Math.min(1, tint[0] * 0.75 + 0.05),
+    tint[1] * 0.3,
+    tint[2] * 0.2,
+    27.4, 0.55,
+  );
+  return { hot, warm, cool };
+}
+
 export function createFireLayer(parent: HTMLElement): FireLayer {
   const canvas = document.createElement("canvas");
   canvas.style.position = "absolute";
@@ -101,6 +216,18 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
 
   const ctx = canvas.getContext("2d", { alpha: true }) as CanvasRenderingContext2D | null;
   const particles: Particle[] = [];
+
+  // Sprites are baked lazily per-tint on first spawn (cache keyed by hex-ish key).
+  const spriteCache = new Map<string, TintedSprites>();
+  const getSprites = (tint: [number, number, number]): TintedSprites => {
+    const key = `${Math.round(tint[0] * 255)},${Math.round(tint[1] * 255)},${Math.round(tint[2] * 255)}`;
+    let s = spriteCache.get(key);
+    if (!s) {
+      s = bakeSprites(tint);
+      spriteCache.set(key, s);
+    }
+    return s;
+  };
 
   const layer: FireLayer = {
     canvas,
@@ -150,6 +277,9 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
     // Particle count scales with intensity. Default around 15, up to ~40.
     const count = Math.max(4, Math.round(6 + intensity * 5));
 
+    // Warm the sprite cache for this tint now, not on first render.
+    getSprites(opts.tint);
+
     const x0 = Number.isFinite(cssX) ? cssX : cssW / 2;
     const y0 = Number.isFinite(cssY) ? cssY : cssH / 2;
 
@@ -195,14 +325,12 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
 
     if (particles.length === 0) return;
 
-    // Draw in css-px space with dpr scaling.
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalCompositeOperation = "lighter";
 
-    // Physics + draw
-    const GRAV = 30;    // css px / s²  — gentle downward pull (post-arc)
-    const DRAG = 0.88;  // per-second drag factor applied via pow(DRAG, dt)
-    const CURL = 55;    // css px / s² wobble acceleration
+    // Physics tuned so sparks travel and curve visibly (needed for streaks).
+    const GRAV = 20;     // css px / s²
+    const DRAG = 0.55;   // per-second drag factor (much lower → longer flights)
+    const CURL = 95;     // wobble acceleration
 
     const dragK = Math.pow(DRAG, dt);
 
@@ -218,48 +346,61 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
       // Wobble force (curl-ish)
       const [wx, wy] = wobble(p.x, p.y, tSec, p.seed);
       p.vx += wx * CURL * dt;
-      p.vy += (wy * CURL - GRAV) * dt; // GRAV is small; sparks slow and drift
+      p.vy += (wy * CURL + GRAV * 0.3) * dt; // faint downward drift late in life
       p.vx *= dragK;
       p.vy *= dragK;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
 
-      // Size shrinks (mostly) and alpha fades toward end.
-      const shrink = 1 - t * 0.75;                 // keep some size mid-life
-      const alpha = Math.pow(1 - t, 1.4) * p.bright;
-      const radius = Math.max(0.4, p.r0 * shrink);
-
-      // Twinkle: quick flicker over life
-      const twinkle = 0.75 + 0.25 * Math.sin(tSec * 30 + p.seed);
+      const shrink = 1 - t * 0.65;
+      const alpha = Math.pow(1 - t, 1.35) * p.bright;
+      const twinkle = 0.8 + 0.2 * Math.sin(tSec * 28 + p.seed * 6.28);
       const a = Math.min(1, alpha * twinkle);
       if (a <= 0.002) continue;
 
+      const speed = Math.hypot(p.vx, p.vy);
+      const ang = speed > 0.1 ? Math.atan2(p.vy, p.vx) : (p.seed % (Math.PI * 2));
+
+      // Streak length grows with speed, capped; shrinks with age.
+      const baseLen = Math.max(3, p.r0 * 2.4);
+      const streakLen = Math.max(baseLen, Math.min(baseLen * 5.5, speed * 0.055 + baseLen));
+      const streakThk = Math.max(1.4, p.r0 * shrink * 1.1);
+
+      // Pick tint variant by life-t. Additive blend gives the color ramp.
+      const sprites = getSprites(p.tint);
+      const sprite = t < 0.25 ? sprites.hot : t < 0.65 ? sprites.warm : sprites.cool;
+
+      // Sprite is 128×64 with head at the right edge; scale so its length →
+      // streakLen and thickness → streakThk, then rotate to velocity dir.
+      const sx = streakLen / SPRITE_W;
+      const sy = streakThk / SPRITE_H * 2.2; // *2.2 because sprite core is thin
+
+      ctx.setTransform(
+        dpr * Math.cos(ang) * sx, dpr * Math.sin(ang) * sx,
+        -dpr * Math.sin(ang) * sy, dpr * Math.cos(ang) * sy,
+        p.x * dpr, p.y * dpr,
+      );
+
+      // Soft bloom halo (round, in local sprite space) — draw first, dimmer.
       const [cr, cg, cb] = emberColor(p.tint[0], p.tint[1], p.tint[2], t);
+      const haloA = a * 0.35;
+      if (haloA > 0.01) {
+        const haloR = SPRITE_W * 0.6;
+        const halo = ctx.createRadialGradient(SPRITE_W * 0.72, SPRITE_H / 2, 0, SPRITE_W * 0.72, SPRITE_H / 2, haloR);
+        halo.addColorStop(0, `rgba(${cr},${cg},${cb},${haloA.toFixed(3)})`);
+        halo.addColorStop(0.45, `rgba(${cr},${cg},${cb},${(haloA * 0.35).toFixed(3)})`);
+        halo.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+        ctx.fillStyle = halo;
+        ctx.fillRect(-SPRITE_W * 0.2, -SPRITE_H * 0.5, SPRITE_W * 1.4, SPRITE_H * 2);
+      }
 
-      // Bloom halo (large, low alpha)
-      const haloR = radius * 6.5;
-      const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, haloR);
-      halo.addColorStop(0, `rgba(${cr},${cg},${cb},${(a * 0.35).toFixed(3)})`);
-      halo.addColorStop(0.4, `rgba(${cr},${cg},${cb},${(a * 0.12).toFixed(3)})`);
-      halo.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
-      ctx.fillStyle = halo;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, haloR, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Bright core (white-hot center)
-      const coreR = radius * 1.8;
-      const core = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, coreR);
-      const coreA = Math.min(1, a * 1.2);
-      core.addColorStop(0, `rgba(255,250,235,${coreA.toFixed(3)})`);
-      core.addColorStop(0.35, `rgba(${cr},${cg},${cb},${(a * 0.95).toFixed(3)})`);
-      core.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
-      ctx.fillStyle = core;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, coreR, 0, Math.PI * 2);
-      ctx.fill();
+      // Streak sprite
+      ctx.globalAlpha = a;
+      ctx.drawImage(sprite, 0, -SPRITE_H / 2);
+      ctx.globalAlpha = 1;
     }
 
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
   };
 

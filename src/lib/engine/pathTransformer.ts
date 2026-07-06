@@ -298,22 +298,31 @@ export function crossings(
   }
   const axis = blueprint.trigger.axis ?? "x";
   const target = blueprint.trigger.position ?? 0;
-  // Sample this voice's progress densely and detect sign changes of
-  // (coord - target). Density = ~64 samples per lap keeps missed
-  // crossings negligible for all supported path types.
+  // Sample densely enough to catch every sign change of (coord - target).
+  // Bug fix: previously stepDt was based solely on lap duration; for short
+  // scan windows (a single 16 ms frame) the loop could skip the window
+  // entirely and miss crossings. Now we cap stepDt to a fraction of the
+  // window AND lap duration, and always evaluate the window endpoint.
+  const window = Math.max(0, t1 - t0);
+  if (window <= 0) return [];
   const laps = Math.max(1, Math.floor(B) + Math.max(0, Math.floor(i)));
   const lapDuration = D / laps;
-  const stepDt = Math.max(0.002, lapDuration / 64);
+  const stepDt = Math.max(
+    0.001,
+    Math.min(lapDuration / 128, 0.008, window),
+  );
+  const samples = Math.max(2, Math.ceil(window / stepDt));
+  const dt = window / samples;
   const out: number[] = [];
   let prevT = t0;
   let prevVal = coordAtTime(blueprint, prevT, i, B, D, axis) - target;
-  for (let t = t0 + stepDt; t <= t1; t += stepDt) {
+  for (let s = 1; s <= samples; s++) {
+    const t = t0 + s * dt;
     const v = coordAtTime(blueprint, t, i, B, D, axis) - target;
-    if (prevVal === 0 || (prevVal < 0 && v > 0) || (prevVal > 0 && v < 0)) {
-      // Linear interpolate crossing time.
-      const frac = prevVal / (prevVal - v);
-      const tc = prevT + (t - prevT) * frac;
-      out.push(tc);
+    if ((prevVal <= 0 && v > 0) || (prevVal >= 0 && v < 0)) {
+      const denom = prevVal - v;
+      const frac = denom === 0 ? 0 : prevVal / denom;
+      out.push(prevT + (t - prevT) * frac);
     }
     prevT = t;
     prevVal = v;
@@ -409,6 +418,8 @@ function mergeAesthetic(raw: unknown): AestheticConfig {
       baseRadiusPx: clampRange(Number(nt.baseRadiusPx ?? d.notes.baseRadiusPx), 1, 30),
       breathHz: clampRange(Number(nt.breathHz ?? d.notes.breathHz), 0, 4),
       breathDepth: clampRange(Number(nt.breathDepth ?? d.notes.breathDepth), 0, 1),
+      noteOpacity: clamp01(Number(nt.noteOpacity ?? d.notes.noteOpacity)),
+      glowOpacity: clamp01(Number(nt.glowOpacity ?? d.notes.glowOpacity)),
     },
     trail: { decay: clampRange(Number(tr.decay ?? d.trail.decay), 0, 0.98) },
     palette: {
@@ -416,23 +427,47 @@ function mergeAesthetic(raw: unknown): AestheticConfig {
       startHex: typeof pl.startHex === "string" ? pl.startHex : d.palette.startHex,
       endHex: typeof pl.endHex === "string" ? pl.endHex : d.palette.endHex,
       presetId: typeof pl.presetId === "string" ? (pl.presetId as PalettePresetId) : undefined,
+      lineColorEnabled: Boolean(pl.lineColorEnabled ?? d.palette.lineColorEnabled),
+      lineColor: typeof pl.lineColor === "string" ? pl.lineColor : d.palette.lineColor,
+      lineOpacity: clamp01(Number(pl.lineOpacity ?? d.palette.lineOpacity)),
     },
     burst: {
       count: clampRange(Number(br.count ?? d.burst.count), 0, 200),
+      angleSpreadDeg: clampRange(Number(br.angleSpreadDeg ?? d.burst.angleSpreadDeg), 0, 360),
+      directionDeg: clampRange(Number(br.directionDeg ?? d.burst.directionDeg), 0, 360),
       baseSpeed: clampRange(Number(br.baseSpeed ?? d.burst.baseSpeed), 0, 800),
-      lifespanMs: clampRange(Number(br.lifespanMs ?? d.burst.lifespanMs), 50, 4000),
+      speedVariance: clamp01(Number(br.speedVariance ?? d.burst.speedVariance)),
       drag: clampRange(Number(br.drag ?? d.burst.drag), 0, 12),
+      gravity: clampRange(Number(br.gravity ?? d.burst.gravity), -2000, 2000),
+      lifespanMs: clampRange(Number(br.lifespanMs ?? d.burst.lifespanMs), 50, 4000),
+      lifespanVariance: clamp01(Number(br.lifespanVariance ?? d.burst.lifespanVariance)),
+      sizeStartPx: clampRange(Number(br.sizeStartPx ?? d.burst.sizeStartPx), 0.2, 24),
+      sizeEndPx: clampRange(Number(br.sizeEndPx ?? d.burst.sizeEndPx), 0, 24),
       sizeVariance: clampRange(Number(br.sizeVariance ?? d.burst.sizeVariance), 0, 6),
+      shape: (["dot", "ring", "spark", "streak", "glow"].includes(br.shape as string)
+        ? (br.shape as BurstShape)
+        : d.burst.shape),
+      colorMode: (["palette", "fixed", "rainbow"].includes(br.colorMode as string)
+        ? (br.colorMode as BurstColorMode)
+        : d.burst.colorMode),
+      fixedColor: typeof br.fixedColor === "string" ? br.fixedColor : d.burst.fixedColor,
+      opacityStart: clamp01(Number(br.opacityStart ?? d.burst.opacityStart)),
+      opacityEnd: clamp01(Number(br.opacityEnd ?? d.burst.opacityEnd)),
+      blendMode: (br.blendMode === "source-over" ? "source-over" : "lighter") as BurstBlendMode,
+      trailLength: clampRange(Number(br.trailLength ?? d.burst.trailLength), 0, 12),
     },
     pathPulse: {
       enabled: Boolean(pp.enabled ?? d.pathPulse.enabled),
       speed: clampRange(Number(pp.speed ?? d.pathPulse.speed), 0.05, 8),
       widthPx: clampRange(Number(pp.widthPx ?? d.pathPulse.widthPx), 0.5, 12),
+      opacity: clamp01(Number(pp.opacity ?? d.pathPulse.opacity)),
     },
     climax: {
       ambientFlash: Boolean(cl.ambientFlash ?? d.climax.ambientFlash),
       stardust: Boolean(cl.stardust ?? d.climax.stardust),
       stardustCount: clampRange(Number(cl.stardustCount ?? d.climax.stardustCount), 0, 120),
+      flashOpacity: clamp01(Number(cl.flashOpacity ?? d.climax.flashOpacity)),
+      stardustOpacity: clamp01(Number(cl.stardustOpacity ?? d.climax.stardustOpacity)),
     },
   };
 }

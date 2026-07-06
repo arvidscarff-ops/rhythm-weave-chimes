@@ -39,6 +39,7 @@ type Particle = {
   haloScale: number; haloAlphaMul: number;
   // trail
   px: number; py: number;
+  ashRate: number;  // per-frame chance base (multiplied by (1-t))
 };
 
 type Ash = {

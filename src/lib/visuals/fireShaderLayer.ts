@@ -161,7 +161,7 @@ vec3 fireParticles(in vec2 uv, in vec2 originalUV, in float iTime) {
   return particles * disappear * appear;
 }
 
-vec3 layeredParticles(in vec2 uv, in float iTime) {
+vec3 layeredParticlesLocal(in vec2 uv, in vec2 originalUV, in float iTime) {
   vec3 particles = vec3(0.0);
   float size = 1.0;
   float alpha = 1.0;
@@ -169,7 +169,7 @@ vec3 layeredParticles(in vec2 uv, in float iTime) {
   for (int i = 0; i < LAYERS_COUNT; i++) {
     vec2 noiseOffset = (noise2_2(uv * size * 2.0 + 0.5) - 0.5) * 0.15;
     vec2 bokehUV = (uv * size + iTime * MOVEMENT_DIRECTION * MOVEMENT_SPEED) + offset + noiseOffset;
-    particles += fireParticles(bokehUV, uv, iTime) * alpha;
+    particles += fireParticles(bokehUV, originalUV, iTime) * alpha;
     offset += hash2_2(vec2(alpha, alpha)) * 10.0;
     alpha *= ALPHA_MOD;
     size *= SIZE_MOD;

@@ -218,9 +218,9 @@ export function PhaseDock(p: Props) {
         <InlineSlider
           label="SPD"
           value={p.speed}
-          min={0.25}
-          max={2}
-          step={0.05}
+          min={0.0625}
+          max={0.25}
+          step={0.01}
           onChange={p.onSpeed}
           suffix="x"
           digits={2}

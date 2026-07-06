@@ -21,7 +21,7 @@ export type PalettePresetId =
   | "autumnHorizon"
   | "phosphorLime"
   | "violetDusk";
-export type BurstShape = "dot" | "ring" | "spark" | "streak" | "glow";
+export type BurstShape = "dot" | "ring" | "spark" | "streak" | "glow" | "fireSpark";
 export type BurstColorMode = "palette" | "fixed" | "rainbow";
 export type BurstBlendMode = "lighter" | "source-over";
 
@@ -75,6 +75,16 @@ export type AestheticConfig = {
     opacityEnd: number;          // 0..1
     blendMode: BurstBlendMode;
     trailLength: number;         // 0..12 — motion-blur segments (0 = off)
+  };
+  /**
+   * Fire-Spark shader (Jan Mróz, jaszunio15 — CC BY 3.0). Only used when
+   * `burst.shape === "fireSpark"`. Rendered by a WebGL2 overlay layer.
+   */
+  fireSpark: {
+    life: number;      // 0.4..4 s
+    size: number;      // 0.05..0.6 — fraction of canvas width
+    intensity: number; // 0..3
+    tint: string;      // hex — multiplied over shader output
   };
   pathPulse: {
     enabled: boolean;
@@ -165,6 +175,7 @@ export const DEFAULT_AESTHETIC: AestheticConfig = {
     trailLength: 0,
   },
   pathPulse: { enabled: true, speed: 1.6, widthPx: 3, opacity: 0.9 },
+  fireSpark: { life: 1.6, size: 0.22, intensity: 1.2, tint: "#FF8A2B" },
   climax: {
     ambientFlash: true,
     stardust: true,
@@ -444,7 +455,7 @@ function mergeAesthetic(raw: unknown): AestheticConfig {
       sizeStartPx: clampRange(Number(br.sizeStartPx ?? d.burst.sizeStartPx), 0.2, 24),
       sizeEndPx: clampRange(Number(br.sizeEndPx ?? d.burst.sizeEndPx), 0, 24),
       sizeVariance: clampRange(Number(br.sizeVariance ?? d.burst.sizeVariance), 0, 6),
-      shape: (["dot", "ring", "spark", "streak", "glow"].includes(br.shape as string)
+      shape: (["dot", "ring", "spark", "streak", "glow", "fireSpark"].includes(br.shape as string)
         ? (br.shape as BurstShape)
         : d.burst.shape),
       colorMode: (["palette", "fixed", "rainbow"].includes(br.colorMode as string)
@@ -456,6 +467,15 @@ function mergeAesthetic(raw: unknown): AestheticConfig {
       blendMode: (br.blendMode === "source-over" ? "source-over" : "lighter") as BurstBlendMode,
       trailLength: clampRange(Number(br.trailLength ?? d.burst.trailLength), 0, 12),
     },
+    fireSpark: (() => {
+      const fs = (a.fireSpark ?? {}) as Record<string, unknown>;
+      return {
+        life: clampRange(Number(fs.life ?? d.fireSpark.life), 0.2, 6),
+        size: clampRange(Number(fs.size ?? d.fireSpark.size), 0.03, 0.8),
+        intensity: clampRange(Number(fs.intensity ?? d.fireSpark.intensity), 0, 3),
+        tint: typeof fs.tint === "string" ? fs.tint : d.fireSpark.tint,
+      };
+    })(),
     pathPulse: {
       enabled: Boolean(pp.enabled ?? d.pathPulse.enabled),
       speed: clampRange(Number(pp.speed ?? d.pathPulse.speed), 0.05, 8),

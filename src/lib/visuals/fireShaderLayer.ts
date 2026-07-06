@@ -351,6 +351,7 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
   const bufI = new Float32Array(MAX_EMITTERS);
 
   let dpr = window.devicePixelRatio || 1;
+  let lastRenderTime = 0;
 
   const resize = () => {
     dpr = window.devicePixelRatio || 1;
@@ -388,6 +389,7 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
   };
 
   layer.render = (tSec) => {
+    lastRenderTime = tSec;
     resize();
     // Reap dead emitters (small ring buffer, cheap).
     for (let i = emitters.length - 1; i >= 0; i--) {
@@ -435,7 +437,7 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
   if (typeof window !== "undefined") {
     window.__phaseFireDebug = (x, y, opts) => {
       const rect = canvas.getBoundingClientRect();
-      const t = performance.now() / 1000;
+      const t = lastRenderTime;
       layer.spawn(
         x ?? rect.width / 2,
         y ?? rect.height / 2,

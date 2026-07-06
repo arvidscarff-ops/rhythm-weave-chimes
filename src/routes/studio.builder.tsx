@@ -702,6 +702,25 @@ function FireSparkPanel({
         onChange={(v) => set({ intensity: v })} />
       <SliderRow label="Small sparks" value={f.ashRate} min={0} max={4} step={0.05} unit="×"
         onChange={(v) => set({ ashRate: v })} />
+      <div className="pt-2 mt-1 border-t border-orange-500/15 text-[10px] uppercase tracking-wider text-orange-300/60">
+        Post-fx · bloom & atmosphere
+      </div>
+      <SliderRow label="Bloom" value={f.bloom} min={0} max={3} step={0.05}
+        onChange={(v) => set({ bloom: v })} />
+      <SliderRow label="Shimmer" value={f.shimmer} min={0} max={2} step={0.02}
+        onChange={(v) => set({ shimmer: v })} />
+      <SliderRow label="Trails" value={f.trails} min={0} max={0.97} step={0.01}
+        onChange={(v) => set({ trails: v })} />
+      <SliderRow label="Turbulence" value={f.turbulence} min={0} max={3} step={0.05}
+        onChange={(v) => set({ turbulence: v })} />
+      <SliderRow label="Wind ↑" value={f.wind} min={-200} max={200} step={2} unit="px/s"
+        onChange={(v) => set({ wind: v })} />
+      <SliderRow label="Afterglow" value={f.afterglow} min={0} max={2} step={0.02}
+        onChange={(v) => set({ afterglow: v })} />
+      <SliderRow label="Ambient glow" value={f.glow} min={0} max={2} step={0.02}
+        onChange={(v) => set({ glow: v })} />
+      <SliderRow label="Chromatic" value={f.chroma} min={0} max={3} step={0.05} unit="px"
+        onChange={(v) => set({ chroma: v })} />
       <label className="flex items-center gap-2 text-xs text-foreground/60">
         Tint
         <input

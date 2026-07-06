@@ -675,8 +675,6 @@ function BurstPanel({
   );
 }
 
-/* ---------- Path Pulse ---------- */
-
 /* ---------- Fire Spark (WebGL shader burst) ---------- */
 
 function FireSparkPanel({

@@ -1088,6 +1088,7 @@ function PhaseApp() {
     else if (scene === "fractalNebula") bind(fractalNebulaScene, () => e.fractalNebula);
     else if (scene === "radialResonator") bind(radialResonatorScene, () => e.radialResonator);
     else if (scene === "phaseAlignRings") bind(phaseAlignRingsScene, () => e.phaseAlignRings);
+    else if (scene === "custom") bind(customScene, () => e.custom);
     else engineScheduler.setActive(null);
   }, [scene, playing, topo]);
 

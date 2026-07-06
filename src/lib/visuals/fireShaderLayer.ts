@@ -647,16 +647,24 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
 
     // Register a reactive glow burst for warm ambient underlay.
     if (cfg.glow > 0) {
+      // Glow tint: for rainbow/palette bursts use a neutral bright anchor of
+      // the burst tint so the underlay doesn't lock to just one hue; for
+      // single mode it matches the tint exactly.
+      const glowTint: [number, number, number] = opts.tint;
       glows.push({
         x: x0, y: y0,
         born: tSec,
         radius: burstScale * 2.4,
-        tint: opts.tint,
+        tint: glowTint,
         decay: Math.max(0.4, life * 0.9),
         strength: cfg.glow * (0.4 + intensity * 0.08),
       });
       if (glows.length > MAX_GLOWS) glows.splice(0, glows.length - MAX_GLOWS);
     }
+
+    const colorMode = opts.colorMode ?? "single";
+    const palette = opts.palette && opts.palette.length >= 1 ? opts.palette : [opts.tint];
+    const paletteMode = opts.paletteMode ?? "random";
 
     for (let i = 0; i < count; i++) {
       const seed = tSec * 1000 + i * 17.31 + Math.random() * 1000;
@@ -664,6 +672,19 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
       const speed = baseSpeed * (0.5 + Math.random() * 0.9);
       const vx = Math.cos(ang) * speed;
       const vy = Math.sin(ang) * speed - baseSpeed * 0.35 * Math.random();
+
+      // Per-particle tint by color mode.
+      let pTint: [number, number, number];
+      if (colorMode === "rainbow") {
+        pTint = hsv2rgb(Math.random(), 0.9, 1.0);
+      } else if (colorMode === "palette") {
+        const idx = paletteMode === "sequential"
+          ? (paletteCursor++ % palette.length)
+          : Math.floor(Math.random() * palette.length);
+        pTint = palette[idx];
+      } else {
+        pTint = opts.tint;
+      }
 
       const jitter = 0.6 + Math.random() * 0.8;
       const lenRoll = Math.pow(Math.random(), 1.8);
@@ -677,7 +698,7 @@ export function createFireLayer(parent: HTMLElement): FireLayer {
         life: life * (0.55 + Math.random() * 0.9),
         r0: Math.max(1.2, burstScale * 0.055 * jitter),
         bright: 0.7 + Math.random() * 0.6,
-        tint: opts.tint,
+        tint: pTint,
         seed,
         ph1: Math.random() * Math.PI * 2,
         ph2: Math.random() * Math.PI * 2,

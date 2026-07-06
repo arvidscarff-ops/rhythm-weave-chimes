@@ -14,6 +14,7 @@ export type FireSpawnOpts = {
   intensity: number; // 0..6 — particle count multiplier + brightness
   tint: [number, number, number]; // 0..1 rgb — cool-down color
   speed?: number;    // 0.1..5 — outward velocity multiplier (independent of life)
+  ashRate?: number;  // 0..4 — how many small orb "ash" flecks are emitted per spark per frame
 };
 
 type Particle = {

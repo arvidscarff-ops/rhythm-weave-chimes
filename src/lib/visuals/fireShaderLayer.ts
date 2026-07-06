@@ -112,6 +112,27 @@ export function spawnFire(cssX: number, cssY: number, tSec: number, opts: FireSp
 
 function mix(a: number, b: number, t: number): number { return a + (b - a) * t; }
 
+// HSV → RGB (all 0..1). Used for rainbow color mode.
+function hsv2rgb(h: number, s: number, v: number): [number, number, number] {
+  const i = Math.floor(h * 6);
+  const f = h * 6 - i;
+  const p = v * (1 - s);
+  const q = v * (1 - f * s);
+  const t = v * (1 - (1 - f) * s);
+  switch (i % 6) {
+    case 0: return [v, t, p];
+    case 1: return [q, v, p];
+    case 2: return [p, v, t];
+    case 3: return [p, q, v];
+    case 4: return [t, p, v];
+    default: return [v, p, q];
+  }
+}
+
+// Sequential-mode palette cursor is layer-global so consecutive bursts continue
+// the walk rather than restarting each spawn.
+let paletteCursor = 0;
+
 // Cheap smooth 2D noise using summed sinusoids. Not simplex, but visually
 // coherent and fast (no lookup tables). Range ~[-1.5, 1.5].
 function noise2D(x: number, y: number, t: number): number {

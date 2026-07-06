@@ -56,6 +56,7 @@ import { PALETTE_PRESETS, paletteAt } from "@/lib/studio/palettes";
 import { getActiveBlueprint, setActiveBlueprint } from "@/lib/scenes/activeBlueprint";
 import { customScene, type CustomSceneState } from "@/lib/scenes/customScene";
 import type { SceneGlobals } from "@/lib/engine/sceneTypes";
+import { createFireLayer } from "@/lib/visuals/fireShaderLayer";
 
 export const Route = createFileRoute("/studio/builder")({
   ssr: false,
@@ -821,6 +822,8 @@ function PreviewCanvas({
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    const parent = canvas.parentElement;
+    const fire = parent ? createFireLayer(parent) : null;
     const dpr = window.devicePixelRatio || 1;
     const resize = () => {
       const w = canvas.clientWidth;
@@ -879,12 +882,15 @@ function PreviewCanvas({
         customScene.sample?.(stateRef.current, t, globals);
         customScene.draw(stateRef.current, ctx, globals);
       }
+      // WebGL fire overlay — safe to render every frame; no-op when idle.
+      fire?.render(t);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      fire?.destroy();
     };
   }, [cycle]);
 

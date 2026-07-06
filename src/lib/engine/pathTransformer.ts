@@ -21,6 +21,9 @@ export type PalettePresetId =
   | "autumnHorizon"
   | "phosphorLime"
   | "violetDusk";
+export type BurstShape = "dot" | "ring" | "spark" | "streak" | "glow";
+export type BurstColorMode = "palette" | "fixed" | "rainbow";
+export type BurstBlendMode = "lighter" | "source-over";
 
 /** Aesthetic layer — pure presentation, does not affect timing. */
 export type AestheticConfig = {
@@ -34,6 +37,10 @@ export type AestheticConfig = {
     baseRadiusPx: number;   // 2..18
     breathHz: number;       // 0..2  (per-note independent sine)
     breathDepth: number;    // 0..0.6
+    /** Alpha multiplier for the solid core (0..1). */
+    noteOpacity: number;
+    /** Alpha multiplier for the radial halo (0..1). */
+    glowOpacity: number;
   };
   trail: {
     decay: number;          // 0..0.98 — canvas retention alpha
@@ -43,23 +50,44 @@ export type AestheticConfig = {
     startHex: string;
     endHex: string;
     presetId?: PalettePresetId;
+    /** When true, wireframe tracks use `lineColor` (single color) instead of the gradient. */
+    lineColorEnabled: boolean;
+    lineColor: string;      // hex
+    lineOpacity: number;    // 0..1
   };
   burst: {
-    count: number;          // 6..120
-    baseSpeed: number;      // 20..400 px/s
-    lifespanMs: number;     // 200..2000
-    drag: number;           // 0..8   (higher = faster settle)
-    sizeVariance: number;   // 0..3
+    count: number;               // 0..200 (per trigger)
+    angleSpreadDeg: number;      // 0..360 — cone width around directionDeg
+    directionDeg: number;        // 0..360 — emission axis (0 = up)
+    baseSpeed: number;           // px/s
+    speedVariance: number;       // 0..1 — random speed multiplier range
+    drag: number;                // 0..12 — per-second exponential damp
+    gravity: number;             // px/s^2, signed (positive = down)
+    lifespanMs: number;          // 50..4000
+    lifespanVariance: number;    // 0..1
+    sizeStartPx: number;         // 0.5..12
+    sizeEndPx: number;           // 0..12 (end-of-life radius; interpolated)
+    sizeVariance: number;        // 0..3
+    shape: BurstShape;
+    colorMode: BurstColorMode;
+    fixedColor: string;          // hex, used when colorMode = "fixed"
+    opacityStart: number;        // 0..1
+    opacityEnd: number;          // 0..1
+    blendMode: BurstBlendMode;
+    trailLength: number;         // 0..12 — motion-blur segments (0 = off)
   };
   pathPulse: {
     enabled: boolean;
     speed: number;          // 0.2..4  (revolutions/sec along path)
     widthPx: number;        // 1..8
+    opacity: number;        // 0..1
   };
   climax: {
     ambientFlash: boolean;
     stardust: boolean;
     stardustCount: number;  // 0..80
+    flashOpacity: number;   // 0..1
+    stardustOpacity: number;// 0..1
   };
 };
 
@@ -105,22 +133,45 @@ export type CustomSceneBlueprint = {
 
 export const DEFAULT_AESTHETIC: AestheticConfig = {
   background: { kind: "none", url: "", opacity: 0.6, blurPx: 8 },
-  notes: { baseRadiusPx: 5, breathHz: 0.6, breathDepth: 0.3 },
+  notes: { baseRadiusPx: 5, breathHz: 0.6, breathDepth: 0.3, noteOpacity: 1, glowOpacity: 1 },
   trail: { decay: 0.86 },
   palette: {
     mode: "gradient",
     startHex: "#7DF9FF",
     endHex: "#FF3EA5",
+    lineColorEnabled: false,
+    lineColor: "#8FD8FF",
+    lineOpacity: 0.22,
   },
   burst: {
     count: 28,
+    angleSpreadDeg: 360,
+    directionDeg: 0,
     baseSpeed: 140,
-    lifespanMs: 700,
+    speedVariance: 0.5,
     drag: 2.4,
+    gravity: 0,
+    lifespanMs: 700,
+    lifespanVariance: 0.4,
+    sizeStartPx: 3,
+    sizeEndPx: 0,
     sizeVariance: 1.4,
+    shape: "glow",
+    colorMode: "palette",
+    fixedColor: "#FFFFFF",
+    opacityStart: 0.9,
+    opacityEnd: 0,
+    blendMode: "lighter",
+    trailLength: 0,
   },
-  pathPulse: { enabled: true, speed: 1.6, widthPx: 3 },
-  climax: { ambientFlash: true, stardust: true, stardustCount: 40 },
+  pathPulse: { enabled: true, speed: 1.6, widthPx: 3, opacity: 0.9 },
+  climax: {
+    ambientFlash: true,
+    stardust: true,
+    stardustCount: 40,
+    flashOpacity: 0.35,
+    stardustOpacity: 1,
+  },
 };
 
 export const DEFAULT_BLUEPRINT: CustomSceneBlueprint = {

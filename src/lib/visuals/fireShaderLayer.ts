@@ -13,6 +13,7 @@ export type FireSpawnOpts = {
   size: number;      // 0.02..0.8 — burst scale (fraction of shorter canvas dim)
   intensity: number; // 0..6 — particle count multiplier + brightness
   tint: [number, number, number]; // 0..1 rgb — cool-down color
+  speed?: number;    // 0.1..5 — outward velocity multiplier (independent of life)
 };
 
 type Particle = {

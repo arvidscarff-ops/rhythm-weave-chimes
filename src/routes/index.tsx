@@ -1143,6 +1143,7 @@ function PhaseApp() {
     engineRef.current.fractalNebula = null;
     engineRef.current.radialResonator = null;
     engineRef.current.phaseAlignRings = null;
+    engineRef.current.custom = null;
     const eng = state.engine;
     if (eng) {
       // Defer until after first runScene init populates the state.

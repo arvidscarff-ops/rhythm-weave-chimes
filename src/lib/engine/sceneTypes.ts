@@ -100,6 +100,15 @@ export interface Scene<TState = unknown> {
   draw(state: TState, ctx: CanvasRenderingContext2D, globals: SceneGlobals): void;
 
   /**
+   * Optional custom pre-clear hook. When present, the render loop
+   * SKIPS its default `paintArtBackground` (clearRect + bloom + grain)
+   * for the current frame and calls `preClear` instead. Used by scenes
+   * that need to preserve prior-frame pixels (long-exposure trails).
+   * Only implemented by the "custom" scene today.
+   */
+  preClear?(ctx: CanvasRenderingContext2D, globals: SceneGlobals): void;
+
+  /**
    * Phase-Zero render contract (preferred). Pure function of scene time
    * — no internal `clock` mutation, no `dt`. When a scene implements
    * `sample`, the render loop calls it instead of `update` for draw

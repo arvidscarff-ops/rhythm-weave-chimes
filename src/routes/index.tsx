@@ -990,6 +990,7 @@ function PhaseApp() {
     fractalNebula: null,
     radialResonator: null,
     phaseAlignRings: null,
+    custom: null,
   });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const grainPatternRef = useRef<CanvasPattern | null>(null);

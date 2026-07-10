@@ -21,6 +21,7 @@ export type SceneId =
   | "fractalNebula"
   | "radialResonator"
   | "phaseAlignRings"
+  | "voidSheets"
   | "custom";
 
 export type VoiceSlotIndex = 0 | 1 | 2 | 3 | 4 | 5;

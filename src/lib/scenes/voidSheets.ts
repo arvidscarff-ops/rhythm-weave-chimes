@@ -33,9 +33,8 @@ const X_MAX = 0.90;
 const Y_MIN = 0.14;
 const Y_MAX = 0.86;
 const CENTER_X = 0.5;
-const MAX_TRAVEL = 0.40; // (X_MAX - CENTER_X) roughly
-const WAVE_FREQ = Math.PI * 2 * 1.35;
-const SECONDARY_FREQ = Math.PI * 2 * 2.2;
+const WAVE_FREQ = Math.PI * 2 * 2.1;
+const SECONDARY_FREQ = Math.PI * 2 * 3.3;
 const LAYER_PHASE = 0.32;
 const SECONDARY_LAYER_PHASE = 0.17;
 
@@ -93,8 +92,8 @@ function envelope(xn: number): number {
 /** Sheet Y in normalized coords for a given normalized X. */
 function sheetYNorm(xn: number, sheetIndex: number): number {
   const baseY = Y_MIN + (Y_MAX - Y_MIN) * (sheetIndex / Math.max(1, SHEET_COUNT - 1));
-  const amp = 0.024 + 0.018 * Math.sin(sheetIndex * 0.7);
-  const amp2 = 0.010 + 0.006 * Math.cos(sheetIndex * 0.9);
+  const amp = 0.055 + 0.032 * Math.sin(sheetIndex * 0.7);
+  const amp2 = 0.022 + 0.012 * Math.cos(sheetIndex * 0.9);
   const e = envelope(xn);
   const primary = amp * e * Math.sin(WAVE_FREQ * xn + sheetIndex * LAYER_PHASE);
   const secondary = amp2 * e * Math.sin(SECONDARY_FREQ * xn - sheetIndex * SECONDARY_LAYER_PHASE);
@@ -105,9 +104,14 @@ function toPx(xn: number, yn: number, W: number, H: number) {
   return { x: xn * W, y: yn * H };
 }
 
-/** Convert current normalized progress into travel ∈ [0,1] (out+back). */
-function travelOf(p: number): number {
-  return p <= 0.5 ? p * 2 : (1 - p) * 2;
+/**
+ * Full-sweep triangle wave: progress p ∈ [0,1) maps to u ∈ [0,1] going
+ * 0 → 1 → 0 across one macro-lap. Combined with a per-note phase
+ * offset, notes traverse the entire sheet width side-to-side.
+ */
+function sweepOf(p: number, phaseOffset: number): number {
+  const q = ((p + phaseOffset) % 1 + 1) % 1;
+  return q <= 0.5 ? q * 2 : (1 - q) * 2;
 }
 
 export const voidSheetsScene: Scene<VoidSheetsState> = {

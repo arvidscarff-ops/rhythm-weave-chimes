@@ -138,6 +138,42 @@ export function PhaseDock(p: Props) {
   const sceneShort =
     ENGINE_SCENES.find((s) => s.id === p.scene)?.short ??
     p.scene.slice(0, 3).toUpperCase();
+  const [recState, setRecState] = useState<{ recording: boolean; left: number }>({
+    recording: false,
+    left: 0,
+  });
+
+  async function handleExportTestVideo() {
+    if (recState.recording) return;
+    const { isRecordingSupported, recordSceneCanvas, downloadBlob } = await import(
+      "@/lib/dev/recordScene"
+    );
+    if (!isRecordingSupported()) {
+      toast.error("This browser can't record WebM video.");
+      return;
+    }
+    const canvas = document.querySelector<HTMLCanvasElement>("canvas[data-scene-canvas]");
+    if (!canvas) {
+      toast.error("Scene canvas not found.");
+      return;
+    }
+    setRecState({ recording: true, left: 10 });
+    try {
+      const blob = await recordSceneCanvas(canvas, {
+        seconds: 10,
+        fps: 30,
+        onTick: (left) => setRecState({ recording: true, left }),
+      });
+      const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      downloadBlob(blob, `phase-${p.scene}-${ts}.webm`);
+      toast.success("Test video exported.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Recording failed.");
+    } finally {
+      setRecState({ recording: false, left: 0 });
+    }
+  }
+
   return (
     <div
       className="pointer-events-none fixed bottom-4 left-1/2 z-40 -translate-x-1/2 max-w-[calc(100vw-1rem)]"

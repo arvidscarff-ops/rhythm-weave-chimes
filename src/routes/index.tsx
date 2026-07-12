@@ -1931,6 +1931,7 @@ function PhaseApp() {
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
         <canvas
           ref={canvasRef}
+          data-scene-canvas
           className="absolute inset-0 w-full h-full block"
           style={{ background: "transparent", cursor: isWheel ? "crosshair" : "default" }}
           onPointerDown={onCanvasPointerDown}

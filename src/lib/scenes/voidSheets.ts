@@ -82,11 +82,18 @@ function buildNotes(N: number): Note[] {
   return notes;
 }
 
-/** Normalized envelope: compressed near center, opens outward. */
+/**
+ * Normalized envelope: compressed near the center ignition seam,
+ * opens outward. Must be smooth (C¹ or better) through xn = CENTER_X
+ * so the two halves of each sheet form one continuous curve — no
+ * V-shaped kink at the trigger line.
+ *
+ * Using a quadratic in the signed offset gives an analytic parabola
+ * across the center: identical left/right derivatives at xn=CENTER_X.
+ */
 function envelope(xn: number): number {
   const d = Math.min(1, Math.abs(xn - CENTER_X) / 0.5);
-  const s = d * d * (3 - 2 * d); // smoothstep
-  return Math.pow(s, 0.75);
+  return d * d;
 }
 
 /** Sheet Y in normalized coords for a given normalized X. */

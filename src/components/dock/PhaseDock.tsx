@@ -26,6 +26,8 @@ import {
   Shield,
   ListMusic,
   Image as ImageIcon,
+  Video,
+  Loader2,
 } from "lucide-react";
 import {
   DropdownMenu,

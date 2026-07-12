@@ -291,6 +291,33 @@ export function PhaseDock(p: Props) {
           <Sparkles className="h-4 w-4" />
         </button>
 
+        <button
+          onClick={handleExportTestVideo}
+          disabled={recState.recording}
+          aria-label="Export 10-second test video of the current trigger engine"
+          title={
+            recState.recording
+              ? `Recording… ${recState.left}s`
+              : "Export 10s test video (webm)"
+          }
+          className={cn(
+            DOCK_BTN,
+            "h-9 px-2 justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.10] disabled:opacity-70 disabled:cursor-not-allowed",
+            recState.recording && "ring-1 ring-red-400/60",
+          )}
+        >
+          {recState.recording ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin text-red-300" />
+              <span className="text-[10px] tracking-[0.18em] text-red-200">
+                {recState.left}s
+              </span>
+            </>
+          ) : (
+            <Video className="h-4 w-4" />
+          )}
+        </button>
+
         <MoreMenu authed={p.authed} email={p.email} onSignOut={p.onSignOut} />
       </div>
     </div>

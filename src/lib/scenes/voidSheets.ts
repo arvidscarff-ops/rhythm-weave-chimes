@@ -296,8 +296,11 @@ export const voidSheetsScene: Scene<VoidSheetsState> = {
     ctx.globalCompositeOperation = "lighter";
     for (const n of state.notes) {
       const p = progress(t, n.id, B, D);
-      const travel = travelOf(p);
-      const xn = CENTER_X + n.side * travel * MAX_TRAVEL;
+      // Odd-id notes ride the opposite phase so left/right variety is
+      // preserved without halving travel.
+      const phaseOffset = n.side === 1 ? 0 : 0.5;
+      const u = sweepOf(p, phaseOffset); // 0 → 1 → 0 per macro-lap
+      const xn = X_MIN + (X_MAX - X_MIN) * u;
       const yn = sheetYNorm(xn, n.sheetIndex);
       const px = xn * W;
       const py = yn * H;

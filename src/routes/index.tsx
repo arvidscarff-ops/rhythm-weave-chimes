@@ -124,6 +124,7 @@ import {
 } from "@/lib/session/sessionUrl";
 import { setSceneOverlay } from "@/lib/engine/sceneOverlay";
 import { AdminTrigger } from "@/components/admin/AdminTrigger";
+import { InstrumentEntryChrome } from "@/components/instrument/InstrumentEntryChrome";
 import {
   subscribeActiveScene,
   getActiveScene,
@@ -135,7 +136,14 @@ import {
   type CycleOverride,
 } from "@/lib/engine/cycleOverride";
 
+type IndexSearch = {
+  shell?: "reset";
+};
+
 export const Route = createFileRoute("/")({
+  validateSearch: (search: Record<string, unknown>): IndexSearch => ({
+    shell: search.shell === "reset" ? "reset" : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Phase — Generative Polyrhythm Engine" },
@@ -898,8 +906,12 @@ function Dropdown<T extends string>({
  * ============================================================ */
 
 function PhaseApp() {
+  const { shell } = Route.useSearch();
+  const entryShell = shell === "reset";
   const [playing, setPlaying] = useState(false);
-  const [scene, setScene] = useState<SceneKind>("wheel");
+  // Temporary R2 preview default only. The initial R4 engine family remains
+  // unresolved and must be selected through its own approval gate.
+  const [scene, setScene] = useState<SceneKind>(entryShell ? "stringNet" : "wheel");
   const [bpm, setBpm] = useState(90);
   const [fxState, setFxState] = useState<FxState>(DEFAULT_FX_STATE);
   const [selectedPack, setSelectedPack] = useState<string>("moss");
@@ -1912,21 +1924,33 @@ function PhaseApp() {
     bumpTopo();
   };
 
+  const resolvedNotesCount = resolveNotesCount(
+    scene,
+    knobs.multiply,
+    resolveGlobalCycle().noteCount,
+  );
+
   return (
     <div
-      className="min-h-screen w-full flex flex-col relative pr-stage"
+      className={`min-h-screen w-full flex flex-col relative pr-stage ${
+        entryShell ? "h-[100svh] overflow-hidden" : ""
+      }`}
       style={{ color: "var(--pr-text)" }}
     >
-      <PhaseReadout
-        scene={scene}
-        wheel={engineRef.current.wheel}
-        pendulum={engineRef.current.pendulum}
-        bars={engineRef.current.bars}
-        bpm={bpm}
-        hoverRingId={hoverRing}
-        topo={topo}
-      />
-      <AdminTrigger />
+      {!entryShell && (
+        <>
+          <PhaseReadout
+            scene={scene}
+            wheel={engineRef.current.wheel}
+            pendulum={engineRef.current.pendulum}
+            bars={engineRef.current.bars}
+            bpm={bpm}
+            hoverRingId={hoverRing}
+            topo={topo}
+          />
+          <AdminTrigger />
+        </>
+      )}
       {/* CANVAS */}
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
         <canvas
@@ -1957,51 +1981,68 @@ function PhaseApp() {
           />
         )}
       </main>
-      <PhaseDock
-        playing={playing}
-        onTogglePlay={togglePlay}
-        scene={scene}
-        onScene={setScene}
-        multiply={knobs.multiply}
-        onMultiply={(n) => setKnobs((k) => ({ ...k, multiply: n }))}
-        notesCount={resolveNotesCount(scene, knobs.multiply, resolveGlobalCycle().noteCount)}
-        cycleOverride={cycleOverrideRef.current}
-        cycleActiveScene={{
-          baseLaps: getActiveScene()?.base_laps ?? 10,
-          macroCycleSeconds: getActiveScene()?.macro_cycle_seconds ?? 30,
-          noteCount: getActiveScene()?.note_count ?? 8,
-        }}
-        onCycleOverride={(o) => saveCycleOverride(o)}
-        bpm={bpm}
-        onBpm={setBpm}
-        speed={knobs.speed}
-        onSpeed={(n) => {
-          engineClock.setSpeed(n);
-          setKnobs((k) => ({ ...k, speed: n }));
-        }}
-        fx={fxState}
-        onFx={setFxState}
-        packs={allPacks}
-        packId={selectedPack}
-        onPackId={setSelectedPack}
-        neural={neural}
-        onNeural={(s) => {
-          setNeural(s);
-          saveNeuralSettings(s);
-        }}
-        composer={composer}
-        onComposer={(s) => {
-          setComposer(s);
-          saveComposerSettings(s);
-        }}
-        authed={!!auth.user}
-        email={auth.user?.email ?? null}
-        onSignOut={() => {
-          supabase.auth.signOut();
-        }}
-        onShare={handleShare}
-        onBigBang={() => engineClock.resetPhaseZero()}
-      />
+      {entryShell ? (
+        <InstrumentEntryChrome
+          playing={playing}
+          onTogglePlay={togglePlay}
+          scene={scene}
+          onScene={setScene}
+          packs={allPacks}
+          packId={selectedPack}
+          onPackId={setSelectedPack}
+          bpm={bpm}
+          speed={knobs.speed}
+          notesCount={resolvedNotesCount}
+          onShare={handleShare}
+          onBigBang={() => engineClock.resetPhaseZero()}
+        />
+      ) : (
+        <PhaseDock
+          playing={playing}
+          onTogglePlay={togglePlay}
+          scene={scene}
+          onScene={setScene}
+          multiply={knobs.multiply}
+          onMultiply={(n) => setKnobs((k) => ({ ...k, multiply: n }))}
+          notesCount={resolvedNotesCount}
+          cycleOverride={cycleOverrideRef.current}
+          cycleActiveScene={{
+            baseLaps: getActiveScene()?.base_laps ?? 10,
+            macroCycleSeconds: getActiveScene()?.macro_cycle_seconds ?? 30,
+            noteCount: getActiveScene()?.note_count ?? 8,
+          }}
+          onCycleOverride={(o) => saveCycleOverride(o)}
+          bpm={bpm}
+          onBpm={setBpm}
+          speed={knobs.speed}
+          onSpeed={(n) => {
+            engineClock.setSpeed(n);
+            setKnobs((k) => ({ ...k, speed: n }));
+          }}
+          fx={fxState}
+          onFx={setFxState}
+          packs={allPacks}
+          packId={selectedPack}
+          onPackId={setSelectedPack}
+          neural={neural}
+          onNeural={(s) => {
+            setNeural(s);
+            saveNeuralSettings(s);
+          }}
+          composer={composer}
+          onComposer={(s) => {
+            setComposer(s);
+            saveComposerSettings(s);
+          }}
+          authed={!!auth.user}
+          email={auth.user?.email ?? null}
+          onSignOut={() => {
+            supabase.auth.signOut();
+          }}
+          onShare={handleShare}
+          onBigBang={() => engineClock.resetPhaseZero()}
+        />
+      )}
       {shareToast && (
         <div className="fixed top-6 left-1/2 z-50 -translate-x-1/2 pointer-events-none">
           <div className="px-4 py-2 rounded-full border border-white/10 bg-[hsl(220_22%_7%/0.88)] backdrop-blur-2xl text-[11px] uppercase tracking-[0.16em] text-white/80 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.65)]">

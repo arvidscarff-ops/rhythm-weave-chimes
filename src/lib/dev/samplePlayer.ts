@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { signPublicSampleUrl } from "@/lib/sound/sampleUrl.functions";
 
 const bufferCache = new Map<string, Promise<AudioBuffer>>();
 const urlCache = new Map<string, { url: string; exp: number }>();
@@ -7,12 +8,14 @@ export async function getSignedUrl(storagePath: string): Promise<string> {
   const now = Date.now();
   const cached = urlCache.get(storagePath);
   if (cached && cached.exp > now + 60_000) return cached.url;
-  const { data, error } = await supabase.storage
-    .from("samples")
-    .createSignedUrl(storagePath, 60 * 60);
-  if (error || !data) throw error ?? new Error("signed url failed");
-  urlCache.set(storagePath, { url: data.signedUrl, exp: now + 60 * 60 * 1000 });
-  return data.signedUrl;
+  // Owners (and admins) can sign directly via storage RLS; otherwise fall back
+  // to the server function, which only signs publicly visible pack samples.
+  const direct = await supabase.storage.from("samples").createSignedUrl(storagePath, 60 * 60);
+  const url = direct.data?.signedUrl
+    ? direct.data.signedUrl
+    : (await signPublicSampleUrl({ data: { storagePath } })).url;
+  urlCache.set(storagePath, { url, exp: now + 60 * 60 * 1000 });
+  return url;
 }
 
 export async function loadSampleBuffer(

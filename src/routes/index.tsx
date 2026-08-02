@@ -125,6 +125,7 @@ import {
 import { setSceneOverlay } from "@/lib/engine/sceneOverlay";
 import { AdminTrigger } from "@/components/admin/AdminTrigger";
 import { InstrumentEntryChrome } from "@/components/instrument/InstrumentEntryChrome";
+import { R3ClockPrototype } from "@/components/rhythm/R3ClockPrototype";
 import {
   subscribeActiveScene,
   getActiveScene,
@@ -138,11 +139,13 @@ import {
 
 type IndexSearch = {
   shell?: "reset";
+  prototype?: "r3-clock";
 };
 
 export const Route = createFileRoute("/")({
   validateSearch: (search: Record<string, unknown>): IndexSearch => ({
     shell: search.shell === "reset" ? "reset" : undefined,
+    prototype: search.prototype === "r3-clock" ? "r3-clock" : undefined,
   }),
   head: () => ({
     meta: [
@@ -160,8 +163,13 @@ export const Route = createFileRoute("/")({
       },
     ],
   }),
-  component: PhaseApp,
+  component: IndexRoute,
 });
+
+function IndexRoute() {
+  const { prototype } = Route.useSearch();
+  return prototype === "r3-clock" ? <R3ClockPrototype /> : <PhaseApp />;
+}
 
 /* ============================================================
  * Types

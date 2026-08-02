@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "7a8fcfc0282f8afa9b0a5adee6279494df349455",
+  "publishedDeployment": "https://rhythm-weave-chimes.lovable.app",
+  "sceneKindCount": 14,
+  "sharedDefaults": {
+    "bpm": 90,
+    "cycleFallback": {
+      "baseLaps": 10,
+      "macroCycleSeconds": 30,
+      "noteCount": 8
+    }
+  },
+  "engines": [
+    {
+      "id": "wheel",
+      "family": "classic",
+      "source": "src/routes/index.tsx",
+      "timingGeneration": "legacy-render-delta",
+      "authoritativeNoteCause": "rendered angular crossing",
+      "sceneMenu": true,
+      "quickDockButton": false,
+      "studioSceneEngine": false,
+      "publishedCapture": "visible"
+    },
+    {
+      "id": "pendulum",
+      "family": "classic",
+      "source": "src/routes/index.tsx",
+      "timingGeneration": "legacy-render-delta",
+      "authoritativeNoteCause": "rendered sign change",
+      "sceneMenu": true,
+      "quickDockButton": false,
+      "studioSceneEngine": false,
+      "publishedCapture": "visible"
+    },
+    {
+      "id": "bars",
+      "family": "classic",
+      "source": "src/routes/index.tsx",
+      "timingGeneration": "legacy-render-delta",
+      "authoritativeNoteCause": "locally accumulated phase wrap",
+      "sceneMenu": true,
+      "quickDockButton": false,
+      "studioSceneEngine": false,
+      "publishedCapture": "visible"
+    },
+    {
+      "id": "stringNet",
+      "family": "phase-zero",
+      "source": "src/lib/scenes/stringNetwork.ts",
+      "timingGeneration": "engineClock plus eventsIn",
+      "authoritativeNoteCause": "mathematical crossing query",
+      "sceneMenu": true,
+      "quickDockButton": true,
+      "studioSceneEngine": true,
+      "hardcodedRootHz": 220,
+      "publishedCapture": "visible"
+    },
+    {
+      "id": "pendulumFan",
+      "family": "phase-zero",
+      "source": "src/lib/scenes/pendulumFan.ts",
+      "timingGeneration": "engineClock plus eventsIn",
+      "authoritativeNoteCause": "mathematical crossing query",
+      "sceneMenu": true,
+      "quickDockButton": true,
+      "studioSceneEngine": true,
+      "hardcodedRootHz": 220,
+      "publishedCapture": "visible"
+    },
+    {
+      "id": "spiralArp",
+      "family": "phase-zero",
+      "source": "src/lib/scenes/spiralArp.ts",
+      "timingGeneration": "engineClock plus eventsIn",
+      "authoritativeNoteCause": "mathematical crossing query",
+      "sceneMenu": true,
+      "quickDockButton": true,
+      "studioSceneEngine": true,
+      "hardcodedRootHz": 220,
+      "publishedCapture": "visible"
+    },
+    {
+      "id": "radialSweep",
+      "family": "phase-zero",
+      "source": "src/lib/scenes/radialSweep.ts",
+      "timingGeneration": "engineClock plus state-mutating eventsIn",
+      "authoritativeNoteCause": "mathematical crossing query",
+      "sceneMenu": true,
+      "quickDockButton": true,
+      "studioSceneEngine": true,
+      "hardcodedRootHz": 220,
+      "publishedCapture": "visible"
+    },
+    {
+      "id": "mandalaMatrix",
+      "family": "phase-zero",
+      "source": "src/lib/scenes/mandalaMatrix.ts",
+      "timingGeneration": "engineClock plus eventsIn",
+      "authoritativeNoteCause": "mathematical crossing query",
+      "sceneMenu": true,
+      "quickDockButton": true,
+      "studioSceneEngine": true,
+      "hardcodedRootHz": 220,
+      "publishedCapture": "visible"
+    },
+    {
+      "id": "metatronLattice",
+      "family": "phase-zero",
+      "source": "src/lib/scenes/metatronLattice.ts",
+      "timingGeneration": "engineClock plus eventsIn",
+      "authoritativeNoteCause": "mathematical crossing query",
+      "sceneMenu": true,
+      "quickDockButton": true,
+      "studioSceneEngine": true,
+      "hardcodedRootHz": 220,
+      "publishedCapture": "visible"
+    },
+    {
+      "id": "fractalNebula",
+      "family": "phase-zero",
+      "source": "src/lib/scenes/fractalNebula.ts",
+      "timingGeneration": "engineClock plus eventsIn",
+      "authoritativeNoteCause": "mathematical crossing query",
+      "sceneMenu": true,
+      "quickDockButton": true,
+      "studioSceneEngine": true,
+      "hardcodedRootHz": 220,
+      "publishedCapture": "visible"
+    },
+    {
+      "id": "radialResonator",
+      "family": "phase-zero",
+      "source": "src/lib/scenes/radialResonator.ts",
+      "timingGeneration": "engineClock plus eventsIn",
+      "authoritativeNoteCause": "mathematical crossing query",
+      "sceneMenu": true,
+      "quickDockButton": true,
+      "studioSceneEngine": true,
+      "hardcodedRootHz": 220,
+      "publishedCapture": "visible"
+    },
+    {
+      "id": "phaseAlignRings",
+      "family": "phase-zero",
+      "source": "src/lib/scenes/phaseAlignRings.ts",
+      "timingGeneration": "engineClock plus eventsIn",
+      "authoritativeNoteCause": "mathematical crossing query",
+      "sceneMenu": false,
+      "quickDockButton": false,
+      "studioSceneEngine": false,
+      "hardcodedRootHz": 220,
+      "publishedCapture": "blank shared shell",
+      "reachability": "version-1 session state"
+    },
+    {
+      "id": "voidSheets",
+      "family": "phase-zero",
+      "source": "src/lib/scenes/voidSheets.ts",
+      "timingGeneration": "engineClock plus eventsIn",
+      "authoritativeNoteCause": "mathematical crossing query",
+      "sceneMenu": false,
+      "quickDockButton": false,
+      "studioSceneEngine": false,
+      "hardcodedRootHz": 220,
+      "publishedCapture": "blank shared shell",
+      "reachability": "version-1 session state"
+    },
+    {
+      "id": "custom",
+      "family": "phase-zero",
+      "source": "src/lib/scenes/customScene.ts",
+      "timingGeneration": "engineClock plus eventsIn",
+      "authoritativeNoteCause": "mathematical crossing query",
+      "sceneMenu": false,
+      "quickDockButton": false,
+      "studioSceneEngine": false,
+      "hardcodedRootHz": 220,
+      "publishedCapture": "blank shared shell",
+      "reachability": "version-1 session state and Studio Builder active blueprint"
+    }
+  ]
+}

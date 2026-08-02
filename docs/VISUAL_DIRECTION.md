@@ -224,6 +224,36 @@ Then discover that proximity, duration, repetition, or interaction makes it unsa
 
 References guide principles, not assets.
 
+### Lucid Rhythms Trigger Engine corpus
+
+**Use:**
+
+- mathematical rhythm made immediately visible;
+- multiple voices readable as one composition;
+- patient repetition and large-cycle anticipation;
+- distinct spatial organizations for distinct musical ideas;
+- visual restraint compatible with long listening;
+- audiovisual work that can support relaxation, meditation, concentration, and deep work;
+- a simple enough initial encounter that the composition itself is the gateway.
+
+**Transform:**
+
+- standalone abstract compositions become PHASE’s entry experience and later acquire world context;
+- reference geometry becomes independently designed Trigger Engine families governed by PHASE’s authoritative event model;
+- generic presentation becomes PHASE’s own cold, living, ancient-future visual language;
+- reference-level long-form appeal becomes an interactive, reconstructable, accessible runtime.
+
+**Do not copy:**
+
+- exact compositions;
+- audio;
+- visual assets;
+- exact layouts, colors, effects, titles, thumbnails, or branding;
+- protected audiovisual expression;
+- inferred private implementation details presented as fact.
+
+The selected six-work corpus and evidence boundary live in `TRIGGER_ENGINE_REFERENCE.md`.
+
 ### *Dune*
 
 **Use:**

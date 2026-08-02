@@ -68,6 +68,12 @@ This document exists to prevent brainstorming, evocative assistant suggestions, 
 - **The Event / Convergence / Drift / Bloom / Long Weather:** These are not interchangeable canon. “The Convergence” is the strongest working catastrophe term; “The Long Weather” and related phrases belong primarily to title/folk-language exploration.
 - **World title / game title / era title:** The conversation deliberately explored separating these. No final separation or title set was selected.
 
+### 2.3 Selected external reference authority
+
+The project owner has selected six Lucid Rhythms works as the initial reference corpus for Trigger Engine capability study. Their URLs, roles, evidence limits, and originality boundaries are recorded in `TRIGGER_ENGINE_REFERENCE.md`.
+
+This selection is **LOCKED / CANON** as project-development provenance and product intent. It is not fictional canon, proof of Lucid Rhythms’ private implementation, permission to reuse protected audiovisual content, or an instruction to reproduce exact works.
+
 ---
 
 ## 3. LOCKED / CANON
@@ -102,6 +108,11 @@ This document exists to prevent brainstorming, evocative assistant suggestions, 
 6. **The social-emotional ideal includes “joint solitude.”**
    - Players may feel connected across distance without destroying isolation or contemplation.
    - Social design should preserve the compositional and solitary atmosphere.
+
+7. **The generative audiovisual instrument is PHASE’s gateway experience.**
+   - It must provide sufficient standalone value for listening, viewing, meditation, deep work, concentration, and rest.
+   - Users may encounter the instrument before understanding the world, routes, MTC, progression, or lore.
+   - World and game systems should be revealed as deeper layers rather than prerequisites for experiencing the instrument.
 
 ### 3.2 World foundations
 
@@ -565,7 +576,7 @@ Later documents should use this index as follows:
 
 If all nuance is stripped away, the smallest trustworthy summary is:
 
-> **PHASE is a low-dopamine audiovisual game/ambient-focus hybrid set on future Earth roughly 130 years after an extraterrestrial arrival began transforming the planet into anomalous Zones. Humanity persists in fragmented communities connected by long, dangerous glider transits. Those crossings are playable generative audiovisual compositions governed by a centralized deterministic rhythm system. Meridian Transit Corporation is a necessary, broadly benevolent, ancient-feeling institution that maintains this continuity; its Navigators are highly trained specialists whose sensitivity to altered harmonic conditions inspires near-sacred regard. The world’s horror is visible, beautiful, and deeply unsettling, and its emotional center is humanity continuing ordinary routines on the smallest remaining quantity of hope. Persistent world-scale weather is intended to affect routes, transit duration, sound, visuals, and danger, but its exact musical and technical contract remains unresolved.**
+> **PHASE is a low-dopamine audiovisual game/ambient-focus hybrid set on future Earth roughly 130 years after an extraterrestrial arrival began transforming the planet into anomalous Zones. Its generative audiovisual instrument is the immediate gateway and must stand alone for listening, viewing, meditation, deep work, concentration, and rest; the world, transit, lore, and progression are deeper layers revealed through and around it. Humanity persists in fragmented communities connected by long, dangerous glider transits. Those crossings are playable generative audiovisual compositions governed by a centralized deterministic rhythm system. Meridian Transit Corporation is a necessary, broadly benevolent, ancient-feeling institution that maintains this continuity; its Navigators are highly trained specialists whose sensitivity to altered harmonic conditions inspires near-sacred regard. The world’s horror is visible, beautiful, and deeply unsettling, and its emotional center is humanity continuing ordinary routines on the smallest remaining quantity of hope. Persistent world-scale weather is intended to affect routes, transit duration, sound, visuals, and danger, but its exact musical and technical contract remains unresolved.**
 
 Anything substantially more specific should retain a status label until its open decisions are resolved.
 

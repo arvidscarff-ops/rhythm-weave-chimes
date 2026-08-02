@@ -9,21 +9,23 @@
 
 ## 1. Roadmap thesis
 
-> **Prove one crossing. Then prove a loop. Then build the foundations that let the loop become a world. Only afterward make that world broad, persistent, and social.**
+> **Prove the instrument. Then prove one crossing. Then prove a loop. Then build the foundations that let the loop become a world. Only afterward make that world broad, persistent, and social.**
 
 PHASE’s largest risk is not lack of features. It is building a wide world before proving that a long audiovisual transit is compelling.
 
 The roadmap therefore proceeds in concentric rings:
 
 1. establish the actual codebase baseline;
-2. protect timing invariants;
-3. prove one exceptional crossing;
-4. prove that several crossings form a game loop;
-5. make content and state scalable;
-6. introduce authoritative world weather;
-7. deepen progression, narrative, and persistence;
-8. add community systems that preserve solitude;
-9. expand content only after the production pipeline works.
+2. preserve the originating Trigger Engine reference and reset the experimental product shell;
+3. protect timing invariants;
+4. prove an exceptional standalone generative audiovisual instrument;
+5. prove one exceptional crossing;
+6. prove that several crossings form a game loop;
+7. make content and state scalable;
+8. introduce authoritative world weather;
+9. deepen progression, narrative, and persistence;
+10. add community systems that preserve solitude;
+11. expand content only after the production pipeline works.
 
 ---
 
@@ -189,10 +191,140 @@ Lovable should not independently reinterpret timing invariants or duplicate majo
 
 ---
 
+## Phase R — Reset / PHASE 2.0
+
+**Goal:** Turn the experimental Lovable prototype into a clean instrument-first foundation without discarding valuable engine, Studio, visual, data, or backend work.
+**Dependency:** Phase A audit and the selected Lucid Rhythms reference corpus.
+**Scope:** Documentation, salvage, product-shell reset, foundational implementation, and authoring-tool consolidation.
+
+### R0 — Reference and Reset charter
+
+- preserve Lucid Rhythms as the originating Trigger Engine reference;
+- record the six selected works;
+- distinguish observation, inference, capability target, and prohibited copying;
+- record the standalone instrument as PHASE’s gateway;
+- define Reset scope and approval boundaries.
+
+### R1 — Salvage map
+
+Classify every active product surface and supporting system as:
+
+- preserve unchanged;
+- preserve and refactor;
+- replace;
+- retain temporarily as reference;
+- remove only after replacement verification.
+
+Inventory:
+
+- routes and screens;
+- timing/audio/scene code;
+- Trigger Engines;
+- My Studio;
+- Supabase schema, storage, functions, and policies;
+- generated assets and visual experiments;
+- data requiring backup;
+- current behavior requiring screenshot or fixture preservation.
+
+No deletion occurs during the salvage-map task.
+
+### R2 — Clean entry shell
+
+- create an immediate instrument-first entry experience;
+- keep controls minimal, legible, and suitable for long sessions;
+- retain access to private My Studio;
+- avoid premature account, map, progression, lore-dashboard, and game-menu requirements;
+- introduce world evidence gradually rather than through exposition;
+- keep old product surfaces until replacement scope is approved.
+
+### R3 — Authoritative Trigger Engine core
+
+- establish the musical/event foundation described in Phase B;
+- prove one correct reference event path;
+- preserve useful normalized-phase mathematics;
+- build lifecycle, determinism, diagnostics, and tests;
+- keep rendering subordinate to musical truth.
+
+### R4 — Initial Trigger Engine family
+
+Deliver a small set of materially distinct reference engines rather than carrying every experiment forward immediately.
+
+Initial families may include:
+
+- pendulum/wave;
+- orbital/radial;
+- linear/lattice/path.
+
+Exact choices follow detailed reference annotation and project-owner approval. Variants must differ structurally, not only through color, particle count, or sound pack.
+
+### R5 — Private My Studio
+
+Consolidate the existing Studio into a reliable owner/developer authoring environment for:
+
+- sound packs and samples;
+- tuning, scales, and progressions;
+- compositions and voices;
+- Trigger Engine and scene configuration;
+- authoritative preview;
+- validation;
+- versioning and publication;
+- backup/export;
+- safe authentication and storage.
+
+Player-facing authoring remains unresolved and out of Reset scope.
+
+### R6 — Superseded-code removal
+
+Remove obsolete UI, duplicated engine paths, dead components, redirects, debug surfaces, styles, and assets only after:
+
+- replacement behavior is verified;
+- data is protected;
+- a complete removal manifest and diff are reviewed;
+- project-owner approval is explicit.
+
+### R7 — Game-graphics laboratory
+
+After the instrument and Studio foundation is stable, test:
+
+- Canvas 2D limits;
+- WebGL and shader workflows;
+- procedural sky, cloud, fog, light, trail, and particle systems;
+- 2D, 2.5D, and restrained 3D approaches;
+- cockpit framing;
+- open-source/licensed asset pipelines;
+- reduced motion;
+- long-session performance.
+
+Select the rendering stack from prototypes, visual review, production feasibility, and measurement. Do not select it merely because it is conventionally associated with games.
+
+### Reset exit criteria
+
+- the selected reference and originality boundary are documented;
+- the active product opens into a compelling standalone audiovisual instrument;
+- a small Trigger Engine family shares one correct architecture;
+- My Studio reliably authors and previews the supported content;
+- valuable prototype work is preserved or deliberately migrated;
+- superseded code is removed only through an approved manifest;
+- long-session, lifecycle, accessibility, and security baselines pass;
+- the project is ready to situate the instrument inside one crossing.
+
+### Do not build during Reset
+
+- final world map;
+- large route network;
+- progression trees or currencies;
+- authoritative living weather;
+- multiplayer/community;
+- player-authored Trigger Engines;
+- final game-graphics stack without prototypes;
+- marketing automation.
+
+---
+
 ## 6. Phase B — Freeze and test the musical foundation
 
 **Goal:** Make the audiovisual timing contract explicit and executable.  
-**Dependency:** Phase A audit.  
+**Dependency:** Phase A audit and Phase R Reset charter/salvage map.
 **Why now:** Every future transit, weather, progression, and visual system depends on it.
 
 ### Work
@@ -901,4 +1033,3 @@ It does not:
 - set calendar dates or budgets;
 - commit exploratory maximum scope;
 - replace `DECISIONS.md`.
-

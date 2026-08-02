@@ -28,9 +28,10 @@ Task routing:
 | Task | Required documents |
 |---|---|
 | Product behavior or new feature | `PHASE_VISION.md`, `GAME_SYSTEMS.md`, `DECISIONS.md` |
-| Audio, rhythm, timing, Trigger Engines | `AUDIO_RHYTHM_ARCHITECTURE.md`, `DECISIONS.md` |
+| Audio, rhythm, timing, Trigger Engines | `TRIGGER_ENGINE_REFERENCE.md`, `AUDIO_RHYTHM_ARCHITECTURE.md`, `DECISIONS.md` |
 | Lore, naming, narrative | `WORLD_LORE.md`, `CONTEXT_INDEX.md`, `GLOSSARY.md`, `DECISIONS.md` |
-| Visual/UI/environment work | `VISUAL_DIRECTION.md`, `PHASE_VISION.md`, relevant systems docs |
+| Trigger Engine visual work | `TRIGGER_ENGINE_REFERENCE.md`, `VISUAL_DIRECTION.md`, `AUDIO_RHYTHM_ARCHITECTURE.md`, `DECISIONS.md` |
+| Other visual/UI/environment work | `VISUAL_DIRECTION.md`, `PHASE_VISION.md`, relevant systems docs |
 | Planning or sequencing | `PRODUCT_ROADMAP.md`, `GAME_SYSTEMS.md`, `DECISIONS.md` |
 | Ambiguous or cross-system change | All documents above as relevant; do not guess |
 

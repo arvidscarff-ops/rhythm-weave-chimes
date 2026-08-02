@@ -21,6 +21,25 @@ PHASE should be able to hold two kinds of attention:
 
 Neither mode is secondary. PHASE is not a game with an incidental “ambient mode,” nor a background visualizer with progression attached. The product is defined by the coexistence of instrument, journey, world, and game.
 
+### 1.1 Entry experience and discovery order
+
+The generative audiovisual instrument is PHASE’s gateway.
+
+A new user should be able to encounter a beautiful long-form Trigger Engine composition before understanding the setting, creating an account, choosing a route, or learning progression systems. That experience must be strong enough to justify PHASE as:
+
+- a music show or composition;
+- an ambient music generator;
+- a meditation companion;
+- a deep-work or concentration tool;
+- a visual focus object;
+- a long-form listening environment.
+
+The world is then discovered as depth inside and beyond the instrument.
+
+Routes, locations, weather, MTC, Navigators, transmissions, progression, and mystery may first appear as subtle evidence that the composition belongs to a larger reality. Curiosity should precede exposition.
+
+This is a discovery sequence, not a declaration that the world or game is disposable. The instrument earns attention; the world transforms that attention into place, responsibility, continuity, and meaning.
+
 ---
 
 ## 2. Creative thesis

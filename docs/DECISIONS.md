@@ -832,6 +832,82 @@ PHASE requires a coherent original identity and must avoid derivative copying.
 
 ---
 
+## D031 — The generative audiovisual instrument is the gateway
+
+**Status:** ACCEPTED
+**Scope:** Product/onboarding
+
+### Decision
+
+PHASE’s first and immediate value is a standalone generative audiovisual instrument suitable for listening, viewing, meditation, deep work, concentration, rest, and long-form observation.
+
+World, transit, MTC, routes, lore, and progression are deeper layers that users may discover through and around that instrument. They are not prerequisites for the first meaningful experience.
+
+### Rationale
+
+The project began from the ambition to create a compelling polyrhythmic audiovisual generator. That experience must provide its own “wow” factor and earn curiosity before the larger world asks for attention.
+
+### Consequences
+
+- the default entry experience should reach a composition with minimal friction;
+- account creation and lore exposition do not precede first value;
+- the instrument remains first-class when world systems arrive;
+- world evidence should invite curiosity before explanation;
+- the first experience must support both attentive and peripheral use;
+- Reset / PHASE 2.0 prioritizes a clean instrument surface and private authoring foundation.
+
+### Prohibited regression
+
+Do not reduce the instrument to a disposable demo, background widget, transit decoration, or feature that only becomes meaningful after progression.
+
+### Source
+
+Explicit project-owner clarification, 2026-08-02; `PHASE_VISION.md`; `TRIGGER_ENGINE_REFERENCE.md`
+
+---
+
+## D032 — Lucid Rhythms is the originating Trigger Engine reference
+
+**Status:** ACCEPTED
+**Scope:** Product provenance/creative technology
+
+### Decision
+
+Lucid Rhythms is the originating technical and experiential reference for PHASE’s Trigger Engine ambition.
+
+The initial selected corpus is:
+
+1. *Space Pendulum*;
+2. *4 Hours Of Ambient Polyrhythms — Mandala*;
+3. *Sine Rhythms Remake*;
+4. *5 Hours Of Ambient Polyrhythms — Black Hole*;
+5. *Fading Scapes*;
+6. *Spinning Triangles — raw early experiment*.
+
+The corpus guides capability study and evaluation. PHASE will independently implement its own architecture, compositions, sound, visuals, interaction, identity, and world integration.
+
+### Rationale
+
+The Project Bible preserved the resulting architectural ideas but omitted the reference that established the original ambition. Recording it prevents the project from optimizing toward a generic visualizer or losing the required level of long-form generative audiovisual quality.
+
+### Consequences
+
+- Trigger Engine work must read `TRIGGER_ENGINE_REFERENCE.md`;
+- reference analysis separates confirmed observation from inference;
+- the corpus informs multiple engine families, long-form evaluation, and My Studio requirements;
+- D030’s translation and anti-copy rules remain fully applicable;
+- PHASE does not claim access to Lucid Rhythms’ private software design.
+
+### Prohibited regression
+
+Do not copy or redistribute reference audio, video, assets, exact compositions, branding, or protected visual expression. Do not present inferred private implementation details as fact.
+
+### Source
+
+Explicit project-owner selection, 2026-08-02; `TRIGGER_ENGINE_REFERENCE.md`
+
+---
+
 ## 2. Rejected decision register
 
 The following have been explicitly rejected or superseded:

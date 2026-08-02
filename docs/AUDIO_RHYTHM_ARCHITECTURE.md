@@ -30,6 +30,21 @@ This rule exists for both technical and creative reasons:
 - weather and transit systems must not create competing clocks;
 - a rendered frame must be reconstructable from authoritative state rather than from accumulated visual approximation.
 
+### 1.1 Originating reference and implementation independence
+
+Lucid Rhythms is the originating technical and experiential reference for PHASE’s Trigger Engine ambition. The selected corpus and reference boundary are defined in `TRIGGER_ENGINE_REFERENCE.md`.
+
+That reference establishes a target class of experience:
+
+- multiple perceptible polyrhythmic voices;
+- mathematical relationships made visible;
+- long-form generative listening;
+- relaxation and concentration use;
+- meaningful recurrence and alignment;
+- visually distinct compositional structures.
+
+It does not prescribe PHASE’s internal architecture. No private source code or authoritative algorithm specification is available. Observed reference behavior must not override PHASE’s accepted timing, event-identity, determinism, lifecycle, accessibility, or originality requirements.
+
 ---
 
 ## 2. Status language

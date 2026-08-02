@@ -1628,16 +1628,24 @@ Potential authoring domains:
 
 ### 24.1 My Studio/admin
 
-The conversation references an existing or intended “My Studio” area, but its present code behavior is unknown.
+The repository audit confirms an existing `/studio` area with pack, scale, scene, and Trigger Engine builder surfaces. It includes a mixture of Supabase-backed data, server functions, browser-local configuration, preview/audition behavior, and publishing controls.
 
-Future audit must determine:
+Its production reliability, authorization model, content-version contract, preview/runtime equivalence, and architectural compliance are not yet established.
 
-- what exists;
-- who can access it;
-- which content is hardcoded;
-- where data lives;
-- how versions publish;
-- whether tooling can safely preview a transit.
+During Reset / PHASE 2.0, My Studio is a private owner/developer tool. It should provide:
+
+- sound-pack and sample authoring;
+- scale, tuning, and progression authoring;
+- composition and voice relationships;
+- permitted Trigger Engine configuration;
+- scene and visual parameters;
+- live preview through the authoritative runtime;
+- validation;
+- draft, version, duplicate, and publish behavior;
+- backup or export;
+- safe authentication and storage.
+
+Whether My Studio or any Trigger Engine authoring becomes player-facing remains **UNRESOLVED / EXPLORATORY — LATER**.
 
 ### 24.2 Authoring principle
 

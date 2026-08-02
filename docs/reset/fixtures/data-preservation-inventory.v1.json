@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "7a8fcfc0282f8afa9b0a5adee6279494df349455",
+  "liveExportPerformed": false,
+  "supabase": {
+    "tables": [
+      "app_scenes",
+      "custom_scales",
+      "pack_slot_samples",
+      "pack_slots",
+      "packs",
+      "profiles",
+      "samples",
+      "scale_progressions",
+      "user_composer_presets",
+      "user_roles",
+      "user_scenes"
+    ],
+    "storageBuckets": [
+      "samples",
+      "pack-covers",
+      "scene-assets"
+    ],
+    "functionDependencies": [
+      "has_role"
+    ],
+    "backupBeforeRemoval": true,
+    "historyWarning": {
+      "migration": "supabase/migrations/20260701120217_a44e97d1-82b7-41cc-8db0-d278637b9e9b.sql",
+      "behavior": "Truncates pack_slots, packs, and samples before restructuring sample relationships."
+    }
+  },
+  "browserStorage": {
+    "localStorage": [
+      "phase:cycleOverride",
+      "phase.neural.settings",
+      "phase.composer.v1",
+      "phase:activeSceneId",
+      "phase:activeBlueprint.v1",
+      "sceneBuilder.presets.v1"
+    ],
+    "sessionStorage": [
+      "phaseZeroAudition"
+    ],
+    "supabaseAuthPersistence": true
+  },
+  "urlState": {
+    "location": "URL hash beginning #s=",
+    "version": 1,
+    "includes": [
+      "scene",
+      "bpm",
+      "knobs",
+      "fx",
+      "pack",
+      "neural settings",
+      "composer settings",
+      "legacy wheel state",
+      "legacy pendulum state",
+      "legacy bars state",
+      "optional legacy engine snapshots"
+    ]
+  },
+  "repositoryEvidence": {
+    "migrations": "supabase/migrations",
+    "generatedTypes": "src/integrations/supabase/types.ts",
+    "adminFunctions": "src/lib/admin",
+    "userContentFunctions": "src/lib/studio",
+    "builderStorage": "src/lib/studio/sceneBuilderStore.ts"
+  },
+  "requiredBeforeDestructiveChange": [
+    "Export live table rows with stable identifiers and timestamps.",
+    "Export storage object paths, metadata, byte sizes, and hashes.",
+    "Export browser-only Builder presets and active blueprint.",
+    "Record restore order and foreign-key dependencies.",
+    "Verify exports by row counts, object counts, hashes, and a restore rehearsal.",
+    "Obtain explicit approval for the exact removal or migration."
+  ]
+}

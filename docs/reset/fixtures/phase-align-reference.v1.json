@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "7a8fcfc0282f8afa9b0a5adee6279494df349455",
+  "sourceFile": "src/lib/engine/phaseAlign.ts",
+  "sourceSha256": "fad561ec80cb695376f061eba7118b8447d44916db8eabb22dd10252663141d3",
+  "cycle": {
+    "baseLaps": 10,
+    "macroCycleSeconds": 30,
+    "noteCount": 8
+  },
+  "laps": [
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17
+  ],
+  "progressCheckpoints": [
+    {
+      "sceneTime": 0,
+      "values": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "sceneTime": 3,
+      "values": [
+        0,
+        0.10000000000000009,
+        0.20000000000000018,
+        0.30000000000000004,
+        0.40000000000000013,
+        0.5,
+        0.6000000000000001,
+        0.7000000000000002
+      ]
+    },
+    {
+      "sceneTime": 15,
+      "values": [0, 0.5, 0, 0.5, 0, 0.5, 0, 0.5]
+    },
+    {
+      "sceneTime": 30,
+      "values": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "sceneTime": 60,
+      "values": [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    {
+      "sceneTime": 86400,
+      "values": [0, 0, 0, 0, 0, 0, 0, 0]
+    }
+  ],
+  "crossingWindows": [
+    {
+      "t0": 0,
+      "t1": 0.12,
+      "voices": [[0], [0], [0], [0], [0], [0], [0], [0]]
+    },
+    {
+      "t0": 0,
+      "t1": 3,
+      "voices": [
+        [0],
+        [0, 2.7272727272727275],
+        [0, 2.5],
+        [0, 2.3076923076923075],
+        [0, 2.142857142857143],
+        [0, 2],
+        [0, 1.875],
+        [0, 1.7647058823529411]
+      ]
+    },
+    {
+      "t0": 29.9,
+      "t1": 30.1,
+      "voices": [
+        [30],
+        [30.000000000000004],
+        [30],
+        [30],
+        [30],
+        [30],
+        [30],
+        [30]
+      ]
+    }
+  ],
+  "fullMacroCycleEventCounts": [10, 11, 12, 13, 14, 15, 16, 17],
+  "interpretationBoundary": {
+    "preservesCurrentOutput": true,
+    "definesFinalTimeRepresentation": false,
+    "definesFinalFloatingPointTolerance": false,
+    "definesFinalSchedulerBehavior": false
+  }
+}

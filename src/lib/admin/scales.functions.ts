@@ -1,6 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { requireStudioAdmin } from "@/lib/studio/admin-middleware";
+import {
+  assertPublicationReady,
+  validateScaleForPublication,
+} from "@/lib/studio/studioValidation";
 
 export type AdminProgressionStep = {
   id: string;
@@ -24,6 +28,39 @@ export type AdminScale = {
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
+}
+
+async function loadScaleForPublication(
+  supa: Awaited<ReturnType<typeof admin>>,
+  id: string,
+): Promise<AdminScale> {
+  const { data: scale, error } = await supa
+    .from("custom_scales")
+    .select(
+      "id,name,pool_size,intervals,pitches,is_published,updated_at,scale_progressions(id,step_order,chord_tones,accent_tones,duration_bars)",
+    )
+    .eq("id", id)
+    .single();
+  if (error || !scale) throw new Error(error?.message ?? "Scale not found");
+  type StepRow = { id: string; step_order: number; chord_tones: number[] | null; accent_tones: number[] | null; duration_bars: number | null };
+  return {
+    id: scale.id,
+    name: scale.name,
+    pool_size: scale.pool_size,
+    intervals: scale.intervals ?? [],
+    pitches: scale.pitches ?? [],
+    is_published: scale.is_published,
+    updated_at: scale.updated_at,
+    steps: ((scale.scale_progressions ?? []) as StepRow[])
+      .map((step) => ({
+        id: step.id,
+        step_order: step.step_order,
+        chord_tones: step.chord_tones ?? [],
+        accent_tones: step.accent_tones ?? [],
+        duration_bars: step.duration_bars ?? 4,
+      }))
+      .sort((a, b) => a.step_order - b.step_order),
+  };
 }
 
 export const listAdminScales = createServerFn({ method: "POST" })
@@ -92,6 +129,19 @@ export const updateAdminScale = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const supa = await admin();
+    if (data.is_published === true) {
+      const current = await loadScaleForPublication(supa, data.id);
+      assertPublicationReady(
+        "scale",
+        validateScaleForPublication({
+          ...current,
+          name: data.name ?? current.name,
+          pool_size: data.pool_size ?? current.pool_size,
+          intervals: data.intervals ?? current.intervals,
+          pitches: data.pitches ?? current.pitches,
+        }),
+      );
+    }
     const patch: TablesUpdate<"custom_scales"> = {};
     if (data.name !== undefined) patch.name = data.name;
     if (data.pool_size !== undefined) patch.pool_size = data.pool_size;

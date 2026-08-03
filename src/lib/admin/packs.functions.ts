@@ -3,6 +3,10 @@ import { createServerFn } from "@tanstack/react-start";
 import type { Humanization } from "./humanization";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { requireStudioAdmin } from "@/lib/studio/admin-middleware";
+import {
+  assertPublicationReady,
+  validatePackForPublication,
+} from "@/lib/studio/studioValidation";
 
 export const MAX_SLOTS_PER_PACK = 12;
 export const MAX_SAMPLES_PER_SLOT = 6;
@@ -42,6 +46,61 @@ function slugify(name: string) {
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
+}
+
+async function loadPackForPublication(
+  supa: Awaited<ReturnType<typeof admin>>,
+  id: string,
+): Promise<AdminPack> {
+  const { data: pack, error } = await supa
+    .from("packs")
+    .select(
+      "id,name,slug,description,is_published,cover_image_url,humanization,updated_at,pack_slots(id,slot_index,label,gain_db,pan,pitch_offset_semitones,humanization,pack_slot_samples(position,samples(id,name,storage_path)))",
+    )
+    .eq("id", id)
+    .single();
+  if (error || !pack) throw new Error(error?.message ?? "Pack not found");
+  type SlotSampleRow = { position: number; samples: { id: string; name: string; storage_path: string } | null };
+  type SlotRawRow = {
+    id: string;
+    slot_index: number;
+    label: string | null;
+    gain_db: number | string;
+    pan: number | string;
+    pitch_offset_semitones: number | string;
+    humanization: unknown;
+    pack_slot_samples: SlotSampleRow[] | null;
+  };
+  return {
+    id: pack.id,
+    name: pack.name,
+    slug: pack.slug,
+    description: pack.description,
+    is_published: pack.is_published,
+    cover_image_url: pack.cover_image_url,
+    humanization: pack.humanization as Humanization | null,
+    updated_at: pack.updated_at,
+    slots: ((pack.pack_slots ?? []) as unknown as SlotRawRow[])
+      .map((slot): AdminSlot => ({
+        id: slot.id,
+        slot_index: slot.slot_index,
+        label: slot.label,
+        gain_db: Number(slot.gain_db),
+        pan: Number(slot.pan),
+        pitch_offset_semitones: Number(slot.pitch_offset_semitones),
+        humanization: slot.humanization as Humanization | null,
+        samples: (slot.pack_slot_samples ?? [])
+          .filter((row) => !!row.samples)
+          .sort((a, b) => a.position - b.position)
+          .map((row) => ({
+            id: row.samples!.id,
+            name: row.samples!.name,
+            storage_path: row.samples!.storage_path,
+            position: row.position,
+          })),
+      }))
+      .sort((a, b) => a.slot_index - b.slot_index),
+  };
 }
 
 export const listAdminPacks = createServerFn({ method: "POST" })
@@ -137,6 +196,24 @@ export const updateAdminPack = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const supa = await admin();
+    if (data.is_published === true) {
+      const current = await loadPackForPublication(supa, data.id);
+      assertPublicationReady(
+        "pack",
+        validatePackForPublication({
+          ...current,
+          name: data.name ?? current.name,
+          description:
+            data.description === undefined ? current.description : data.description,
+          cover_image_url:
+            data.cover_image_url === undefined
+              ? current.cover_image_url
+              : data.cover_image_url,
+          humanization:
+            data.humanization === undefined ? current.humanization : data.humanization,
+        }),
+      );
+    }
     const patch: TablesUpdate<"packs"> = {};
     if (data.name !== undefined) patch.name = data.name;
     if (data.description !== undefined) patch.description = data.description;

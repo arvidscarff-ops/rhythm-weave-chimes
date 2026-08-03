@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test:r3": "node --test src/lib/rhythm/referenceAuthority.test.ts",
     "test:r4": "node --test src/lib/rhythm/referenceAuthority.test.ts src/lib/rhythm/pendulumFamily.test.ts src/lib/rhythm/orbitalFamily.test.ts src/lib/rhythm/stringNetworkFamily.test.ts",
-    "test:r5": "node --test src/lib/studio/studioSecurity.test.ts src/lib/studio/studioArchive.test.ts",
+    "test:r5": "node --test src/lib/studio/studioSecurity.test.ts src/lib/studio/studioArchive.test.ts src/lib/studio/studioValidation.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

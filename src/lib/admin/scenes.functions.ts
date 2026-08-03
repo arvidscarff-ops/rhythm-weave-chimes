@@ -3,6 +3,10 @@ import { createServerFn } from "@tanstack/react-start";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { requireStudioAdmin } from "@/lib/studio/admin-middleware";
 import { validateSceneAssetPath } from "@/lib/studio/studioSecurity";
+import {
+  assertPublicationReady,
+  validateSceneForPublication,
+} from "@/lib/studio/studioValidation";
 
 export const SCENE_ENGINES = [
   "stringNet",
@@ -197,6 +201,40 @@ export const updateAdminScene = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const supa = await admin();
+    if (data.is_published === true) {
+      const { data: currentRow, error: currentError } = await supa
+        .from("app_scenes")
+        .select(
+          "id,name,background_type,background_path,trigger_engine_id,ui_theme_colors,visual_fx,audio_reactive,is_published,updated_at,base_laps,macro_cycle_seconds,note_count",
+        )
+        .eq("id", data.id)
+        .single();
+      if (currentError || !currentRow) {
+        throw new Error(currentError?.message ?? "Scene not found");
+      }
+      const current = normalize(currentRow as unknown as Parameters<typeof normalize>[0]);
+      assertPublicationReady(
+        "scene",
+        validateSceneForPublication({
+          ...current,
+          name: data.name ?? current.name,
+          background_type: data.background_type ?? current.background_type,
+          background_path:
+            data.background_path === undefined
+              ? current.background_path
+              : data.background_path,
+          trigger_engine_id:
+            data.trigger_engine_id ?? current.trigger_engine_id,
+          ui_theme_colors: data.ui_theme_colors ?? current.ui_theme_colors,
+          visual_fx: data.visual_fx ?? current.visual_fx,
+          audio_reactive: data.audio_reactive ?? current.audio_reactive,
+          base_laps: data.base_laps ?? current.base_laps,
+          macro_cycle_seconds:
+            data.macro_cycle_seconds ?? current.macro_cycle_seconds,
+          note_count: data.note_count ?? current.note_count,
+        }),
+      );
+    }
     const patch: TablesUpdate<"app_scenes"> = {};
     if (data.name !== undefined) patch.name = data.name;
     if (data.background_type !== undefined) patch.background_type = data.background_type;

@@ -6,6 +6,7 @@ import {
   snapshotAt,
   ticksToSeconds,
   type MusicalTick,
+  type ReferenceComposition,
   type ReferenceRhythmEvent,
   type ReferenceRhythmSnapshot,
 } from "./referenceAuthority";
@@ -32,9 +33,11 @@ export type ReferenceRuntimeDiagnostics = {
  * projects their future events onto Web Audio; the renderer independently
  * reconstructs current geometry from the same transport and event IDs.
  */
-class ReferenceRuntime {
+export class ReferenceRuntime {
   readonly transport = new ReferenceTransport();
 
+  private readonly composition: ReferenceComposition;
+  private readonly masterLevel: number;
   private audioContext: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private schedulerTimer: ReturnType<typeof setInterval> | null = null;
@@ -47,14 +50,19 @@ class ReferenceRuntime {
   private lastScheduledEventId: string | null = null;
   private lastPhaseZeroTick = 0n;
 
+  constructor(composition: ReferenceComposition, masterLevel = 0.42) {
+    this.composition = composition;
+    this.masterLevel = masterLevel;
+  }
+
   snapshot(): ReferenceRhythmSnapshot {
-    return snapshotAt(R3_REFERENCE_COMPOSITION, this.transport.positionTick());
+    return snapshotAt(this.composition, this.transport.positionTick());
   }
 
   recentEvents(): ReferenceRhythmEvent[] {
     const now = this.transport.positionTick();
     const start = now > VISUAL_EVENT_AGE_TICKS ? now - VISUAL_EVENT_AGE_TICKS : 0n;
-    return eventsBetween(R3_REFERENCE_COMPOSITION, start, now + 1n);
+    return eventsBetween(this.composition, start, now + 1n);
   }
 
   diagnostics(): ReferenceRuntimeDiagnostics {
@@ -104,7 +112,7 @@ class ReferenceRuntime {
     const AudioCtor = window.AudioContext ?? window.webkitAudioContext;
     const context = new AudioCtor();
     const master = context.createGain();
-    master.gain.value = 0.42;
+    master.gain.value = this.masterLevel;
     master.connect(context.destination);
     this.audioContext = context;
     this.masterGain = master;
@@ -136,7 +144,7 @@ class ReferenceRuntime {
     const horizonTick = nowTick + LOOKAHEAD_TICKS;
     if (this.scheduledThroughTick >= horizonTick) return;
 
-    const events = eventsBetween(R3_REFERENCE_COMPOSITION, this.scheduledThroughTick, horizonTick);
+    const events = eventsBetween(this.composition, this.scheduledThroughTick, horizonTick);
     for (const event of events) {
       if (this.scheduledIds.has(event.id)) {
         this.duplicateEventCount += 1;
@@ -209,9 +217,7 @@ class ReferenceRuntime {
 
   private pruneEventIdentities(nowTick: MusicalTick): void {
     const oldestKeptTick =
-      nowTick > R3_REFERENCE_COMPOSITION.macroCycleTicks
-        ? nowTick - R3_REFERENCE_COMPOSITION.macroCycleTicks
-        : 0n;
+      nowTick > this.composition.macroCycleTicks ? nowTick - this.composition.macroCycleTicks : 0n;
     for (const [eventId, tick] of this.scheduledIds) {
       if (tick < oldestKeptTick && !this.activeSources.has(eventId)) {
         this.scheduledIds.delete(eventId);
@@ -226,4 +232,4 @@ declare global {
   }
 }
 
-export const r3ReferenceRuntime = new ReferenceRuntime();
+export const r3ReferenceRuntime = new ReferenceRuntime(R3_REFERENCE_COMPOSITION);

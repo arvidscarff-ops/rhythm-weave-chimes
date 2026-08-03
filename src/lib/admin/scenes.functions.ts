@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { requireStudioAdmin } from "@/lib/studio/admin-middleware";
-import { validateSceneAssetPath } from "@/lib/studio/studioSecurity";
+import { validateSceneMediaPath } from "@/lib/studio/studioSecurity";
 import {
   assertPublicationReady,
   validateSceneForPublication,
@@ -269,7 +269,7 @@ export const deleteAdminScene = createServerFn({ method: "POST" })
 export const createSceneAssetUploadUrl = createServerFn({ method: "POST" })
   .middleware([requireStudioAdmin])
   .inputValidator((data: { path: string }) => ({
-    path: validateSceneAssetPath(data.path),
+    path: validateSceneMediaPath(data.path),
   }))
   .handler(
     async ({ data }): Promise<{ signedUrl: string; token: string; path: string }> => {
@@ -288,7 +288,7 @@ export const createSceneAssetUploadUrl = createServerFn({ method: "POST" })
 export const signedAdminSceneAssetUrl = createServerFn({ method: "POST" })
   .middleware([requireStudioAdmin])
   .inputValidator((data: { path: string }) => ({
-    path: validateSceneAssetPath(data.path),
+    path: validateSceneMediaPath(data.path),
   }))
   .handler(async ({ data }): Promise<{ url: string }> => {
     const supa = await admin();
@@ -305,7 +305,7 @@ export const signedAdminSceneAssetUrl = createServerFn({ method: "POST" })
  */
 export const signedSceneAssetUrl = createServerFn({ method: "POST" })
   .inputValidator((data: { path: string }) => ({
-    path: validateSceneAssetPath(data.path),
+    path: validateSceneMediaPath(data.path),
   }))
   .handler(async ({ data }): Promise<{ url: string }> => {
     const supa = await admin();

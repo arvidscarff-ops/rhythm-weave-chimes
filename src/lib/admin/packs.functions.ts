@@ -7,6 +7,7 @@ import {
   assertPublicationReady,
   validatePackForPublication,
 } from "@/lib/studio/studioValidation";
+import { validatePackAssetPath } from "@/lib/studio/studioSecurity";
 
 export const MAX_SLOTS_PER_PACK = 12;
 export const MAX_SAMPLES_PER_SLOT = 6;
@@ -347,7 +348,10 @@ export const setAdminSlotSamples = createServerFn({ method: "POST" })
 export const registerAdminSample = createServerFn({ method: "POST" })
   .middleware([requireStudioAdmin])
   .inputValidator(
-    (data: { name: string; storage_path: string; mime_type?: string }) => data,
+    (data: { name: string; storage_path: string; mime_type?: string }) => ({
+      ...data,
+      storage_path: validatePackAssetPath("samples", data.storage_path),
+    }),
   )
   .handler(async ({ data }) => {
     const supa = await admin();
@@ -367,7 +371,9 @@ export const registerAdminSample = createServerFn({ method: "POST" })
 
 export const signedCoverUrl = createServerFn({ method: "POST" })
   .middleware([requireStudioAdmin])
-  .inputValidator((data: { storage_path: string }) => data)
+  .inputValidator((data: { storage_path: string }) => ({
+    storage_path: validatePackAssetPath("pack-covers", data.storage_path),
+  }))
   .handler(async ({ data }): Promise<{ url: string }> => {
     const supa = await admin();
     const { data: signed, error } = await supa.storage
@@ -387,7 +393,10 @@ export const createAdminUploadUrl = createServerFn({ method: "POST" })
       if (!ADMIN_BUCKETS.includes(data.bucket)) {
         throw new Error(`Bucket not allowed: ${data.bucket}`);
       }
-      return data;
+      return {
+        ...data,
+        path: validatePackAssetPath(data.bucket, data.path),
+      };
     },
   )
   .handler(

@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import type { Humanization } from "./humanization";
 import type { TablesUpdate } from "@/integrations/supabase/types";
+import { requireStudioAdmin } from "@/lib/studio/admin-middleware";
 
 export const MAX_SLOTS_PER_PACK = 12;
 export const MAX_SAMPLES_PER_SLOT = 6;
@@ -43,15 +44,9 @@ async function admin() {
   return supabaseAdmin;
 }
 
-async function gate(passcode: string) {
-  const { assertPasscode } = await import("./gate.server");
-  assertPasscode(passcode);
-}
-
 export const listAdminPacks = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string }) => data)
-  .handler(async ({ data: input }): Promise<AdminPack[]> => {
-    await gate(input.passcode);
+  .middleware([requireStudioAdmin])
+  .handler(async (): Promise<AdminPack[]> => {
     const supa = await admin();
     const { data, error } = await supa
       .from("packs")
@@ -104,9 +99,9 @@ export const listAdminPacks = createServerFn({ method: "POST" })
   });
 
 export const createAdminPack = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string; name: string }) => data)
+  .middleware([requireStudioAdmin])
+  .inputValidator((data: { name: string }) => data)
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const slug = `${slugify(data.name)}-${Date.now().toString(36).slice(-4)}`;
     const { data: pack, error } = await supa
@@ -129,9 +124,9 @@ export const createAdminPack = createServerFn({ method: "POST" })
   });
 
 export const updateAdminPack = createServerFn({ method: "POST" })
+  .middleware([requireStudioAdmin])
   .inputValidator(
     (data: {
-      passcode: string;
       id: string;
       name?: string;
       description?: string | null;
@@ -141,7 +136,6 @@ export const updateAdminPack = createServerFn({ method: "POST" })
     }) => data,
   )
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const patch: TablesUpdate<"packs"> = {};
     if (data.name !== undefined) patch.name = data.name;
@@ -155,9 +149,9 @@ export const updateAdminPack = createServerFn({ method: "POST" })
   });
 
 export const deleteAdminPack = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string; id: string }) => data)
+  .middleware([requireStudioAdmin])
+  .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const { error } = await supa.from("packs").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -165,9 +159,9 @@ export const deleteAdminPack = createServerFn({ method: "POST" })
   });
 
 export const updateAdminSlot = createServerFn({ method: "POST" })
+  .middleware([requireStudioAdmin])
   .inputValidator(
     (data: {
-      passcode: string;
       id: string;
       label?: string | null;
       gain_db?: number;
@@ -177,7 +171,6 @@ export const updateAdminSlot = createServerFn({ method: "POST" })
     }) => data,
   )
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const patch: TablesUpdate<"pack_slots"> = {};
     if (data.label !== undefined) patch.label = data.label;
@@ -192,9 +185,9 @@ export const updateAdminSlot = createServerFn({ method: "POST" })
   });
 
 export const addAdminSlot = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string; pack_id: string }) => data)
+  .middleware([requireStudioAdmin])
+  .inputValidator((data: { pack_id: string }) => data)
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const { data: existing, error: e1 } = await supa
       .from("pack_slots")
@@ -215,9 +208,9 @@ export const addAdminSlot = createServerFn({ method: "POST" })
   });
 
 export const removeAdminSlot = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string; id: string }) => data)
+  .middleware([requireStudioAdmin])
+  .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const { data: slot, error: eSel } = await supa
       .from("pack_slots")
@@ -249,14 +242,14 @@ export const removeAdminSlot = createServerFn({ method: "POST" })
   });
 
 export const setAdminSlotSamples = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string; slot_id: string; sample_ids: string[] }) => {
+  .middleware([requireStudioAdmin])
+  .inputValidator((data: { slot_id: string; sample_ids: string[] }) => {
     if (data.sample_ids.length > MAX_SAMPLES_PER_SLOT) {
       throw new Error(`Max ${MAX_SAMPLES_PER_SLOT} samples per slot`);
     }
     return data;
   })
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const { error: eDel } = await supa
       .from("pack_slot_samples")
@@ -275,11 +268,11 @@ export const setAdminSlotSamples = createServerFn({ method: "POST" })
   });
 
 export const registerAdminSample = createServerFn({ method: "POST" })
+  .middleware([requireStudioAdmin])
   .inputValidator(
-    (data: { passcode: string; name: string; storage_path: string; mime_type?: string }) => data,
+    (data: { name: string; storage_path: string; mime_type?: string }) => data,
   )
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const { data: row, error } = await supa
       .from("samples")
@@ -296,9 +289,9 @@ export const registerAdminSample = createServerFn({ method: "POST" })
   });
 
 export const signedCoverUrl = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string; storage_path: string }) => data)
+  .middleware([requireStudioAdmin])
+  .inputValidator((data: { storage_path: string }) => data)
   .handler(async ({ data }): Promise<{ url: string }> => {
-    await gate(data.passcode);
     const supa = await admin();
     const { data: signed, error } = await supa.storage
       .from("pack-covers")
@@ -311,8 +304,9 @@ const ADMIN_BUCKETS = ["pack-covers", "samples"] as const;
 export type AdminBucket = (typeof ADMIN_BUCKETS)[number];
 
 export const createAdminUploadUrl = createServerFn({ method: "POST" })
+  .middleware([requireStudioAdmin])
   .inputValidator(
-    (data: { passcode: string; bucket: AdminBucket; path: string; upsert?: boolean }) => {
+    (data: { bucket: AdminBucket; path: string; upsert?: boolean }) => {
       if (!ADMIN_BUCKETS.includes(data.bucket)) {
         throw new Error(`Bucket not allowed: ${data.bucket}`);
       }
@@ -321,7 +315,6 @@ export const createAdminUploadUrl = createServerFn({ method: "POST" })
   )
   .handler(
     async ({ data }): Promise<{ signedUrl: string; token: string; path: string }> => {
-      await gate(data.passcode);
       const supa = await admin();
       const { data: signed, error } = await supa.storage
         .from(data.bucket)

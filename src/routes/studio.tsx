@@ -1,8 +1,9 @@
-import { createFileRoute, Link, Outlet, useRouter, useLocation } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { ChevronLeft, Lock } from "lucide-react";
+import { createFileRoute, Link, Outlet, useLocation, useRouter } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { ChevronLeft, LogOut, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PasscodeProvider, usePasscode } from "@/lib/admin/passcode-context";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/studio")({
   ssr: false,
@@ -10,47 +11,58 @@ export const Route = createFileRoute("/studio")({
   head: () => ({
     meta: [
       { title: "My Studio · Phase" },
-      { name: "description", content: "Phase creator workspace — sound packs, scales, and progressions." },
+      {
+        name: "description",
+        content: "Phase creator workspace — sound packs, scales, and progressions.",
+      },
     ],
   }),
 });
 
 function StudioLayout() {
-  return (
-    <PasscodeProvider>
-      <Gate />
-    </PasscodeProvider>
-  );
-}
-
-function Gate() {
-  const { ensure, get, set } = usePasscode();
+  const { user, isAdmin, loading } = useAuth();
   const router = useRouter();
-  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const w = window as unknown as { __phaseAdminPass?: string };
-    if (w.__phaseAdminPass) {
-      set(w.__phaseAdminPass);
-      w.__phaseAdminPass = undefined;
+    if (!loading && !user) {
+      void router.navigate({ to: "/auth" });
     }
-    if (get()) {
-      setReady(true);
-      return;
-    }
-    ensure()
-      .then(() => setReady(true))
-      .catch(() => {
-        void router.navigate({ to: "/" });
-      });
-  }, [ensure, get, router, set]);
+  }, [loading, router, user]);
 
-  if (!ready) return null;
-  return <Shell />;
+  if (loading || !user) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-background text-foreground">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-foreground/45">
+          Verifying Studio access…
+        </p>
+      </main>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-background px-6 text-foreground">
+        <section className="max-w-md border border-white/10 bg-white/[0.03] p-8 text-center">
+          <ShieldAlert className="mx-auto h-6 w-6 text-foreground/55" />
+          <h1 className="mt-4 text-lg">My Studio is private</h1>
+          <p className="mt-2 text-sm leading-relaxed text-foreground/55">
+            This account is authenticated but does not have the administrator role required for the
+            owner/developer workspace.
+          </p>
+          <Button asChild variant="secondary" className="mt-6">
+            <Link to="/" search={{ shell: "reset" }}>
+              Return to instrument
+            </Link>
+          </Button>
+        </section>
+      </main>
+    );
+  }
+
+  return <Shell accountLabel={user.email ?? "Administrator"} />;
 }
 
-function Shell() {
-  const { clear } = usePasscode();
+function Shell({ accountLabel }: { accountLabel: string }) {
   const router = useRouter();
   const pathname = useLocation({ select: (l) => l.pathname });
   const tabs = [
@@ -89,16 +101,21 @@ function Shell() {
             })}
           </nav>
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            clear();
-            void router.navigate({ to: "/" });
-          }}
-        >
-          <Lock className="h-3 w-3 mr-2" /> Lock
-        </Button>
+        <div className="flex items-center gap-3">
+          <span className="hidden max-w-52 truncate font-mono text-[9px] uppercase tracking-[0.16em] text-foreground/35 sm:block">
+            {accountLabel}
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={async () => {
+              await supabase.auth.signOut();
+              void router.navigate({ to: "/" });
+            }}
+          >
+            <LogOut className="mr-2 h-3 w-3" /> Sign out
+          </Button>
+        </div>
       </header>
       <main className="mx-auto max-w-7xl px-6 py-6">
         <Outlet />

@@ -9,14 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { usePasscode } from "@/lib/admin/passcode-context";
 import {
   listAdminScenes,
   createAdminScene,
   updateAdminScene,
   deleteAdminScene,
   createSceneAssetUploadUrl,
-  signedSceneAssetUrl,
+  signedAdminSceneAssetUrl,
   SCENE_ENGINES,
   DEFAULT_THEME,
   DEFAULT_FX,
@@ -47,17 +46,13 @@ const ENGINE_LABELS: Record<SceneEngineId, string> = {
 
 function ScenesAdmin() {
   const qc = useQueryClient();
-  const { ensure, get: getPass } = usePasscode();
   const list = useServerFn(listAdminScenes);
   const create = useServerFn(createAdminScene);
   const del = useServerFn(deleteAdminScene);
 
   const scenesQ = useQuery({
     queryKey: ["admin", "scenes"],
-    queryFn: async () => {
-      const pass = getPass() || (await ensure());
-      return list({ data: { passcode: pass } });
-    },
+    queryFn: () => list(),
   });
 
   const scenes = scenesQ.data ?? [];
@@ -68,10 +63,7 @@ function ScenesAdmin() {
   }, [scenes, selectedId]);
 
   const createMut = useMutation({
-    mutationFn: async (name: string) => {
-      const pass = getPass() || (await ensure());
-      return create({ data: { passcode: pass, name } });
-    },
+    mutationFn: (name: string) => create({ data: { name } }),
     onSuccess: async ({ id }) => {
       await qc.invalidateQueries({ queryKey: ["admin", "scenes"] });
       setSelectedId(id);
@@ -81,10 +73,7 @@ function ScenesAdmin() {
   });
 
   const delMut = useMutation({
-    mutationFn: async (id: string) => {
-      const pass = getPass() || (await ensure());
-      return del({ data: { passcode: pass, id } });
-    },
+    mutationFn: (id: string) => del({ data: { id } }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "scenes"] });
       setSelectedId(null);
@@ -155,10 +144,9 @@ function ScenesAdmin() {
 
 function SceneEditor({ scene, onDelete }: { scene: SceneRow; onDelete: () => void }) {
   const qc = useQueryClient();
-  const { ensure, get: getPass } = usePasscode();
   const update = useServerFn(updateAdminScene);
   const signUpload = useServerFn(createSceneAssetUploadUrl);
-  const signRead = useServerFn(signedSceneAssetUrl);
+  const signRead = useServerFn(signedAdminSceneAssetUrl);
 
   const [name, setName] = useState(scene.name);
   const [engine, setEngine] = useState<SceneEngineId>(scene.trigger_engine_id);
@@ -194,12 +182,9 @@ function SceneEditor({ scene, onDelete }: { scene: SceneRow; onDelete: () => voi
     };
   }, [bgPath, signRead]);
 
-  type SavePatch = Omit<Parameters<typeof update>[0]["data"], "passcode">;
+  type SavePatch = Parameters<typeof update>[0]["data"];
   const saveMut = useMutation({
-    mutationFn: async (patch: SavePatch) => {
-      const pass = getPass() || (await ensure());
-      return update({ data: { ...patch, passcode: pass } });
-    },
+    mutationFn: (patch: SavePatch) => update({ data: patch }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "scenes"] }),
     onError: (e) => toast.error(e instanceof Error ? e.message : "Save failed"),
   });
@@ -246,10 +231,9 @@ function SceneEditor({ scene, onDelete }: { scene: SceneRow; onDelete: () => voi
       }
       setUploading(true);
       try {
-        const pass = getPass() || (await ensure());
         const ext = (file.name.split(".").pop() ?? (isVideo ? "mp4" : "png")).toLowerCase();
         const path = `${scene.id}/${Date.now()}.${ext}`;
-        const { signedUrl } = await signUpload({ data: { passcode: pass, path } });
+        const { signedUrl } = await signUpload({ data: { path } });
         const res = await fetch(signedUrl, {
           method: "PUT",
           headers: { "Content-Type": file.type, "x-upsert": "true" },
@@ -265,7 +249,7 @@ function SceneEditor({ scene, onDelete }: { scene: SceneRow; onDelete: () => voi
         setUploading(false);
       }
     },
-    [ensure, getPass, scene.id, signUpload, uploading],
+    [scene.id, signUpload, uploading],
   );
 
   return (

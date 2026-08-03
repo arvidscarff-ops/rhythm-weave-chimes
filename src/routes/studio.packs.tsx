@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
 import { auditionSample } from "@/lib/dev/samplePlayer";
-import { usePasscode } from "@/lib/admin/passcode-context";
 import {
   listAdminPacks,
   createAdminPack,
@@ -40,14 +39,13 @@ export const Route = createFileRoute("/studio/packs")({
 
 function AdminUI() {
   const qc = useQueryClient();
-  const { get: getPass } = usePasscode();
   const list = useServerFn(listAdminPacks);
   const create = useServerFn(createAdminPack);
   const del = useServerFn(deleteAdminPack);
 
   const packsQ = useQuery({
     queryKey: ["admin", "packs"],
-    queryFn: () => list({ data: { passcode: getPass() } }),
+    queryFn: () => list(),
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const packs = packsQ.data ?? [];
@@ -57,7 +55,7 @@ function AdminUI() {
   }, [packs, selectedId]);
 
   const createMut = useMutation({
-    mutationFn: (name: string) => create({ data: { passcode: getPass(), name } }),
+    mutationFn: (name: string) => create({ data: { name } }),
     onSuccess: async ({ id }) => {
       await qc.invalidateQueries({ queryKey: ["admin", "packs"] });
       setSelectedId(id);
@@ -67,7 +65,7 @@ function AdminUI() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: string) => del({ data: { passcode: getPass(), id } }),
+    mutationFn: (id: string) => del({ data: { id } }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "packs"] });
       setSelectedId(null);
@@ -139,7 +137,6 @@ function AdminUI() {
 
 function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void }) {
   const qc = useQueryClient();
-  const { get: getPass } = usePasscode();
   const update = useServerFn(updateAdminPack);
   const signCover = useServerFn(signedCoverUrl);
   const createUploadUrl = useServerFn(createAdminUploadUrl);
@@ -156,15 +153,14 @@ function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void 
     setHumanization(pack.humanization ?? DEFAULT_HUMANIZATION);
     setCoverPreview(null);
     if (pack.cover_image_url) {
-      signCover({ data: { passcode: getPass(), storage_path: pack.cover_image_url } })
+      signCover({ data: { storage_path: pack.cover_image_url } })
         .then((r) => setCoverPreview(r.url))
         .catch(() => {});
     }
-  }, [pack.id, pack.cover_image_url, pack.name, pack.description, pack.humanization, signCover, getPass]);
+  }, [pack.id, pack.cover_image_url, pack.name, pack.description, pack.humanization, signCover]);
 
   const saveMut = useMutation({
-    mutationFn: (patch: Omit<Parameters<typeof update>[0]["data"], "passcode">) =>
-      update({ data: { ...patch, passcode: getPass() } }),
+    mutationFn: (patch: Parameters<typeof update>[0]["data"]) => update({ data: patch }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "packs"] });
       toast.success("Saved");
@@ -172,7 +168,7 @@ function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void 
   });
 
   const publishMut = useMutation({
-    mutationFn: (v: boolean) => update({ data: { passcode: getPass(), id: pack.id, is_published: v } }),
+    mutationFn: (v: boolean) => update({ data: { id: pack.id, is_published: v } }),
     onSuccess: (_r, v) => {
       qc.invalidateQueries({ queryKey: ["admin", "packs"] });
       toast.success(v ? "Published" : "Unpublished");
@@ -183,7 +179,7 @@ function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void 
     const ext = file.name.split(".").pop() ?? "png";
     const path = `${pack.id}/cover-${Date.now()}.${ext}`;
     const signed = await createUploadUrl({
-      data: { passcode: getPass(), bucket: "pack-covers", path, upsert: true },
+      data: { bucket: "pack-covers", path, upsert: true },
     });
     const { error } = await supabase.storage
       .from("pack-covers")
@@ -272,13 +268,12 @@ function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void 
 
 function SlotsSection({ pack }: { pack: AdminPack }) {
   const qc = useQueryClient();
-  const { get: getPass } = usePasscode();
   const addSlot = useServerFn(addAdminSlot);
   const removeSlot = useServerFn(removeAdminSlot);
   const invalidate = () => qc.invalidateQueries({ queryKey: ["admin", "packs"] });
 
   const addMut = useMutation({
-    mutationFn: () => addSlot({ data: { passcode: getPass(), pack_id: pack.id } }),
+    mutationFn: () => addSlot({ data: { pack_id: pack.id } }),
     onSuccess: () => {
       invalidate();
       toast.success("Slot added");
@@ -287,7 +282,7 @@ function SlotsSection({ pack }: { pack: AdminPack }) {
   });
 
   const removeMut = useMutation({
-    mutationFn: (id: string) => removeSlot({ data: { passcode: getPass(), id } }),
+    mutationFn: (id: string) => removeSlot({ data: { id } }),
     onSuccess: () => {
       invalidate();
       toast.success("Slot removed");
@@ -437,7 +432,6 @@ function SlotEditor({
   onRemove: () => void;
 }) {
   const qc = useQueryClient();
-  const { get: getPass } = usePasscode();
   const update = useServerFn(updateAdminSlot);
   const register = useServerFn(registerAdminSample);
   const createUploadUrl = useServerFn(createAdminUploadUrl);
@@ -476,7 +470,7 @@ function SlotEditor({
           .toString(36)
           .slice(2, 6)}.wav`;
         const signed = await createUploadUrl({
-          data: { passcode: getPass(), bucket: "samples", path, upsert: true },
+          data: { bucket: "samples", path, upsert: true },
         });
         const { error } = await supabase.storage
           .from("samples")
@@ -486,7 +480,6 @@ function SlotEditor({
         if (error) throw error;
         const { id } = await register({
           data: {
-            passcode: getPass(),
             name: file.name,
             storage_path: signed.path,
             mime_type: file.type || "audio/wav",
@@ -495,7 +488,7 @@ function SlotEditor({
         newIds.push(id);
       }
       await setSamples({
-        data: { passcode: getPass(), slot_id: slot.id, sample_ids: [...currentIds, ...newIds] },
+        data: { slot_id: slot.id, sample_ids: [...currentIds, ...newIds] },
       });
       toast.success(`Added ${newIds.length} variation${newIds.length === 1 ? "" : "s"}`);
       invalidate();
@@ -509,7 +502,7 @@ function SlotEditor({
   const removeSampleAt = async (idx: number) => {
     const next = currentIds.slice();
     next.splice(idx, 1);
-    await setSamples({ data: { passcode: getPass(), slot_id: slot.id, sample_ids: next } });
+    await setSamples({ data: { slot_id: slot.id, sample_ids: next } });
     invalidate();
   };
 
@@ -518,19 +511,19 @@ function SlotEditor({
     if (j < 0 || j >= currentIds.length) return;
     const next = currentIds.slice();
     [next[idx], next[j]] = [next[j], next[idx]];
-    await setSamples({ data: { passcode: getPass(), slot_id: slot.id, sample_ids: next } });
+    await setSamples({ data: { slot_id: slot.id, sample_ids: next } });
     invalidate();
   };
 
   const saveName = async () => {
     if ((slot.label ?? "") === name) return;
-    await update({ data: { passcode: getPass(), id: slot.id, label: name || null } });
+    await update({ data: { id: slot.id, label: name || null } });
     invalidate();
   };
 
   const saveOverride = async () => {
     await update({
-      data: { passcode: getPass(), id: slot.id, humanization: overrideOn ? hum : null },
+      data: { id: slot.id, humanization: overrideOn ? hum : null },
     });
     toast.success("Slot humanization saved");
     invalidate();

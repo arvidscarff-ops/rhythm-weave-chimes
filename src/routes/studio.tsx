@@ -66,6 +66,7 @@ function Shell({ accountLabel }: { accountLabel: string }) {
   const router = useRouter();
   const pathname = useLocation({ select: (l) => l.pathname });
   const tabs = [
+    { to: "/studio", label: "Overview", exact: true },
     { to: "/studio/packs", label: "Packs" },
     { to: "/studio/scales", label: "Scales" },
     { to: "/studio/scenes", label: "Scenes" },
@@ -84,7 +85,10 @@ function Shell({ accountLabel }: { accountLabel: string }) {
           <h1 className="text-base font-medium tracking-wide">My Studio</h1>
           <nav className="ml-4 flex gap-1 text-[11px] uppercase tracking-[0.18em]">
             {tabs.map((t) => {
-              const active = pathname.startsWith(t.to);
+              const active =
+                "exact" in t
+                  ? pathname === t.to || pathname === `${t.to}/`
+                  : pathname.startsWith(t.to);
               return (
                 <Link
                   key={t.to}

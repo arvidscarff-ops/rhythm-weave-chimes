@@ -5,11 +5,11 @@
  * controls (Geometry, Background, Notes, Trails, Palette, Burst FX,
  * Path Pulse, Climax, Cycle) plus a persistent Preset panel. Right
  * pane: live preview canvas rendering the same `customScene` used in
- * production, with a theater-mode expand overlay.
+ * the legacy `customScene`, with a theater-mode expand overlay.
  *
  * All state is a single `CustomSceneBlueprint` object serialized to
- * LocalStorage — no server calls, no AI credits, and preset loads never
- * reset the running musical clock.
+ * LocalStorage. The builder is retained for blueprint recovery during Reset;
+ * it is not an authoritative Trigger Engine or publication path.
  */
 
 import { createFileRoute } from "@tanstack/react-router";
@@ -53,7 +53,10 @@ import {
   type PresetMap,
 } from "@/lib/studio/sceneBuilderStore";
 import { PALETTE_PRESETS, paletteAt } from "@/lib/studio/palettes";
-import { getActiveBlueprint, setActiveBlueprint } from "@/lib/scenes/activeBlueprint";
+import {
+  getActiveBlueprint,
+  setPreviewBlueprint,
+} from "@/lib/scenes/activeBlueprint";
 import { customScene, type CustomSceneState } from "@/lib/scenes/customScene";
 import type { SceneGlobals } from "@/lib/engine/sceneTypes";
 import { createFireLayer } from "@/lib/visuals/fireShaderLayer";
@@ -128,7 +131,6 @@ function BuilderPage() {
     if (!p) return;
     setSelectedId(id);
     setBp(p.blueprint);
-    setActiveBlueprint(p.blueprint);
   };
 
   const deleteHandler = () => {
@@ -142,19 +144,6 @@ function BuilderPage() {
     });
     setSelectedId(null);
   };
-
-  const publishHandler = () => {
-    setActiveBlueprint(bp);
-    toast.success(`"${bp.name}" is now the active custom scene`, {
-      description: "In the app, set Scene → Custom to see it.",
-    });
-  };
-
-  // Live-publish so preset selection swaps the app scene without needing
-  // a manual "Load into app" click.
-  useEffect(() => {
-    setActiveBlueprint(bp);
-  }, [bp]);
 
   const importRef = useRef<HTMLInputElement>(null);
   const importHandler = () => importRef.current?.click();
@@ -170,7 +159,18 @@ function BuilderPage() {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[420px_1fr]">
+    <div className="space-y-4">
+      <section className="border border-amber-300/25 bg-amber-300/[0.05] p-4">
+        <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-amber-200/75">
+          Legacy lab · local blueprints only
+        </div>
+        <p className="mt-2 max-w-3xl text-xs leading-relaxed text-foreground/55">
+          This pre-Reset experiment is preserved so existing blueprints can be reviewed and exported.
+          Its accumulated preview clock is not the PHASE rhythm authority, and edits made here are not
+          published into the player.
+        </p>
+      </section>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[420px_1fr]">
       {/* ================ Left rack ================ */}
       <aside className="space-y-4">
         <header className="flex items-center gap-2">
@@ -180,9 +180,6 @@ function BuilderPage() {
             className="max-w-[220px] bg-white/5"
             placeholder="Preset name"
           />
-          <Button size="sm" variant="secondary" onClick={publishHandler} title="Publish to app">
-            <Play className="h-3 w-3 mr-2" /> Publish
-          </Button>
           <Button size="sm" onClick={savePresetHandler} title="Save preset">
             <Save className="h-3 w-3 mr-2" /> Save
           </Button>
@@ -212,6 +209,7 @@ function BuilderPage() {
       {/* ================ Right preview ================ */}
       <div className={theater ? "fixed inset-0 z-50 bg-black p-4" : "sticky top-4 h-fit"}>
         <PreviewCanvas bp={bp} theater={theater} onToggleTheater={() => setTheater((v) => !v)} />
+      </div>
       </div>
     </div>
   );
@@ -903,9 +901,11 @@ function PreviewCanvas({
     ro.observe(canvas);
     startRef.current = performance.now();
     let raf = 0;
-    // Ensure our local blueprint drives the preview draw; live-publish
-    // in the page effect keeps this in sync with the app runtime too.
-    setActiveBlueprint(bpRef.current);
+    const previousBlueprint = getActiveBlueprint();
+    // The legacy renderer still reads its blueprint through the old module
+    // slot. Use a non-persistent override and restore the prior runtime value
+    // when the preview unmounts.
+    setPreviewBlueprint(bpRef.current);
 
     const loop = () => {
       const now = performance.now();
@@ -928,7 +928,7 @@ function PreviewCanvas({
       t = t * PREVIEW_SPEED;
       const W = canvas.clientWidth;
       const H = canvas.clientHeight;
-      setActiveBlueprint(bpRef.current);
+      setPreviewBlueprint(bpRef.current);
       const globals: SceneGlobals = {
         W, H,
         bpm: 90,
@@ -957,6 +957,7 @@ function PreviewCanvas({
       cancelAnimationFrame(raf);
       ro.disconnect();
       fire?.destroy();
+      setPreviewBlueprint(previousBlueprint);
     };
   }, [cycle]);
 

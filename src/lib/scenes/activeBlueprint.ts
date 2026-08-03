@@ -34,8 +34,20 @@ export function getActiveBlueprint(): CustomSceneBlueprint {
 }
 
 export function setActiveBlueprint(bp: CustomSceneBlueprint): void {
+  applyBlueprint(bp, true);
+}
+
+/**
+ * Temporary, non-persistent override for the quarantined legacy Builder preview.
+ * This must never be used as a publication path.
+ */
+export function setPreviewBlueprint(bp: CustomSceneBlueprint): void {
+  applyBlueprint(bp, false);
+}
+
+function applyBlueprint(bp: CustomSceneBlueprint, persist: boolean): void {
   current = bp;
-  if (typeof window !== "undefined") {
+  if (persist && typeof window !== "undefined") {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(bp));
     } catch {

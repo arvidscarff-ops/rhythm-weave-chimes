@@ -70,7 +70,7 @@ function Shell({ accountLabel }: { accountLabel: string }) {
     { to: "/studio/packs", label: "Packs" },
     { to: "/studio/scales", label: "Scales" },
     { to: "/studio/scenes", label: "Scenes" },
-    { to: "/studio/builder", label: "Builder" },
+    { to: "/studio/builder", label: "Legacy lab" },
   ] as const;
   return (
     <div className="min-h-screen bg-background text-foreground">

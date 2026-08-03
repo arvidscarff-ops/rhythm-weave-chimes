@@ -9,7 +9,7 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "test:r3": "node --test src/lib/rhythm/referenceAuthority.test.ts",
-    "test:r4": "node --test src/lib/rhythm/referenceAuthority.test.ts src/lib/rhythm/pendulumFamily.test.ts src/lib/rhythm/orbitalFamily.test.ts",
+    "test:r4": "node --test src/lib/rhythm/referenceAuthority.test.ts src/lib/rhythm/pendulumFamily.test.ts src/lib/rhythm/orbitalFamily.test.ts src/lib/rhythm/stringNetworkFamily.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

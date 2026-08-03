@@ -128,6 +128,7 @@ import { InstrumentEntryChrome } from "@/components/instrument/InstrumentEntryCh
 import { R3ClockPrototype } from "@/components/rhythm/R3ClockPrototype";
 import { R4OrbitalPrototype } from "@/components/rhythm/R4OrbitalPrototype";
 import { R4PendulumPrototype } from "@/components/rhythm/R4PendulumPrototype";
+import { R4StringNetworkPrototype } from "@/components/rhythm/R4StringNetworkPrototype";
 import {
   subscribeActiveScene,
   getActiveScene,
@@ -141,7 +142,7 @@ import {
 
 type IndexSearch = {
   shell?: "reset";
-  prototype?: "r3-clock" | "r4-pendulum" | "r4-orbital";
+  prototype?: "r3-clock" | "r4-pendulum" | "r4-orbital" | "r4-string-network";
 };
 
 export const Route = createFileRoute("/")({
@@ -150,7 +151,8 @@ export const Route = createFileRoute("/")({
     prototype:
       search.prototype === "r3-clock" ||
       search.prototype === "r4-pendulum" ||
-      search.prototype === "r4-orbital"
+      search.prototype === "r4-orbital" ||
+      search.prototype === "r4-string-network"
         ? search.prototype
         : undefined,
   }),
@@ -178,6 +180,7 @@ function IndexRoute() {
   if (prototype === "r3-clock") return <R3ClockPrototype />;
   if (prototype === "r4-pendulum") return <R4PendulumPrototype />;
   if (prototype === "r4-orbital") return <R4OrbitalPrototype />;
+  if (prototype === "r4-string-network") return <R4StringNetworkPrototype />;
   return <PhaseApp />;
 }
 

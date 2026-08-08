@@ -18,6 +18,7 @@ export function PerfProbeMount() {
   const [enabled, setEnabled] = useState(false);
   useEffect(() => setEnabled(PERF_MODE_AT_LOAD), []);
 
+  if (typeof window !== "undefined") console.log("PROBEMOUNT", enabled, PERF_MODE_AT_LOAD, window.location.href);
   if (!enabled) return null;
   return (
     <Suspense fallback={null}>

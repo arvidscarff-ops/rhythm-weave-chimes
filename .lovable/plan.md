@@ -15,12 +15,14 @@ coupling to Trigger Engines or audio.
 
 **1. `src/lib/crossing/crossingRuntime.ts` — the single owner of crossing state**
 
-- Typed state exactly as specified: `id`, `originId`, `destinationId`, `phase`
+- Typed state: `id`, `originId`, `destinationId`, `phase`
   (`idle | launching | in_transit | approaching | arrived`), `elapsedSeconds`,
-  `durationSeconds`, `progress`, `startedAt`, `arrivedAt`, `paused`.
+  `durationSeconds`, `progress`, `startedAtMonotonicSeconds`,
+  `arrivedAtMonotonicSeconds`, `paused`. No `startedAt` / `arrivedAt` fields exist.
 - One authoritative progress value: `clamp(elapsedSeconds / durationSeconds, 0, 1)`.
-- Elapsed integrates wall-clock deltas (`performance.now()`), sampled on demand — never
-  frame-count driven, so frame rate cannot change journey state.
+- Elapsed derives solely from the injected monotonic `TimeSource`, sampled on demand — never
+  frame-count driven, so frame rate cannot change journey state. The runtime itself knows
+  nothing about `performance.now()`; only the production `TimeSource` implementation does.
 - Configurable phase thresholds (defaults 0.05 / 0.90 / 1.0), passed in, not hardcoded canon.
 - Arrival fires exactly once, guarded by a latch on the `arrived` transition.
 - API: `start(opts)`, `pause()`, `resume()`, `reset()`, `scrubTo(progress)` (dev-only),

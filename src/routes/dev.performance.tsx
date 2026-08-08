@@ -7,7 +7,7 @@
  * experience use the in-player probe (`/?perf=1`) which shares these modules,
  * then open this page to inspect and export the handed-off result.
  */
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { createFrameCollector, type CollectorTick } from "@/lib/perf/frameCollector";
 import {
@@ -73,9 +73,9 @@ function PerformanceHarness() {
       <h1 style={{ fontSize: 16, marginBottom: 4 }}>SYS-005 performance harness</h1>
       <p style={{ fontSize: 12, opacity: 0.7, marginBottom: 16 }}>
         Diagnostic only — prototype pending Codex review. This route renders no scene; use{" "}
-        <Link to="/" search={{ perf: "1" }} style={{ textDecoration: "underline" }}>
+        <a href="/?perf=1" style={{ textDecoration: "underline" }}>
           /?perf=1
-        </Link>{" "}
+        </a>{" "}
         to measure the live player with the same collector.
       </p>
 

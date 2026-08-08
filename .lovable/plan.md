@@ -30,16 +30,27 @@ engine touchpoint), so it can be recorded as optional context.
   while measuring. Per frame it does one subtraction and one ring-buffer write — no sorting,
   no allocation, no React state update.
 - Fixed-size ring buffer (default capacity 36000, about 10 minutes at 60fps) so an indefinite
-  session cannot grow unbounded; overflow drops oldest samples and sets a `truncated` flag.
+  session cannot grow unbounded; overflow drops oldest samples and latches `truncated: true`,
+  alongside `totalFramesObserved` so the discarded count is recoverable.
 - The first frame after start is discarded (no valid previous timestamp).
+- Zero dependency on any route: it is a plain module with no React and no DOM rendering, so
+  the dev route and the in-player probe drive the exact same instance type.
+
+**Tab visibility handling.** A `visibilitychange` listener is attached only while measuring.
+On `hidden`, sampling suspends and the previous timestamp is invalidated. On `visible`,
+sampling resumes and the first delta after the gap is discarded, so a backgrounded tab never
+lands in the samples as one giant rendered frame. Hidden time is tracked and subtracted from
+the reported session duration, and the behaviour is documented in the module header. The
+timestamp-reset logic lives in a small pure helper so it can be unit-tested without a browser.
 - API: `start()`, `stop()`, `reset()`, `getSamples()`, and a low-cadence `onTick` callback
   fired roughly twice per second for live display — the only thing driving React re-renders.
 - Time comes from the rAF timestamp argument, not `Date.now()`.
 
 **3. `src/lib/perf/session.ts` — result snapshot assembly**
 
-- `PerfResult` = `label`, `startedAtIso` + `startedAtEpochMs`, `durationMs`, the full
-  `FrameStats`, plus an optional `context` block.
+- `PerfResult` = `label`, `startedAtIso` + `startedAtEpochMs`, `durationMs`, `truncated`,
+  `totalFramesObserved`, the full `FrameStats`, plus an optional `context` block.
+- `truncated` is always present in the object, and therefore in COPY RESULTS and EXPORT JSON.
 - Epoch timestamps are intentional here: this is history/measurement data, not simulation
   timing, and is explicitly not a clock authority.
 - Context is best-effort and omits anything unavailable: `route` (current pathname),
@@ -53,16 +64,35 @@ engine touchpoint), so it can be recorded as optional context.
 - Monospace diagnostic readout: STATE (IDLE / MEASURING / COMPLETE), FPS, FRAME, P95, P99,
   SLOW >33 as `count / total`, SESSION as mm:ss. Live values refresh on the collector's
   ~2Hz tick, never per frame.
+- When `truncated` is true, an explicit "TRUNCATED — analysed last N of M frames" line is
+  shown next to the results so a long run is never mistaken for a whole-session analysis.
 - Controls: label text input, START MEASUREMENT, STOP, RESET.
 - On stop: full result table plus COPY RESULTS (JSON to clipboard) and EXPORT JSON
   (Blob download, `phase-perf-<label>-<timestamp>.json`).
 - Deliberately plain — explicitly not PHASE HUD styling.
 
-**5. `src/lib/perf/frameStats.test.ts`**
+**5. `src/routes/index.tsx` — one minimal guarded edit (approved exception)**
 
-Covers the empty array, a single sample, a known fixed array with hand-checked
+- When the player URL carries `?perf=1`, mount a dev-only `<PerformanceProbe />`
+  (`src/components/dev/PerformanceProbe.tsx`). Without the flag, nothing renders, no listener
+  is attached, and no rAF loop starts — the component is lazily imported so its code does not
+  load at all in the normal path.
+- The probe is a tiny fixed-corner monospace readout: FPS, FRAME, P95, P99, SESSION, plus
+  START / STOP and a link to `/dev/performance`. Rolling P95/P99 are computed on the same
+  ~2Hz tick from the current buffer, not per frame. No player UI changes.
+- The probe uses the same `frameCollector` / `frameStats` / `session` modules as the dev
+  route; the last stopped result is handed to `/dev/performance` via `sessionStorage` so it
+  can be inspected and exported there.
+
+**6. `src/lib/perf/frameStats.test.ts` and `src/lib/perf/collector.test.ts`**
+
+Statistics: the empty array, a single sample, a known fixed array with hand-checked
 median/p95/p99/worst, slow-frame counts at each threshold boundary (exactly 16.67 not
 counted, just above counted), and all-fast / all-slow arrays.
+
+Collector: ring-buffer overflow sets `truncated` and preserves the most recent samples; the
+pure visibility/timestamp-reset helper discards the first delta after a resume and never
+records the background gap.
 
 ## Profiler overhead
 
@@ -76,9 +106,9 @@ No edits to `engineClock`, `scheduler`, audio, the crossing runtime, scenes, or 
 
 ## Open questions for Codex
 
-- `/dev/performance` renders no scene of its own, so it measures an idle page. Should the
-  collector also be attachable to the live player route (overlay or keyboard toggle) so real
-  Trigger Engine cost can be measured?
-- Is a 10-minute ring buffer the right cap, or should long sessions downsample instead?
+- Is a 10-minute ring buffer the right cap, or should long sessions downsample instead of
+  truncating?
+- Should hidden-tab time be excluded from `durationMs` (planned) or reported as a separate
+  `hiddenMs` field as well?
 - Should results persist locally (a small run history) for A/B comparison, or stay
   export-only as specified?

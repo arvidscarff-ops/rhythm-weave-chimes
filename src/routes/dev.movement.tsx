@@ -173,7 +173,6 @@ function MovementSandbox() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
-      window.removeEventListener("resize", resize);
       keyboard.dispose();
     };
   }, []);

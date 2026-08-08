@@ -30,12 +30,14 @@ Events: `transmissionStarted`, `transmissionEnded`, `eligibilityChanged`.
 Plain diagnostic surface in the same unstyled spirit as `/dev/crossing`: drives a real SYS-007 crossing runtime, feeds its snapshot into the transmission runtime each poll. Shows crossing phase, progress, seed, current transmission with remaining seconds, played list, eligible list. Controls: start, pause/resume, reset, progress scrub, seed entry + restart.
 
 **6. Tests** — `src/lib/transmissions/transmissionRuntime.test.ts`
-Covers every case listed in the brief, using injected manual time and fixed seeds.
+Covers every case listed in the brief, using injected manual time and fixed seeds — including an **update-rate independence** test: the same progress/time progression sampled at a high polling rate and at a sparse polling rate, with the same seed, yields equivalent admission and selection results.
 
 ## Explicit semantics (documented in code and tests)
 
-- **Sparseness**: on each `update()`, if nothing is active, a per-crossing seeded roll decides whether to start; the chance is a config knob (`startChancePerCheck`) plus a configurable minimum gap between transmissions. An eligible item may simply never play.
-- **Selection**: weighted pick among currently-eligible, unplayed items using the seeded RNG. Same seed + same definitions + same progress sequence ⇒ same result.
+- **Sparseness (admission at eligibility entry)**: no per-update rolls, and no `startChancePerCheck`. When a transmission first *enters* eligibility, one deterministic seeded admission roll is made from `(seed, crossingId, transmissionId, episodeIndex)` and latched for that entire eligibility episode. Repeated `update()` calls inside the window never re-roll. Admitted items may start when constraints allow (nothing active, minimum gap satisfied); rejected items stay unplayed for that episode. Leaving and re-entering the window begins a new episode with a new deterministic roll. **Invariant: changing update frequency cannot change which transmissions are admitted.** A configurable minimum gap between transmissions also applies.
+- **Selection**: weighted pick, via the seeded RNG, among items currently eligible, admitted, and permitted to play.
+- **`oncePerCrossing`**: a real field, not a blanket exclusion of everything played. `true` ⇒ never again during that crossing once played. `false` ⇒ may become eligible and play again under normal eligibility/admission/gap rules. All sample definitions are `true`, but the runtime respects both.
+- **Determinism guarantee**: same seed + same transmission definitions + same crossing-snapshot sequence + same monotonic-time sequence ⇒ same scheduling result. Progress alone is insufficient, since duration and minimum-gap logic depend on monotonic time.
 - **Progress jumps**: only the window the crossing is *currently inside* is considered. Jumping 0.20 → 0.80 never retroactively fires a 0.40–0.50 item. Scrubbing backwards cannot replay a `oncePerCrossing` item — `playedIds` is per-run and only cleared by `startCrossing()`/`reset()`.
 - **Arrival**: phase `arrived` starts nothing new and immediately ends any active transmission, emitting `transmissionEnded` exactly once (reason `arrival`). Marked prototype behaviour, not canon.
 - **Duration**: measured against the injectable monotonic `TimeSource`, never frame counts or `Date.now()`.

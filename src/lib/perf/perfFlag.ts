@@ -17,4 +17,3 @@ function detect(): boolean {
 }
 
 export const PERF_MODE_AT_LOAD = detect();
-if (typeof window !== "undefined") console.log("PERFFLAG", PERF_MODE_AT_LOAD, window.location.href);

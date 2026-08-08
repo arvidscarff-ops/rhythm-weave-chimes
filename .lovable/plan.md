@@ -56,3 +56,22 @@ No edits to `engineClock`, scheduler, scenes, dock, or audio. No downstream cons
   stay fully independent (prototype assumes independent)?
 - Does arrival need persistence/resume across remount (invariant 11 suggests eventually yes)?
 - Should route data eventually live in the database rather than a local module?
+
+## Approved clarifications (folded in)
+
+**Injectable time source.** `src/lib/crossing/timeSource.ts` exports a `TimeSource = () => number`
+(monotonic seconds) with `performance.now()` as the production default and a manual source for
+tests. The runtime takes it as a dependency and never calls `performance.now()` itself.
+
+**Sampling model.** The runtime owns no requestAnimationFrame loop and no timer. `sample()`
+reads the time source and recomputes state; consumers poll on their own cadence (the dev route
+uses its own rAF). Events fire only from a `sample()` that detects a material change:
+`phaseChanged` on phase transition, `progressChanged` only when progress moves past a small
+epsilon (default 0.001) since the last emission, `crossingStarted` / `crossingArrived` once each.
+
+**Scrub semantics.** `scrubTo()` is developer-only and intentionally runs the normal transition
+logic, so scrubbing to 1.0 produces a real `arrived` phase and one `crossingArrived` event —
+it is documented as indistinguishable from a natural completion by design. The arrival latch is
+per-run: scrubbing back below the arrival threshold does not re-arm it, only `reset()` /
+`start()` does, so repeated scrub/reset sequences can never emit arrival twice in one run.
+Tests specify all three behaviors explicitly.

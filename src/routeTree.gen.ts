@@ -19,6 +19,7 @@ import { Route as StudioPacksRouteImport } from './routes/studio.packs'
 import { Route as StudioBuilderRouteImport } from './routes/studio.builder'
 import { Route as DevTransmissionsRouteImport } from './routes/dev.transmissions'
 import { Route as DevPerformanceRouteImport } from './routes/dev.performance'
+import { Route as DevMovementRouteImport } from './routes/dev.movement'
 import { Route as DevCrossingRouteImport } from './routes/dev.crossing'
 import { Route as AdminUnlockRouteImport } from './routes/admin.unlock'
 import { Route as AdminScenesRouteImport } from './routes/admin.scenes'
@@ -75,6 +76,11 @@ const DevPerformanceRoute = DevPerformanceRouteImport.update({
   path: '/dev/performance',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevMovementRoute = DevMovementRouteImport.update({
+  id: '/dev/movement',
+  path: '/dev/movement',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevCrossingRoute = DevCrossingRouteImport.update({
   id: '/dev/crossing',
   path: '/dev/crossing',
@@ -110,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
   '/dev/crossing': typeof DevCrossingRoute
+  '/dev/movement': typeof DevMovementRoute
   '/dev/performance': typeof DevPerformanceRoute
   '/dev/transmissions': typeof DevTransmissionsRoute
   '/studio/builder': typeof StudioBuilderRoute
@@ -126,6 +133,7 @@ export interface FileRoutesByTo {
   '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
   '/dev/crossing': typeof DevCrossingRoute
+  '/dev/movement': typeof DevMovementRoute
   '/dev/performance': typeof DevPerformanceRoute
   '/dev/transmissions': typeof DevTransmissionsRoute
   '/studio/builder': typeof StudioBuilderRoute
@@ -144,6 +152,7 @@ export interface FileRoutesById {
   '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
   '/dev/crossing': typeof DevCrossingRoute
+  '/dev/movement': typeof DevMovementRoute
   '/dev/performance': typeof DevPerformanceRoute
   '/dev/transmissions': typeof DevTransmissionsRoute
   '/studio/builder': typeof StudioBuilderRoute
@@ -163,6 +172,7 @@ export interface FileRouteTypes {
     | '/admin/scenes'
     | '/admin/unlock'
     | '/dev/crossing'
+    | '/dev/movement'
     | '/dev/performance'
     | '/dev/transmissions'
     | '/studio/builder'
@@ -179,6 +189,7 @@ export interface FileRouteTypes {
     | '/admin/scenes'
     | '/admin/unlock'
     | '/dev/crossing'
+    | '/dev/movement'
     | '/dev/performance'
     | '/dev/transmissions'
     | '/studio/builder'
@@ -196,6 +207,7 @@ export interface FileRouteTypes {
     | '/admin/scenes'
     | '/admin/unlock'
     | '/dev/crossing'
+    | '/dev/movement'
     | '/dev/performance'
     | '/dev/transmissions'
     | '/studio/builder'
@@ -214,6 +226,7 @@ export interface RootRouteChildren {
   AdminScenesRoute: typeof AdminScenesRoute
   AdminUnlockRoute: typeof AdminUnlockRoute
   DevCrossingRoute: typeof DevCrossingRoute
+  DevMovementRoute: typeof DevMovementRoute
   DevPerformanceRoute: typeof DevPerformanceRoute
   DevTransmissionsRoute: typeof DevTransmissionsRoute
 }
@@ -290,6 +303,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevPerformanceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dev/movement': {
+      id: '/dev/movement'
+      path: '/dev/movement'
+      fullPath: '/dev/movement'
+      preLoaderRoute: typeof DevMovementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dev/crossing': {
       id: '/dev/crossing'
       path: '/dev/crossing'
@@ -356,6 +376,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminScenesRoute: AdminScenesRoute,
   AdminUnlockRoute: AdminUnlockRoute,
   DevCrossingRoute: DevCrossingRoute,
+  DevMovementRoute: DevMovementRoute,
   DevPerformanceRoute: DevPerformanceRoute,
   DevTransmissionsRoute: DevTransmissionsRoute,
 }

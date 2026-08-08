@@ -354,7 +354,8 @@ function draw(
     const py = cy - dy * s - aimDy * 0.4;
     if (px < -20 || px > w + 20 || py < -20 || py > h + 20) continue;
     const fade = Math.max(0, 1 - dz / 900);
-    const r = Math.max(0.6, 3 * s * 6);
+    // Clamped so near markers stay depth cues rather than screen-filling slabs.
+    const r = Math.min(14, Math.max(0.8, 18 * s));
     ctx.globalAlpha = fade * 0.9;
     ctx.fillRect(px, py, r, r);
   }

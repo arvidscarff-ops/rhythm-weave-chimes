@@ -916,6 +916,7 @@ function Dropdown<T extends string>({
  * ============================================================ */
 
 function PhaseApp() {
+  const perfMode = useIsPerfMode(); // SYS-005 dev-only, ?perf=1
   const [playing, setPlaying] = useState(false);
   const [scene, setScene] = useState<SceneKind>("wheel");
   const [bpm, setBpm] = useState(90);

@@ -1,36 +1,58 @@
-## Export Test Video button
+# SYS-007 — First Crossing route runtime (prototype)
 
-Add a one-click recorder that captures 10s of the live scene canvas and downloads it, so you can hand the file to another LLM as visual context.
+Isolated implementation experiment for Codex review. Not a claim that SYS-007 is complete.
 
-### Approach
-- Use the browser-native `HTMLCanvasElement.captureStream(fps)` + `MediaRecorder` — no libraries, no server round-trip.
-- Record the existing scene canvas directly (whatever's already animating in the preview). No re-render pass, no separate offscreen composition — what you see is what gets exported.
-- Output: `.webm` (VP9 if supported, else VP8). WebM is what MediaRecorder produces natively; every modern LLM that accepts video handles it. No ffmpeg / mp4 transcode step (would need a WASM lib or server function — not worth it for a debug tool).
-- No audio track. This is a visual reference clip; keeping it silent avoids AudioContext/MediaStream plumbing and keeps the file small.
+## Architecture finding
 
-### UX
-- Button lives in the `PhaseDock` alongside the existing controls, labeled "Export test video" (icon: `Video` from lucide).
-- Click → button switches to a recording state showing a countdown (`Recording… 9s`), disabled during capture.
-- On finish, auto-downloads `phase-<sceneId>-<timestamp>.webm`.
-- Recording length: fixed 10s at 30fps.
-- If the browser doesn't support the codec / MediaRecorder, toast an error and no-op.
+There is no existing journey/transit/route runtime in the repo. The only time authority is
+`engineClock` (scene time for rhythm/geometry) plus `cycleOverride` (macro-cycle params).
+A crossing is a finite, non-wrapping journey — architecturally distinct from wrapped rhythmic
+phase — so extending `engineClock` would violate the "finite route progress is distinct from
+wrapped phase" invariant. Therefore: a small, deletable module with a clear boundary, and no
+coupling to Trigger Engines or audio.
 
-### Implementation sketch
-1. New helper `src/lib/dev/recordScene.ts`:
-   - `recordSceneCanvas(canvas, { seconds, fps, onTick }) → Promise<Blob>` using `canvas.captureStream(fps)` + `MediaRecorder` with progressive codec fallback (`video/webm;codecs=vp9` → `vp8` → `video/webm`).
-   - Small `downloadBlob(blob, filename)` util.
-2. `PhaseDock.tsx`:
-   - Add an "Export test video" button. On click, look up the scene canvas via a stable selector (e.g. `document.querySelector('canvas[data-scene-canvas]')` — I'll tag the canvas in `SceneBackground.tsx` with that attribute).
-   - Local `useState` for `isRecording` + `secondsLeft`; a 1s interval drives the countdown UI while the recorder runs.
-3. `SceneBackground.tsx`: add `data-scene-canvas` to the rendered `<canvas>` so the recorder can find it without prop drilling.
+## What gets built
 
-### Not touching
-- Rhythm/audio engine, scene code, scheduler, macro-cycle — the recording just observes the canvas.
-- Session URL, presets, admin routes.
+**1. `src/lib/crossing/crossingRuntime.ts` — the single owner of crossing state**
 
-### Quick assumptions worth confirming
-- **Placement**: PhaseDock is fine, or would you rather have it in a debug-only spot (admin panel / hidden behind a keyboard shortcut) so it doesn't clutter the main UI?
-- **Format**: `.webm` (native, no transcode). Say the word if you specifically need `.mp4` and I'll add a WASM ffmpeg transcode step (heavier, ~30MB dep).
-- **Audio**: silent. Say if you want the ambient audio mixed in — I'll wire the WebAudio destination into the MediaRecorder stream.
+- Typed state exactly as specified: `id`, `originId`, `destinationId`, `phase`
+  (`idle | launching | in_transit | approaching | arrived`), `elapsedSeconds`,
+  `durationSeconds`, `progress`, `startedAt`, `arrivedAt`, `paused`.
+- One authoritative progress value: `clamp(elapsedSeconds / durationSeconds, 0, 1)`.
+- Elapsed integrates wall-clock deltas (`performance.now()`), sampled on demand — never
+  frame-count driven, so frame rate cannot change journey state.
+- Configurable phase thresholds (defaults 0.05 / 0.90 / 1.0), passed in, not hardcoded canon.
+- Arrival fires exactly once, guarded by a latch on the `arrived` transition.
+- API: `start(opts)`, `pause()`, `resume()`, `reset()`, `scrubTo(progress)` (dev-only),
+  `sample()` (returns immutable snapshot), `subscribe(fn)`.
+- Events emitted through the same lightweight subscriber-set pattern already used in
+  `cycleOverride.ts` — no new event bus. Callbacks: `crossingStarted`, `phaseChanged`,
+  `progressChanged`, `crossingArrived`.
 
-I'll assume dock placement, webm, silent unless you say otherwise.
+**2. `src/lib/crossing/routes.ts`** — one hardcoded origin/destination pair for the prototype
+(`origin` → `destination`, placeholder labels; no lore names invented, since naming is
+unresolved). Data-shaped so more pairs are additive.
+
+**3. `src/routes/dev.crossing.tsx`** — isolated developer route at `/dev/crossing`.
+Diagnostic-only readout (PHASE, PROGRESS, ELAPSED, DURATION, ORIGIN, DESTINATION) plus
+START / PAUSE-RESUME / RESET, a duration input (30–120s), and a progress scrub slider.
+Deliberately plain — monospace text and default buttons, explicitly not PHASE HUD styling.
+Not linked from the player; nothing in the normal experience changes.
+
+**4. `src/lib/crossing/crossingRuntime.test.ts`** — unit tests for determinism at fixed
+elapsed values, clamping, threshold transitions, single arrival, and clean reset.
+
+## Explicitly prototype-only
+
+Hardcoded route pair, the threshold values, the scrub control, and the dev route itself.
+
+## Nothing else changes
+
+No edits to `engineClock`, scheduler, scenes, dock, or audio. No downstream consumers wired up.
+
+## Open questions for Codex
+
+- Should the crossing clock ever be pausable/scaled by the same authority as scene time, or
+  stay fully independent (prototype assumes independent)?
+- Does arrival need persistence/resume across remount (invariant 11 suggests eventually yes)?
+- Should route data eventually live in the database rather than a local module?

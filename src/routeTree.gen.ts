@@ -17,6 +17,7 @@ import { Route as StudioScenesRouteImport } from './routes/studio.scenes'
 import { Route as StudioScalesRouteImport } from './routes/studio.scales'
 import { Route as StudioPacksRouteImport } from './routes/studio.packs'
 import { Route as StudioBuilderRouteImport } from './routes/studio.builder'
+import { Route as DevTransmissionsRouteImport } from './routes/dev.transmissions'
 import { Route as DevPerformanceRouteImport } from './routes/dev.performance'
 import { Route as DevCrossingRouteImport } from './routes/dev.crossing'
 import { Route as AdminUnlockRouteImport } from './routes/admin.unlock'
@@ -64,6 +65,11 @@ const StudioBuilderRoute = StudioBuilderRouteImport.update({
   path: '/builder',
   getParentRoute: () => StudioRoute,
 } as any)
+const DevTransmissionsRoute = DevTransmissionsRouteImport.update({
+  id: '/dev/transmissions',
+  path: '/dev/transmissions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevPerformanceRoute = DevPerformanceRouteImport.update({
   id: '/dev/performance',
   path: '/dev/performance',
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/admin/unlock': typeof AdminUnlockRoute
   '/dev/crossing': typeof DevCrossingRoute
   '/dev/performance': typeof DevPerformanceRoute
+  '/dev/transmissions': typeof DevTransmissionsRoute
   '/studio/builder': typeof StudioBuilderRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
@@ -120,6 +127,7 @@ export interface FileRoutesByTo {
   '/admin/unlock': typeof AdminUnlockRoute
   '/dev/crossing': typeof DevCrossingRoute
   '/dev/performance': typeof DevPerformanceRoute
+  '/dev/transmissions': typeof DevTransmissionsRoute
   '/studio/builder': typeof StudioBuilderRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
@@ -137,6 +145,7 @@ export interface FileRoutesById {
   '/admin/unlock': typeof AdminUnlockRoute
   '/dev/crossing': typeof DevCrossingRoute
   '/dev/performance': typeof DevPerformanceRoute
+  '/dev/transmissions': typeof DevTransmissionsRoute
   '/studio/builder': typeof StudioBuilderRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | '/admin/unlock'
     | '/dev/crossing'
     | '/dev/performance'
+    | '/dev/transmissions'
     | '/studio/builder'
     | '/studio/packs'
     | '/studio/scales'
@@ -170,6 +180,7 @@ export interface FileRouteTypes {
     | '/admin/unlock'
     | '/dev/crossing'
     | '/dev/performance'
+    | '/dev/transmissions'
     | '/studio/builder'
     | '/studio/packs'
     | '/studio/scales'
@@ -186,6 +197,7 @@ export interface FileRouteTypes {
     | '/admin/unlock'
     | '/dev/crossing'
     | '/dev/performance'
+    | '/dev/transmissions'
     | '/studio/builder'
     | '/studio/packs'
     | '/studio/scales'
@@ -203,6 +215,7 @@ export interface RootRouteChildren {
   AdminUnlockRoute: typeof AdminUnlockRoute
   DevCrossingRoute: typeof DevCrossingRoute
   DevPerformanceRoute: typeof DevPerformanceRoute
+  DevTransmissionsRoute: typeof DevTransmissionsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -262,6 +275,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/studio/builder'
       preLoaderRoute: typeof StudioBuilderRouteImport
       parentRoute: typeof StudioRoute
+    }
+    '/dev/transmissions': {
+      id: '/dev/transmissions'
+      path: '/dev/transmissions'
+      fullPath: '/dev/transmissions'
+      preLoaderRoute: typeof DevTransmissionsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/dev/performance': {
       id: '/dev/performance'
@@ -337,17 +357,8 @@ const rootRouteChildren: RootRouteChildren = {
   AdminUnlockRoute: AdminUnlockRoute,
   DevCrossingRoute: DevCrossingRoute,
   DevPerformanceRoute: DevPerformanceRoute,
+  DevTransmissionsRoute: DevTransmissionsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

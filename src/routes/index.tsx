@@ -7,15 +7,9 @@ import { Suspense, lazy } from "react";
  */
 const PerformanceProbe = lazy(() => import("@/components/dev/PerformanceProbe"));
 
-/**
- * Captured at module evaluation: the player rewrites the URL with its session
- * hash shortly after mount, which strips the query string, so the flag has to
- * be read before that happens. Applied via effect to avoid SSR mismatch.
- */
-const PERF_MODE_AT_LOAD =
-  typeof window !== "undefined" &&
-  new URLSearchParams(window.location.search).get("perf") === "1";
+import { PERF_MODE_AT_LOAD } from "@/lib/perf/perfFlag";
 
+/** Applied via effect so SSR/hydration output stays identical. */
 function useIsPerfMode(): boolean {
   const [on, setOn] = useState(false);
   useEffect(() => {

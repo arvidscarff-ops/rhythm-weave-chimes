@@ -9,7 +9,7 @@ Authoritative state is only **position** and **velocity**. Base speed and steer 
 
 Params: baseSpeed, steeringStrength, acceleration, damping, maxLateralSpeed — camera params kept separate.
 
-**Coordinate frame (prototype):** +Z forward transit, +X lateral, +Y vertical. `baseSpeed` drives the forward (z) component only; `steeringStrength`, `acceleration`, `damping` and `maxLateralSpeed` act only on x/y. Guaranteed and tested: zero input keeps baseline forward motion, damping after release never bleeds forward speed, steering never raises forward speed, `maxLateralSpeed` caps lateral/vertical rather than total magnitude, and total speed may naturally exceed baseline while carving while one clear forward baseline remains.
+**Coordinate frame (prototype):** +Z forward transit, +X lateral, +Y vertical. `baseSpeed` drives the forward (z) component only; `steeringStrength`, `acceleration`, `damping` and `maxLateralSpeed` act only on x/y. `maxLateralSpeed` caps the combined vector magnitude `sqrt(vx² + vy²)` — the x/y pair is scaled down proportionally rather than clamped per-axis, so diagonal steering cannot exceed the limit. Guaranteed and tested: zero input keeps baseline forward motion, damping after release never bleeds forward speed, steering never raises forward speed, diagonal input never exceeds the combined lateral limit, and total speed may naturally exceed baseline while carving while one clear forward baseline remains.
 
 Reset goes through an explicit `createMovementState(params)` / `resetMovementState` initializer in the model — tests exercise that helper, not route state.
 

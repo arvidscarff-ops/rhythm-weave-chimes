@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+// SYS-005 dev-only frame probe; renders nothing unless the page was opened with ?perf=1.
+import { PerfProbeMount } from "@/components/dev/PerfProbeMount";
 import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -1917,6 +1919,7 @@ function PhaseApp() {
       className="min-h-screen w-full flex flex-col relative pr-stage"
       style={{ color: "var(--pr-text)" }}
     >
+      <PerfProbeMount />
       <PhaseReadout
         scene={scene}
         wheel={engineRef.current.wheel}

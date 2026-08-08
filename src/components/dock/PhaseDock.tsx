@@ -491,6 +491,10 @@ function CycleMenu({
   onOverride: (o: CycleOverride) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Override state is restored client-side, so the indicator dot must not be
+  // rendered during SSR/hydration or the markup mismatches.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const effB = override.baseLaps ?? defaults.baseLaps;
   const effD = override.macroCycleSeconds ?? defaults.macroCycleSeconds;
   const effN = override.noteCount ?? defaults.noteCount;
@@ -500,7 +504,7 @@ function CycleMenu({
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger className={DOCK_BTN}>
         <Sparkles className="h-4 w-4" /> Cycle
-        {overridden && (
+        {mounted && overridden && (
           <span className="ml-1 h-1.5 w-1.5 rounded-full bg-emerald-400/80" aria-hidden />
         )}
       </DropdownMenuTrigger>

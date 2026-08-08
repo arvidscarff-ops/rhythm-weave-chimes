@@ -160,9 +160,6 @@ import {
 } from "@/lib/engine/cycleOverride";
 
 export const Route = createFileRoute("/")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    perf: typeof search.perf === "string" ? search.perf : undefined,
-  }),
   head: () => ({
     meta: [
       { title: "Phase — Generative Polyrhythm Engine" },

@@ -1,4 +1,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Suspense, lazy } from "react";
+
+/**
+ * SYS-005 dev-only probe. Lazily imported so the profiler code never loads on
+ * the normal player path; mounted only when the URL carries ?perf=1.
+ */
+const PerformanceProbe = lazy(() => import("@/components/dev/PerformanceProbe"));
+
+function useIsPerfMode(): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    setOn(new URLSearchParams(window.location.search).get("perf") === "1");
+  }, []);
+  return on;
+}
 import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -136,6 +151,9 @@ import {
 } from "@/lib/engine/cycleOverride";
 
 export const Route = createFileRoute("/")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    perf: typeof search.perf === "string" ? search.perf : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Phase — Generative Polyrhythm Engine" },

@@ -1,22 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Suspense, lazy } from "react";
-
-/**
- * SYS-005 dev-only probe. Lazily imported so the profiler code never loads on
- * the normal player path; mounted only when the URL carries ?perf=1.
- */
-const PerformanceProbe = lazy(() => import("@/components/dev/PerformanceProbe"));
-
-import { PERF_MODE_AT_LOAD } from "@/lib/perf/perfFlag";
-
-/** Applied via effect so SSR/hydration output stays identical. */
-function useIsPerfMode(): boolean {
-  const [on, setOn] = useState(false);
-  useEffect(() => {
-    setOn(PERF_MODE_AT_LOAD);
-  }, []);
-  return on;
-}
+// SYS-005 dev-only frame probe; renders nothing unless the page was opened with ?perf=1.
+import { PerfProbeMount } from "@/components/dev/PerfProbeMount";
 import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -916,7 +900,6 @@ function Dropdown<T extends string>({
  * ============================================================ */
 
 function PhaseApp() {
-  const perfMode = useIsPerfMode(); // SYS-005 dev-only, ?perf=1
   const [playing, setPlaying] = useState(false);
   const [scene, setScene] = useState<SceneKind>("wheel");
   const [bpm, setBpm] = useState(90);
@@ -1936,11 +1919,7 @@ function PhaseApp() {
       className="min-h-screen w-full flex flex-col relative pr-stage"
       style={{ color: "var(--pr-text)" }}
     >
-      {perfMode ? (
-        <Suspense fallback={null}>
-          <PerformanceProbe />
-        </Suspense>
-      ) : null}
+      <PerfProbeMount />
       <PhaseReadout
         scene={scene}
         wheel={engineRef.current.wheel}

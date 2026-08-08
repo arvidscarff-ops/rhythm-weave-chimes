@@ -9,6 +9,10 @@ Authoritative state is only **position** and **velocity**. Base speed and steer 
 
 Params: baseSpeed, steeringStrength, acceleration, damping, maxLateralSpeed — camera params kept separate.
 
+**Coordinate frame (prototype):** +Z forward transit, +X lateral, +Y vertical. `baseSpeed` drives the forward (z) component only; `steeringStrength`, `acceleration`, `damping` and `maxLateralSpeed` act only on x/y. Guaranteed and tested: zero input keeps baseline forward motion, damping after release never bleeds forward speed, steering never raises forward speed, `maxLateralSpeed` caps lateral/vertical rather than total magnitude, and total speed may naturally exceed baseline while carving while one clear forward baseline remains.
+
+Reset goes through an explicit `createMovementState(params)` / `resetMovementState` initializer in the model — tests exercise that helper, not route state.
+
 **2. Input abstraction (dumb adapters)**
 The keyboard adapter normalizes device state only: pressed keys to ±1, released keys straight to 0. All feel — acceleration, inertia, damping, coast, recentring — lives in the movement model and its params, so controller, mouse or touch can later feed equivalent normalized input into identical behaviour.
 

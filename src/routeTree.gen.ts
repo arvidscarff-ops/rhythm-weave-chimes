@@ -17,6 +17,7 @@ import { Route as StudioScenesRouteImport } from './routes/studio.scenes'
 import { Route as StudioScalesRouteImport } from './routes/studio.scales'
 import { Route as StudioPacksRouteImport } from './routes/studio.packs'
 import { Route as StudioBuilderRouteImport } from './routes/studio.builder'
+import { Route as DevCrossingRouteImport } from './routes/dev.crossing'
 import { Route as AdminUnlockRouteImport } from './routes/admin.unlock'
 import { Route as AdminScenesRouteImport } from './routes/admin.scenes'
 import { Route as AdminScalesRouteImport } from './routes/admin.scales'
@@ -62,6 +63,11 @@ const StudioBuilderRoute = StudioBuilderRouteImport.update({
   path: '/builder',
   getParentRoute: () => StudioRoute,
 } as any)
+const DevCrossingRoute = DevCrossingRouteImport.update({
+  id: '/dev/crossing',
+  path: '/dev/crossing',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminUnlockRoute = AdminUnlockRouteImport.update({
   id: '/admin/unlock',
   path: '/admin/unlock',
@@ -91,6 +97,7 @@ export interface FileRoutesByFullPath {
   '/admin/scales': typeof AdminScalesRoute
   '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
+  '/dev/crossing': typeof DevCrossingRoute
   '/studio/builder': typeof StudioBuilderRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
@@ -104,6 +111,7 @@ export interface FileRoutesByTo {
   '/admin/scales': typeof AdminScalesRoute
   '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
+  '/dev/crossing': typeof DevCrossingRoute
   '/studio/builder': typeof StudioBuilderRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
@@ -119,6 +127,7 @@ export interface FileRoutesById {
   '/admin/scales': typeof AdminScalesRoute
   '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
+  '/dev/crossing': typeof DevCrossingRoute
   '/studio/builder': typeof StudioBuilderRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
@@ -135,6 +144,7 @@ export interface FileRouteTypes {
     | '/admin/scales'
     | '/admin/scenes'
     | '/admin/unlock'
+    | '/dev/crossing'
     | '/studio/builder'
     | '/studio/packs'
     | '/studio/scales'
@@ -148,6 +158,7 @@ export interface FileRouteTypes {
     | '/admin/scales'
     | '/admin/scenes'
     | '/admin/unlock'
+    | '/dev/crossing'
     | '/studio/builder'
     | '/studio/packs'
     | '/studio/scales'
@@ -162,6 +173,7 @@ export interface FileRouteTypes {
     | '/admin/scales'
     | '/admin/scenes'
     | '/admin/unlock'
+    | '/dev/crossing'
     | '/studio/builder'
     | '/studio/packs'
     | '/studio/scales'
@@ -177,6 +189,7 @@ export interface RootRouteChildren {
   AdminScalesRoute: typeof AdminScalesRoute
   AdminScenesRoute: typeof AdminScenesRoute
   AdminUnlockRoute: typeof AdminUnlockRoute
+  DevCrossingRoute: typeof DevCrossingRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -237,6 +250,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioBuilderRouteImport
       parentRoute: typeof StudioRoute
     }
+    '/dev/crossing': {
+      id: '/dev/crossing'
+      path: '/dev/crossing'
+      fullPath: '/dev/crossing'
+      preLoaderRoute: typeof DevCrossingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/unlock': {
       id: '/admin/unlock'
       path: '/admin/unlock'
@@ -295,17 +315,8 @@ const rootRouteChildren: RootRouteChildren = {
   AdminScalesRoute: AdminScalesRoute,
   AdminScenesRoute: AdminScenesRoute,
   AdminUnlockRoute: AdminUnlockRoute,
+  DevCrossingRoute: DevCrossingRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

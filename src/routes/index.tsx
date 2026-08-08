@@ -1935,6 +1935,11 @@ function PhaseApp() {
       className="min-h-screen w-full flex flex-col relative pr-stage"
       style={{ color: "var(--pr-text)" }}
     >
+      {perfMode ? (
+        <Suspense fallback={null}>
+          <PerformanceProbe />
+        </Suspense>
+      ) : null}
       <PhaseReadout
         scene={scene}
         wheel={engineRef.current.wheel}

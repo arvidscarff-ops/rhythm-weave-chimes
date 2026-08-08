@@ -75,3 +75,12 @@ it is documented as indistinguishable from a natural completion by design. The a
 per-run: scrubbing back below the arrival threshold does not re-arm it, only `reset()` /
 `start()` does, so repeated scrub/reset sequences can never emit arrival twice in one run.
 Tests specify all three behaviors explicitly.
+
+**Time fields (option A).** No epoch timestamps and no `Date.now()`. The fields are named
+`startedAtMonotonicSeconds` / `arrivedAtMonotonicSeconds`, typed and documented as monotonic
+runtime seconds from the injected `TimeSource` — not wall-clock, not persistence-safe.
+Persistence/history is out of scope.
+
+**Arrival observability.** On the arrival transition, progress is set to exactly `1.0` and a
+`progressChanged` event is emitted unconditionally, bypassing the epsilon suppression, so the
+final state is always observable alongside `phaseChanged` and `crossingArrived`. Covered by test.

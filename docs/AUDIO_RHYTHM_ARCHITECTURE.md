@@ -4,7 +4,7 @@
 **Run:** 3 of the PHASE Project Bible documentation plan  
 **Authority:** Governing target behavior for rhythm, timing, Trigger Engines, and audiovisual synchronization  
 **Evidence boundary:** Defines known invariants and safe contracts; it does not claim that the current repository already implements them  
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-09
 
 ---
 
@@ -418,6 +418,8 @@ Audio normally requires scheduling slightly ahead of playback to avoid main-thre
 
 The scheduler may maintain a lookahead queue, but it remains subordinate to the rhythm authority. It schedules authoritative events; it does not invent them.
 
+**ACCEPTED PRODUCTION CONTRACT — D035:** The migrated Phase-Alignment path has one lookahead scheduler. It enumerates exact authoritative envelopes from the active immutable composition session, projects each supplied-transport occurrence individually onto audio-clock time, and passes the same stable identity to audio and visual sinks. Scene geometry supplies presentation metadata only. Legacy Wheel, Pendulum, and Bars remain outside this contract during validation; Custom Scene geometry/contact is visual-only during this migration.
+
 ### 5.5 Visual snapshot
 
 The visual layer receives or derives:
@@ -788,7 +790,7 @@ Two safe patterns are possible:
 1. **Audio-clock-led transport:** musical position is anchored to audio clock time.
 2. **Logical transport with synchronized audio projection:** a logical transport maps events onto audio clock timestamps.
 
-The repository audit must determine the current approach. The project should adopt and document one.
+**ACCEPTED FOR THE MIGRATED PRODUCTION PATH — D035:** PHASE currently uses the logical-transport pattern. `engineClock` owns live position, the exact-rational timeline owns event relationships, and the scheduler maps each authoritative transport occurrence onto an `AudioContext` playback target. The audio clock does not enumerate musical events.
 
 ### 11.3 Lookahead is not a second authority
 
@@ -800,6 +802,8 @@ It must be possible to cancel or invalidate scheduled events when:
 - a seek occurs;
 - the composition version changes;
 - a quantized transition replaces future events.
+
+**ACCEPTED INVALIDATION CONTRACT — D035:** Migrated scheduled sources pass through a disposable generation gain gate. Explicit pause, hidden/background suspension, origin/rate invalidation, scheduler rebind, and teardown silence and disconnect the current gate. Invalidated future identities may then be scheduled again from the preserved transport position; already-consumed identities remain guarded. A scheduler gap resumes at the current position without a catch-up burst.
 
 ### 11.4 Late events
 

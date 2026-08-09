@@ -124,6 +124,36 @@ export const metatronLatticeScene: Scene<MetatronLatticeState> = {
 
   sample(_state, _t, _g) {},
 
+  projectAuthoritativeEvent(state, event, occurrenceSceneTime, g) {
+    const note = state.notes[event.voiceOrder];
+    if (!note) throw new Error(`Metatron Lattice voice is unavailable: ${event.voiceId}`);
+    const spec = LAYERS[note.layer];
+    const point = edgePos(
+      spec,
+      note.edge,
+      0,
+      layerRotation(spec, occurrenceSceneTime, g.macroCycleSeconds),
+      g.W / 2,
+      g.H / 2,
+      Math.min(g.W, g.H) * 0.42,
+    );
+    const speedNorm = state.notes.length > 1 ? note.pi / (state.notes.length - 1) : 1;
+    return {
+      slot: note.slot,
+      freq: freqOf(note.pitchSemis + g.pitchSemis),
+      x: point.x,
+      y: point.y,
+      hue: note.hue,
+      velocity: 0.5 + speedNorm * 0.4,
+      pack: note.pack,
+    };
+  },
+
+  consumeAuthoritativeVisualEvent(state, event, occurrenceSceneTime) {
+    const note = state.notes[event.voiceOrder];
+    if (note) note.lastFireT = occurrenceSceneTime;
+  },
+
   eventsIn(state, t0, t1, g) {
     const events: TriggerEvent[] = [];
     if (t1 <= t0) return events;

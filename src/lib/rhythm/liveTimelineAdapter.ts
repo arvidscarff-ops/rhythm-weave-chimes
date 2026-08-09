@@ -162,6 +162,12 @@ export function multiplyTransportSeconds(
   return exactTransportSeconds(value.secondsNumerator * multiplier, value.secondsDenominator);
 }
 
+/** Derived number projection for transport/audio APIs; never musical authority. */
+export function transportSecondsToNumber(input: TransportPositionInput): number {
+  const value = normalizeTransportInput(input);
+  return Number(value.secondsNumerator) / Number(value.secondsDenominator);
+}
+
 function greatestCommonDivisor(left: bigint, right: bigint): bigint {
   let a = left;
   let b = right;

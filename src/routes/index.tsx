@@ -48,6 +48,21 @@ import { engineClock } from "@/lib/engine/clock";
 import { installEngineClockVisibilityFreeze } from "@/lib/engine/visibilityFreeze";
 import { createFireLayer } from "@/lib/visuals/fireShaderLayer";
 import { engineScheduler } from "@/lib/engine/scheduler";
+import { publishScheduledVisual } from "@/lib/engine/triggerBus";
+import type { Scene as ProductionScene, SceneGlobals } from "@/lib/engine/sceneTypes";
+import {
+  createCompositionRevisionSession,
+  queueCompositionRevision,
+  type CompositionRevisionSession,
+  type ProductionTimelineEvent,
+} from "@/lib/rhythm/productionRhythmBridge";
+import {
+  createProductionCompositionSnapshot,
+  isProductionPhaseAlignedEngineId,
+  productionEngineIdFromSnapshot,
+  type ProductionPhaseAlignedEngineId,
+} from "@/lib/rhythm/productionComposition";
+import { transportSecondsToNumber } from "@/lib/rhythm/liveTimelineAdapter";
 import {
   composerAdvance,
   resetComposerSources,
@@ -191,6 +206,27 @@ type Knobs = {
 };
 
 type VoiceSel = { melo: VoiceKind; bass: VoiceKind; atmo: VoiceKind };
+
+type ProductionCompositionConfig = Readonly<{
+  engineId: ProductionPhaseAlignedEngineId;
+  density: number;
+  noteCount: number;
+  baseLaps: number;
+  macroCycleSeconds: number;
+}>;
+
+/**
+ * Composition-session state survives a player component remount. It owns no
+ * timer or transport; `engineClock` remains the sole live-time authority.
+ */
+const productionPlayerRuntime = {
+  session: { current: null as CompositionRevisionSession | null },
+  configs: { current: new Map<number, ProductionCompositionConfig>() },
+  projectionStates: { current: new Map<number, unknown>() },
+  nextRevision: { current: 1 },
+  lastStructure: { current: null as string | null },
+  initialWindowPending: { current: false },
+};
 
 type TriggerEvent = {
   vertex: number;
@@ -942,6 +978,12 @@ function PhaseApp() {
   knobsRef.current = knobs;
   const bpmRef = useRef(bpm);
   bpmRef.current = bpm;
+  const productionSessionRef = productionPlayerRuntime.session;
+  const productionConfigsRef = productionPlayerRuntime.configs;
+  const productionProjectionStatesRef = productionPlayerRuntime.projectionStates;
+  const nextCompositionRevisionRef = productionPlayerRuntime.nextRevision;
+  const lastProductionStructureRef = productionPlayerRuntime.lastStructure;
+  const initialProductionWindowPendingRef = productionPlayerRuntime.initialWindowPending;
 
   // ---- Chord Progression Engine wiring ----
   // Push tempo into the progression module whenever it changes so bar math
@@ -1042,68 +1084,368 @@ function PhaseApp() {
     };
   }, []);
 
-  /* ---- Phase-Zero scheduler binding ---------------------------------
-   * The scheduler ticks on its own (25 ms setInterval) and pulls events
-   * via `activeScene.eventsIn(t0, t1)`. We re-bind whenever the active
-   * scene changes; legacy scenes (no `eventsIn`) leave the scheduler
-   * dormant so the imperative `dispatchTriggers` path keeps owning audio.
+  const resetMigratedSceneState = useCallback((engineId: ProductionPhaseAlignedEngineId) => {
+    const state = engineRef.current;
+    if (engineId === "stringNet") state.stringNet = null;
+    else if (engineId === "pendulumFan") state.pendulumFan = null;
+    else if (engineId === "spiralArp") state.spiralArp = null;
+    else if (engineId === "radialSweep") state.radialSweep = null;
+    else if (engineId === "mandalaMatrix") state.mandalaMatrix = null;
+    else if (engineId === "metatronLattice") state.metatronLattice = null;
+    else if (engineId === "fractalNebula") state.fractalNebula = null;
+    else if (engineId === "radialResonator") state.radialResonator = null;
+    else if (engineId === "phaseAlignRings") state.phaseAlignRings = null;
+    else if (engineId === "voidSheets") state.voidSheets = null;
+  }, []);
+
+  const cycleForComposition = resolveGlobalCycle();
+  const productionStructure = isProductionPhaseAlignedEngineId(scene)
+    ? `${scene}|${knobs.multiply}|${cycleForComposition.baseLaps}|${cycleForComposition.macroCycleSeconds}|${cycleForComposition.noteCount}`
+    : null;
+
+  useEffect(() => {
+    if (!isProductionPhaseAlignedEngineId(scene) || productionStructure == null) {
+      productionSessionRef.current = null;
+      productionConfigsRef.current.clear();
+      productionProjectionStatesRef.current.clear();
+      lastProductionStructureRef.current = null;
+      initialProductionWindowPendingRef.current = false;
+      return;
+    }
+    if (lastProductionStructureRef.current === productionStructure) return;
+
+    const cycle = resolveGlobalCycle();
+    const revision = nextCompositionRevisionRef.current++;
+    const config = Object.freeze({
+      engineId: scene,
+      density: knobs.multiply,
+      noteCount: cycle.noteCount,
+      baseLaps: cycle.baseLaps,
+      macroCycleSeconds: cycle.macroCycleSeconds,
+    });
+    const snapshot = createProductionCompositionSnapshot({
+      compositionId: "phase-production-player",
+      revision,
+      engineId: scene,
+      macroCycleDuration: cycle.macroCycleSeconds,
+      baseLaps: cycle.baseLaps,
+      density: knobs.multiply,
+      noteCount: cycle.noteCount,
+    });
+    productionConfigsRef.current.set(revision, config);
+
+    if (productionSessionRef.current == null) {
+      productionSessionRef.current = createCompositionRevisionSession(snapshot, engineClock.t());
+      initialProductionWindowPendingRef.current = true;
+      resetMigratedSceneState(scene);
+    } else {
+      productionSessionRef.current = queueCompositionRevision(
+        productionSessionRef.current,
+        snapshot,
+        engineClock.t(),
+      );
+    }
+    lastProductionStructureRef.current = productionStructure;
+    engineScheduler.resync();
+  }, [knobs.multiply, productionStructure, resetMigratedSceneState, resolveGlobalCycle, scene]);
+
+  /* ---- Authoritative production scheduler binding -------------------
+   * Only migrated Phase-Alignment engines bind here. Their scene modules
+   * project exact authoritative events into presentation metadata; they do
+   * not enumerate, retime, or independently dispatch musical events.
+   * Legacy Wheel/Pendulum/Bars remain on their existing direct paths.
    * --------------------------------------------------------------- */
   useEffect(() => {
     engineScheduler.start();
-    return () => engineScheduler.stop();
+    return () => {
+      engineClock.pause();
+      engineScheduler.stop();
+    };
   }, []);
   useEffect(() => installEngineClockVisibilityFreeze(), []);
   useEffect(() => {
     const a = audioRef.current;
     const e = engineRef.current;
-    if (!a) {
+    if (!a || !playing || !isProductionPhaseAlignedEngineId(scene)) {
       engineScheduler.setActive(null);
       return;
     }
-    const bind = <S,>(impl: import("@/lib/engine/sceneTypes").Scene<S>, getter: () => S | null) => {
-      if (!impl.eventsIn) {
-        engineScheduler.setActive(null);
-        return;
+
+    const initialSession = productionSessionRef.current;
+    if (!initialSession) {
+      engineScheduler.setActive(null);
+      return;
+    }
+
+    const projectWithScene = <S,>(
+      impl: ProductionScene<S>,
+      event: ProductionTimelineEvent,
+      globals: SceneGlobals,
+      occurrenceSceneTime: number,
+    ) => {
+      if (!impl.projectAuthoritativeEvent) {
+        throw new Error(`${impl.id} does not implement authoritative event projection.`);
       }
-      engineScheduler.setActive({
-        scene: impl as unknown as import("@/lib/engine/sceneTypes").Scene<unknown>,
-        state: () => getter(),
-        globals: () => {
-          const k = knobsRef.current;
-          const c = canvasRef.current;
-          const cyc = resolveGlobalCycle();
-          return {
-            W: c?.clientWidth ?? 0,
-            H: c?.clientHeight ?? 0,
-            bpm: bpmRef.current,
-            speed: k.speed,
-            density: k.multiply,
-            pitchSemis: k.pitch,
-            audioNow: a.ctx.currentTime,
-            globalTime: engineClock.t(),
-            baseLaps: cyc.baseLaps,
-            macroCycleSeconds: cyc.macroCycleSeconds,
-            noteCount: cyc.noteCount,
-          };
-        },
-        audioCtx: a.ctx,
-        audioDest: a.preFx,
-        pack: () => packRef.current,
-      });
+      let state = productionProjectionStatesRef.current.get(event.compositionRevision) as
+        | S
+        | undefined;
+      if (!state) {
+        state = impl.init(globals);
+        productionProjectionStatesRef.current.set(event.compositionRevision, state);
+      }
+      return impl.projectAuthoritativeEvent(state, event, occurrenceSceneTime, globals);
     };
-    if (scene === "stringNet") bind(stringNetworkScene, () => e.stringNet);
-    else if (scene === "pendulumFan") bind(pendulumFanScene, () => e.pendulumFan);
-    else if (scene === "spiralArp") bind(spiralArpScene, () => e.spiralArp);
-    else if (scene === "radialSweep") bind(radialSweepScene, () => e.radialSweep);
-    else if (scene === "mandalaMatrix") bind(mandalaMatrixScene, () => e.mandalaMatrix);
-    else if (scene === "metatronLattice") bind(metatronLatticeScene, () => e.metatronLattice);
-    else if (scene === "fractalNebula") bind(fractalNebulaScene, () => e.fractalNebula);
-    else if (scene === "radialResonator") bind(radialResonatorScene, () => e.radialResonator);
-    else if (scene === "phaseAlignRings") bind(phaseAlignRingsScene, () => e.phaseAlignRings);
-    else if (scene === "voidSheets") bind(voidSheetsScene, () => e.voidSheets);
-    else if (scene === "custom") bind(customScene, () => e.custom);
-    else engineScheduler.setActive(null);
-  }, [scene, playing, topo]);
+
+    const consumeWithScene = <S,>(
+      impl: ProductionScene<S>,
+      getState: () => S | null,
+      setState: (state: S) => void,
+      event: ProductionTimelineEvent,
+      globals: SceneGlobals,
+      occurrenceSceneTime: number,
+    ) => {
+      if (!impl.consumeAuthoritativeVisualEvent) return;
+      let state = getState();
+      if (!state) {
+        state = impl.init(globals);
+        setState(state);
+      }
+      impl.consumeAuthoritativeVisualEvent(state, event, occurrenceSceneTime, globals);
+    };
+
+    const globalsForEvent = (event: ProductionTimelineEvent) => {
+      const config = productionConfigsRef.current.get(event.compositionRevision);
+      if (!config) {
+        throw new Error(
+          `Missing production configuration for revision ${event.compositionRevision}.`,
+        );
+      }
+      const c = canvasRef.current;
+      const occurrenceSceneTime = transportSecondsToNumber(event.compositionTransportOccurrence);
+      const globals: SceneGlobals = {
+        W: c?.clientWidth ?? 0,
+        H: c?.clientHeight ?? 0,
+        bpm: bpmRef.current,
+        speed: knobsRef.current.speed,
+        density: config.density,
+        pitchSemis: knobsRef.current.pitch,
+        audioNow: a.ctx.currentTime,
+        globalTime: occurrenceSceneTime,
+        baseLaps: config.baseLaps,
+        macroCycleSeconds: config.macroCycleSeconds,
+        noteCount: config.noteCount,
+      };
+      return { config, globals, occurrenceSceneTime };
+    };
+
+    const consumeVisualEvent = (event: ProductionTimelineEvent) => {
+      const { config, globals, occurrenceSceneTime } = globalsForEvent(event);
+      switch (config.engineId) {
+        case "stringNet":
+          return consumeWithScene(
+            stringNetworkScene,
+            () => e.stringNet,
+            (s) => (e.stringNet = s),
+            event,
+            globals,
+            occurrenceSceneTime,
+          );
+        case "pendulumFan":
+          return consumeWithScene(
+            pendulumFanScene,
+            () => e.pendulumFan,
+            (s) => (e.pendulumFan = s),
+            event,
+            globals,
+            occurrenceSceneTime,
+          );
+        case "spiralArp":
+          return consumeWithScene(
+            spiralArpScene,
+            () => e.spiralArp,
+            (s) => (e.spiralArp = s),
+            event,
+            globals,
+            occurrenceSceneTime,
+          );
+        case "radialSweep":
+          return consumeWithScene(
+            radialSweepScene,
+            () => e.radialSweep,
+            (s) => (e.radialSweep = s),
+            event,
+            globals,
+            occurrenceSceneTime,
+          );
+        case "mandalaMatrix":
+          return consumeWithScene(
+            mandalaMatrixScene,
+            () => e.mandalaMatrix,
+            (s) => (e.mandalaMatrix = s),
+            event,
+            globals,
+            occurrenceSceneTime,
+          );
+        case "metatronLattice":
+          return consumeWithScene(
+            metatronLatticeScene,
+            () => e.metatronLattice,
+            (s) => (e.metatronLattice = s),
+            event,
+            globals,
+            occurrenceSceneTime,
+          );
+        case "fractalNebula":
+          return consumeWithScene(
+            fractalNebulaScene,
+            () => e.fractalNebula,
+            (s) => (e.fractalNebula = s),
+            event,
+            globals,
+            occurrenceSceneTime,
+          );
+        case "radialResonator":
+          return consumeWithScene(
+            radialResonatorScene,
+            () => e.radialResonator,
+            (s) => (e.radialResonator = s),
+            event,
+            globals,
+            occurrenceSceneTime,
+          );
+        case "phaseAlignRings":
+          return consumeWithScene(
+            phaseAlignRingsScene,
+            () => e.phaseAlignRings,
+            (s) => (e.phaseAlignRings = s),
+            event,
+            globals,
+            occurrenceSceneTime,
+          );
+        case "voidSheets":
+          return consumeWithScene(
+            voidSheetsScene,
+            () => e.voidSheets,
+            (s) => (e.voidSheets = s),
+            event,
+            globals,
+            occurrenceSceneTime,
+          );
+      }
+    };
+
+    engineScheduler.setActive({
+      session: () => {
+        const session = productionSessionRef.current;
+        if (!session) throw new Error("Production scheduler lost its composition session.");
+        return session;
+      },
+      setSession: (session) => {
+        productionSessionRef.current = session;
+      },
+      project: (event) => {
+        const { config, globals, occurrenceSceneTime } = globalsForEvent(event);
+
+        switch (config.engineId) {
+          case "stringNet":
+            return projectWithScene(
+              stringNetworkScene,
+              event,
+              globals,
+              occurrenceSceneTime,
+            );
+          case "pendulumFan":
+            return projectWithScene(
+              pendulumFanScene,
+              event,
+              globals,
+              occurrenceSceneTime,
+            );
+          case "spiralArp":
+            return projectWithScene(
+              spiralArpScene,
+              event,
+              globals,
+              occurrenceSceneTime,
+            );
+          case "radialSweep":
+            return projectWithScene(
+              radialSweepScene,
+              event,
+              globals,
+              occurrenceSceneTime,
+            );
+          case "mandalaMatrix":
+            return projectWithScene(
+              mandalaMatrixScene,
+              event,
+              globals,
+              occurrenceSceneTime,
+            );
+          case "metatronLattice":
+            return projectWithScene(
+              metatronLatticeScene,
+              event,
+              globals,
+              occurrenceSceneTime,
+            );
+          case "fractalNebula":
+            return projectWithScene(
+              fractalNebulaScene,
+              event,
+              globals,
+              occurrenceSceneTime,
+            );
+          case "radialResonator":
+            return projectWithScene(
+              radialResonatorScene,
+              event,
+              globals,
+              occurrenceSceneTime,
+            );
+          case "phaseAlignRings":
+            return projectWithScene(
+              phaseAlignRingsScene,
+              event,
+              globals,
+              occurrenceSceneTime,
+            );
+          case "voidSheets":
+            return projectWithScene(
+              voidSheetsScene,
+              event,
+              globals,
+              occurrenceSceneTime,
+            );
+        }
+      },
+      audioCtx: a.ctx,
+      audioDest: a.preFx,
+      pack: () => packRef.current,
+      visualSink: ({ timelineEvent, presentation }) => {
+        consumeVisualEvent(timelineEvent);
+        publishScheduledVisual(presentation);
+      },
+      onCompositionActivated: (session) => {
+        const activeRevision = session.active.composition.revision;
+        const activeEngine = productionEngineIdFromSnapshot(session.active.composition);
+        resetMigratedSceneState(activeEngine);
+        for (const revision of productionConfigsRef.current.keys()) {
+          if (revision !== activeRevision) productionConfigsRef.current.delete(revision);
+        }
+        for (const revision of productionProjectionStatesRef.current.keys()) {
+          if (revision !== activeRevision) productionProjectionStatesRef.current.delete(revision);
+        }
+        bumpTopo();
+      },
+    });
+
+    if (initialProductionWindowPendingRef.current) {
+      engineScheduler.resync(initialSession.activeFrom);
+      initialProductionWindowPendingRef.current = false;
+    }
+    return () => engineScheduler.setActive(null);
+  }, [bumpTopo, playing, resetMigratedSceneState, scene]);
 
   /* ---- Session URL: share + restore ---- */
   const buildSessionState = useCallback(
@@ -1601,12 +1943,22 @@ function PhaseApp() {
     const W = e.w,
       H = e.h;
     ctx2d.setTransform(e.dpr, 0, 0, e.dpr, 0, 0);
+    const requestedScene = sceneRef.current;
+    const productionSession = isProductionPhaseAlignedEngineId(requestedScene)
+      ? productionSessionRef.current
+      : null;
+    const activeProductionConfig = productionSession
+      ? productionConfigsRef.current.get(productionSession.active.composition.revision)
+      : undefined;
+    // A requested structural change remains queued until exact Phase Zero.
+    // Continue rendering the active immutable revision in the meantime.
+    const scene: SceneKind = activeProductionConfig?.engineId ?? requestedScene;
 
     // Always: art surface (transparent + bloom + grain), UNLESS the
     // active scene owns its own pre-clear (e.g. "custom" Scene Builder
     // trail decay). In that case skip the default clear/bloom/grain so
     // long-exposure trails survive frame-to-frame.
-    if (sceneRef.current === "custom") {
+    if (scene === "custom") {
       customScene.preClear?.(ctx2d, {
         W,
         H,
@@ -1625,7 +1977,6 @@ function PhaseApp() {
     }
 
     const playing = !!(a && playingRef.current);
-    const scene = sceneRef.current;
     ctx2d.globalCompositeOperation = "lighter";
     if (scene === "wheel") {
       if (playing) {
@@ -1661,14 +2012,16 @@ function PhaseApp() {
     } else {
       // Engine scenes (Scene interface). New scenes share one dispatch path.
       const k = knobsRef.current;
-      const gT = engineClock.t();
-      const cyc = resolveGlobalCycle();
+      const gT = productionSession
+        ? Math.max(0, engineClock.t() - transportSecondsToNumber(productionSession.activeFrom))
+        : engineClock.t();
+      const cyc = activeProductionConfig ?? resolveGlobalCycle();
       const globals = {
         W,
         H,
         bpm: bpmRef.current,
         speed: k.speed,
-        density: k.multiply,
+        density: activeProductionConfig?.density ?? k.multiply,
         pitchSemis: k.pitch,
         audioNow: a ? a.ctx.currentTime : 0,
         globalTime: gT,
@@ -1738,9 +2091,11 @@ function PhaseApp() {
     if (playingRef.current) resetComposerSources();
     if (playingRef.current) engineClock.pause();
     else {
-      // Always start a play session from the Big Bang formation so every
-      // note rests on its trigger point and fires together on click.
-      engineClock.resetPhaseZero();
+      // Migrated compositions resume their preserved authoritative position.
+      // Legacy engines retain their established Big Bang-on-play behavior.
+      if (!isProductionPhaseAlignedEngineId(sceneRef.current)) {
+        engineClock.resetPhaseZero();
+      }
       engineClock.resume();
     }
     engineScheduler.resync();
@@ -1751,21 +2106,22 @@ function PhaseApp() {
 
   const isWheel = scene === "wheel";
 
-  /* ---- Universal Big Bang on shape change ----
-   * Whenever the composition shape changes (scene, note count, scale, root,
-   * or any composer slot), snap scene-time back to t=0 so every node returns
-   * to its rest formation and the next play click is a Big Bang.
-   */
-  const shapeSig =
+  /* ---- Legacy shape reset ------------------------------------------
+   * Wheel/Pendulum/Bars and the Custom graphics lab retain the previous
+   * immediate reset contract. Migrated engines instead queue structural
+   * CompositionSnapshot revisions for exact Phase-Zero activation above.
+   * --------------------------------------------------------------- */
+  const legacyShapeSig =
     `${scene}|${knobs.multiply}|${composer.scale}|${composer.root}|` +
     composer.slots
       .map((s) => `${s.k}/${s.n}/${s.rotation}/${s.noteMode}`)
       .join(",");
   useEffect(() => {
+    if (isProductionPhaseAlignedEngineId(scene)) return;
     engineClock.resetPhaseZero();
     engineScheduler.resync();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shapeSig]);
+  }, [legacyShapeSig, scene]);
 
   /* ---- Wheel pointer interaction ---- */
   const onCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {

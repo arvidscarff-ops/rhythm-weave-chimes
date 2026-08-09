@@ -143,6 +143,36 @@ export const fractalNebulaScene: Scene<FractalNebulaState> = {
 
   sample(_state, _t, _g) {},
 
+  projectAuthoritativeEvent(state, event, occurrenceSceneTime, g) {
+    const particle = state.particles[event.voiceOrder];
+    if (!particle) throw new Error(`Fractal Nebula voice is unavailable: ${event.voiceId}`);
+    const spec = LAYERS[particle.layer];
+    const point = edgePos(
+      spec,
+      particle.edge,
+      0,
+      layerRotation(spec, occurrenceSceneTime, g.macroCycleSeconds),
+      g.W / 2,
+      g.H / 2,
+      Math.min(g.W, g.H) * 0.42,
+    );
+    const speedNorm = state.particles.length > 1 ? particle.pi / (state.particles.length - 1) : 1;
+    return {
+      slot: particle.slot,
+      freq: freqOf(particle.pitchSemis + g.pitchSemis),
+      x: point.x,
+      y: point.y,
+      hue: particle.hue,
+      velocity: 0.5 + speedNorm * 0.4,
+      pack: particle.pack,
+    };
+  },
+
+  consumeAuthoritativeVisualEvent(state, event, occurrenceSceneTime) {
+    const particle = state.particles[event.voiceOrder];
+    if (particle) particle.lastFireT = occurrenceSceneTime;
+  },
+
   eventsIn(state, t0, t1, g) {
     const events: TriggerEvent[] = [];
     if (t1 <= t0) return events;

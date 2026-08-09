@@ -102,6 +102,27 @@ export const spiralArpScene: Scene<SpiralArpState> = {
     }
   },
 
+  projectAuthoritativeEvent(state, event, occurrenceSceneTime, g) {
+    const playhead = state.playheads[event.voiceOrder];
+    if (!playhead) throw new Error(`Spiral Arp voice is unavailable: ${event.voiceId}`);
+    const tMax = thetaMax(state.turns);
+    const rOuter = radiusAt(state, tMax);
+    const speedNorm = state.playheads.length > 1 ? playhead.pi / (state.playheads.length - 1) : 1;
+    return {
+      slot: playhead.slot,
+      freq: freqOf(SCALE_SEMIS[playhead.pi % SCALE_SEMIS.length] + g.pitchSemis),
+      x: g.W / 2 + Math.cos(tMax) * rOuter,
+      y: g.H / 2 + Math.sin(tMax) * rOuter,
+      hue: playhead.hue,
+      velocity: 0.5 + speedNorm * 0.45,
+    };
+  },
+
+  consumeAuthoritativeVisualEvent(state, event, occurrenceSceneTime) {
+    const playhead = state.playheads[event.voiceOrder];
+    if (playhead) playhead.lastFireT = occurrenceSceneTime;
+  },
+
   eventsIn(state, t0, t1, g) {
     const events: TriggerEvent[] = [];
     if (t1 <= t0) return events;

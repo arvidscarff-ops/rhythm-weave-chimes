@@ -1,15 +1,16 @@
 /**
  * Phase engine — Scene contract.
  *
- * Each Scene owns its own physics + draw; the render loop only knows how to
- * tick `update(dt)` and `draw(ctx)`, then pipe returned `TriggerEvent`s
- * through the shared `triggerBus` (audio + ink-bleed in one place).
+ * Each Scene owns visual state and drawing. Migrated scenes project a supplied
+ * authoritative event into presentation metadata; the shared scheduler then
+ * sends that same identified event to audio and visual sinks.
  *
  * Scenes never call `triggerPackVoice`, `performance.now()`, or `audioCtx`
  * directly. That keeps audio↔visual sync owned by one file.
  */
 
 import type { PackId } from "@/lib/sound/packs";
+import type { ProductionTimelineEvent } from "@/lib/rhythm/productionRhythmBridge";
 
 export type SceneId =
   | "stringNet"
@@ -113,8 +114,7 @@ export interface Scene<TState = unknown> {
    * Phase-Zero render contract (preferred). Pure function of scene time
    * — no internal `clock` mutation, no `dt`. When a scene implements
    * `sample`, the render loop calls it instead of `update` for draw
-   * positions; the global scheduler (see {@link Scene.eventsIn}) owns
-   * audio triggers.
+   * positions; the production authoritative timeline owns musical events.
    *
    * Returning `void` (or omitting `sample` entirely) means the scene is
    * still on the legacy `update` + `draw` path.
@@ -122,12 +122,32 @@ export interface Scene<TState = unknown> {
   sample?(state: TState, t: number, globals: SceneGlobals): void;
 
   /**
-   * Phase-Zero scheduler contract (preferred). Return every trigger
+   * Project one already-authoritative event into audio/visual presentation
+   * metadata. This function cannot add, remove, or retime musical events.
+   */
+  projectAuthoritativeEvent?(
+    state: TState,
+    event: ProductionTimelineEvent,
+    occurrenceSceneTime: number,
+    globals: SceneGlobals,
+  ): TriggerEvent;
+
+  /** Apply visual reaction state when that same event actually occurs. */
+  consumeAuthoritativeVisualEvent?(
+    state: TState,
+    event: ProductionTimelineEvent,
+    occurrenceSceneTime: number,
+    globals: SceneGlobals,
+  ): void;
+
+  /**
+   * Legacy Phase-Zero scheduler contract. Return every trigger
    * whose scene-time falls in `[t0, t1)`, in order. Called by the audio
    * scheduler from a look-ahead window — NOT from the render loop.
    *
    * Must be deterministic: `eventsIn(state, a, b)` called twice with the
    * same arguments must return identical results.
+   * Migrated production audio uses `projectAuthoritativeEvent` instead.
    */
   eventsIn?(state: TState, t0: number, t1: number, globals: SceneGlobals): TriggerEvent[];
 }

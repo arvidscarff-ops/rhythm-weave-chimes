@@ -1048,6 +1048,68 @@ Explicit project-owner decision, 2026-08-09; Reconciliation Step 4.
 
 ---
 
+## D035 — Migrated production audio schedules authoritative event envelopes
+
+**Status:** ACCEPTED
+**Scope:** Production scheduler, audio projection, and audiovisual event identity
+**Date:** 2026-08-09
+
+### Context
+
+The immutable composition bridge in D034 can enumerate exact events, but the existing production scheduler still asks scene implementations to enumerate floating-point windows and previously batches notes at a lookahead horizon. Pause, background suspension, remount, and composition replacement also require explicit invalidation of already-looked-ahead Web Audio work. Migrated Trigger Engines must not regain event authority through their presentation geometry.
+
+### Decision
+
+The migrated Phase-Alignment path uses one production lookahead scheduler beneath `engineClock`. It enumerates half-open windows through the active `CompositionRevisionSession` and schedules canonical event envelopes containing stable event identity, composition ID and numeric revision, voice identity and integer indices, exact macro position, exact composition-local occurrence, and exact supplied-transport occurrence.
+
+Each event's supplied transport occurrence is projected individually onto `AudioContext.currentTime` through the existing transport mapping. Audio clock time is a playback target only; it is not musical authority. One disposable generation gain gate sits between newly scheduled sources and the existing audio destination. Pause, hidden/background suspension, origin/rate invalidation, scheduler rebind, and runtime teardown silence and disconnect that generation so stale future sources—including sources completed after asynchronous sample loading—cannot play.
+
+Stable authoritative event IDs prevent duplicate scheduling. Identities for invalidated future events are released so resume can reschedule them from the preserved transport position; identities whose occurrences have passed remain guarded. A missed scheduler interval resumes from current preserved transport position and does not emit a catch-up burst.
+
+Migrated scene modules may project one supplied authoritative event into pitch, sound-slot, position, color, and energy metadata. They cannot enumerate, add, remove, or retime events. The scheduled audio event and scheduled visual presentation retain the same authoritative ID. Structural revisions remain queued and the scheduler splits its window at exact Phase Zero, finishing old-revision events before activating and projecting the new revision.
+
+Legacy Wheel, Pendulum, and Bars remain on their prior player paths for comparison. Custom Scene geometry/contact behavior is visual-only during this migration and is not bound to the production audio scheduler.
+
+### Rationale
+
+Separating exact event existence from audio-time and visual presentation preserves deterministic closure while still using Web Audio lookahead. A generation gate is the smallest reliable invalidation boundary available for already-created and asynchronously-created sources. Keeping the old player paths isolated supports comparison without introducing a second authority for migrated engines.
+
+### Consequences
+
+- lookahead horizons no longer become note timestamps;
+- frame cadence and geometry cannot alter migrated musical results;
+- explicit pause and hidden suspension freeze position and silence stale future schedules;
+- resume continues from preserved position without replaying elapsed hidden time;
+- current tuning, scales, sound packs, and pitch projection remain behind existing scene/audio boundaries;
+- late-event policy and scheduler telemetry remain unresolved follow-up work;
+- legacy engine retirement requires separate migration and validation.
+
+### Alternatives considered
+
+- **Keep scene `eventsIn` as production authority:** rejected because duplicated floating-point enumeration can diverge from the accepted rational timeline.
+- **Schedule every event at the lookahead horizon:** rejected because it destroys the event's actual occurrence time.
+- **Let rendering or contact dispatch audio:** rejected by D003, D007, and D033.
+- **Create a second transport or scheduler per engine:** rejected because it creates competing timing ownership.
+- **Migrate legacy and Custom engines in the same change:** rejected to preserve validation surfaces and avoid silently assigning geometry musical authority.
+
+### Migration and verification
+
+- retain `engineClock` as the only live transport and one production scheduler singleton;
+- pass authoritative envelopes through one injected audio sink and one visual sink;
+- gate and invalidate future work on transport lifecycle changes and rebinds;
+- test actual occurrence timestamps, half-open adjacency, identity deduplication, freeze/resume, hidden suspension, skipped-boundary revision activation, remount behavior, shared audiovisual identity, and one-event projection;
+- keep legacy engine behavior unchanged until its separately approved migration.
+
+### Supersedes / superseded by
+
+Completes the scheduler/audio portion deferred by D034. It does not resolve tuning, late-event policy, final Trigger Engine geometry, or legacy engine retirement.
+
+### Source
+
+Explicit project-owner instruction, 2026-08-09; Reconciliation Step 5.
+
+---
+
 ## 2. Rejected decision register
 
 The following have been explicitly rejected or superseded:

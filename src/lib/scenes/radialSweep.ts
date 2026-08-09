@@ -79,6 +79,28 @@ export const radialSweepScene: Scene<RadialSweepState> = {
     }
   },
 
+  projectAuthoritativeEvent(state, event, occurrenceSceneTime, g) {
+    const arm = state.arms[event.voiceOrder];
+    if (!arm) throw new Error(`Radial Sweep voice is unavailable: ${event.voiceId}`);
+    const speedNorm = state.arms.length > 1 ? arm.pi / (state.arms.length - 1) : 1;
+    return {
+      slot: arm.slot,
+      freq: freqOf(arm.pitchSemis + g.pitchSemis),
+      x: g.W / 2,
+      y: g.H / 2 - arm.rNorm * Math.min(g.W, g.H) * 0.42,
+      hue: arm.hue,
+      velocity: 0.55 + speedNorm * 0.4,
+    };
+  },
+
+  consumeAuthoritativeVisualEvent(state, event, occurrenceSceneTime) {
+    const arm = state.arms[event.voiceOrder];
+    if (!arm) return;
+    arm.lastFireT = occurrenceSceneTime;
+    state.triggerCount += 1;
+    if (state.triggerCount % 4 === 0) state.lastNebulaT = occurrenceSceneTime;
+  },
+
   eventsIn(state, t0, t1, g) {
     const events: TriggerEvent[] = [];
     if (t1 <= t0) return events;

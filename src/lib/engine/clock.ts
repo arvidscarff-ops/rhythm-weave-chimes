@@ -37,6 +37,14 @@ let accumulated = 0;
 /** Scene-time value of the most recent Phase Zero reset. */
 let phaseZeroAt = 0;
 
+export type EngineTransportLifecycleEvent = "freeze" | "resume" | "origin-reset" | "rate-change";
+type TransportLifecycleSubscriber = (event: EngineTransportLifecycleEvent) => void;
+const lifecycleSubscribers = new Set<TransportLifecycleSubscriber>();
+
+function emitLifecycle(event: EngineTransportLifecycleEvent): void {
+  for (const subscriber of lifecycleSubscribers) subscriber(event);
+}
+
 function nowRaw(): number {
   if (typeof performance !== "undefined") return performance.now() / 1000;
   return Date.now() / 1000;
@@ -66,6 +74,7 @@ export const engineClock = {
     paused = true;
     // An explicit pause while hidden cancels automatic resume.
     resumeAfterBackground = false;
+    emitLifecycle("freeze");
   },
 
   resume(): void {
@@ -76,6 +85,7 @@ export const engineClock = {
       return;
     }
     paused = false;
+    emitLifecycle("resume");
   },
 
   isPaused(): boolean {
@@ -89,6 +99,7 @@ export const engineClock = {
     resumeAfterBackground = !paused;
     paused = true;
     backgroundSuspended = true;
+    emitLifecycle("freeze");
   },
 
   /** Resume only if transport was playing when background suspension began. */
@@ -98,6 +109,7 @@ export const engineClock = {
     backgroundSuspended = false;
     paused = !resumeAfterBackground;
     resumeAfterBackground = false;
+    if (!paused) emitLifecycle("resume");
   },
 
   isBackgroundSuspended(): boolean {
@@ -108,6 +120,7 @@ export const engineClock = {
   setSpeed(x: number): void {
     tick();
     speed = Math.max(0, x);
+    emitLifecycle("rate-change");
   },
 
   getSpeed(): number {
@@ -121,6 +134,7 @@ export const engineClock = {
   resetPhaseZero(): void {
     tick();
     phaseZeroAt = accumulated;
+    emitLifecycle("origin-reset");
   },
 
   /** Scene time in seconds, monotonic, modulated by `speed`. */
@@ -144,5 +158,10 @@ export const engineClock = {
     const audioNow = audioCtx ? audioCtx.currentTime : 0;
     const dAudio = audioT - audioNow;
     return engineClock.t() + dAudio * speed;
+  },
+
+  subscribeLifecycle(subscriber: TransportLifecycleSubscriber): () => void {
+    lifecycleSubscribers.add(subscriber);
+    return () => lifecycleSubscribers.delete(subscriber);
   },
 };

@@ -31,6 +31,24 @@ export function onDispatch(fn: Sub): () => void {
   return () => subs.delete(fn);
 }
 
+/**
+ * Publish visual/reactive presentation for an event whose audio has already
+ * been scheduled by the authoritative production scheduler.
+ *
+ * The caller supplies the already-normalized event. This function cannot
+ * schedule audio and therefore cannot become a second musical authority.
+ */
+export function publishScheduledVisual(ev: TriggerEvent): void {
+  spawnInkBleed(ev.x, ev.y, { hue: ev.hue, energy: ev.velocity });
+  for (const subscriber of subs) {
+    try {
+      subscriber(ev);
+    } catch {
+      /* subscriber failures must not break the scheduler's visual sink */
+    }
+  }
+}
+
 export function dispatchTriggers(events: TriggerEvent[], ctx: DispatchCtx) {
   if (events.length === 0) return;
   for (const raw of events) {
@@ -38,13 +56,6 @@ export function dispatchTriggers(events: TriggerEvent[], ctx: DispatchCtx) {
     // Audio first — zero scheduling delay relative to the collision frame.
     triggerPackVoice(ctx.audioCtx, ctx.audioDest, ctx.pack, ev.slot, ev.freq, ctx.audioNow);
     // Visual ink-bleed in the same tick. No hard flashes.
-    spawnInkBleed(ev.x, ev.y, { hue: ev.hue, energy: ev.velocity });
-    for (const s of subs) {
-      try {
-        s(ev);
-      } catch {
-        /* subscriber failures must not break the audio loop */
-      }
-    }
+    publishScheduledVisual(ev);
   }
 }

@@ -1,5 +1,9 @@
 import { engineClock } from "@/lib/engine/clock";
-import type { AuthoritativeRhythmEvent, RhythmTimelineSnapshot } from "./authoritativeTimeline";
+import type {
+  AuthoritativeRhythmEvent,
+  ExactMacroPosition,
+  RhythmTimelineSnapshot,
+} from "./authoritativeTimeline";
 import { compositionTimelineDefinition, type CompositionSnapshot } from "./compositionSnapshot";
 import {
   addTransportSeconds,
@@ -20,13 +24,29 @@ export type ProductionRhythmAuthority = Readonly<{
   timeline: LiveTimelineAdapter;
 }>;
 
+/** Canonical event handed to the single production scheduler and its sinks. */
+export type ProductionTimelineEvent = Readonly<{
+  id: string;
+  compositionId: string;
+  compositionRevision: number;
+  voiceId: string;
+  voiceOrder: number;
+  voiceCount: number;
+  voiceEventIndex: bigint;
+  eventInMacroCycle: number;
+  exactMacroPosition: ExactMacroPosition;
+  compositionTransportOccurrence: ExactTransportSeconds;
+  suppliedTransportOccurrence: ExactTransportSeconds;
+  authoritativeEvent: AuthoritativeRhythmEvent;
+}>;
+
 /** Exact payload future production Trigger Engines consume. */
 export type ProductionTriggerEngineInput = Readonly<{
   composition: CompositionSnapshot;
   suppliedTransportPosition: ExactTransportSeconds;
   compositionTransportPosition: ExactTransportSeconds;
   snapshot: RhythmTimelineSnapshot;
-  events: readonly AuthoritativeRhythmEvent[];
+  events: readonly ProductionTimelineEvent[];
 }>;
 
 type PendingCompositionRevision = Readonly<{
@@ -157,7 +177,11 @@ export function advanceCompositionRevisionSession(
         session.active,
         current,
         localCurrent,
-        session.active.timeline.eventsBetween(localPrevious, localCurrent),
+        envelopeEvents(
+          session.active,
+          session.activeFrom,
+          session.active.timeline.eventsBetween(localPrevious, localCurrent),
+        ),
       ),
     });
   }
@@ -165,9 +189,13 @@ export function advanceCompositionRevisionSession(
   const oldWindowEnd = pending.activatesAt;
   const oldEvents =
     compareTransportSeconds(previous, oldWindowEnd) < 0
-      ? session.active.timeline.eventsBetween(
-          subtractTransportSeconds(previous, session.activeFrom),
-          subtractTransportSeconds(oldWindowEnd, session.activeFrom),
+      ? envelopeEvents(
+          session.active,
+          session.activeFrom,
+          session.active.timeline.eventsBetween(
+            subtractTransportSeconds(previous, session.activeFrom),
+            subtractTransportSeconds(oldWindowEnd, session.activeFrom),
+          ),
         )
       : Object.freeze([]);
   const newWindowStart =
@@ -175,7 +203,11 @@ export function advanceCompositionRevisionSession(
       ? exactTransportSeconds(0n)
       : subtractTransportSeconds(previous, pending.activatesAt);
   const newWindowEnd = subtractTransportSeconds(current, pending.activatesAt);
-  const newEvents = pending.authority.timeline.eventsBetween(newWindowStart, newWindowEnd);
+  const newEvents = envelopeEvents(
+    pending.authority,
+    pending.activatesAt,
+    pending.authority.timeline.eventsBetween(newWindowStart, newWindowEnd),
+  );
   const nextSession = Object.freeze({
     active: pending.authority,
     activeFrom: pending.activatesAt,
@@ -197,7 +229,7 @@ function buildInput(
   authority: ProductionRhythmAuthority,
   suppliedPosition: ExactTransportSeconds,
   compositionPosition: ExactTransportSeconds,
-  events: readonly AuthoritativeRhythmEvent[],
+  events: readonly ProductionTimelineEvent[],
 ): ProductionTriggerEngineInput {
   return Object.freeze({
     composition: authority.composition,
@@ -206,4 +238,37 @@ function buildInput(
     snapshot: authority.timeline.snapshotAt(compositionPosition),
     events,
   });
+}
+
+function envelopeEvents(
+  authority: ProductionRhythmAuthority,
+  compositionOrigin: ExactTransportSeconds,
+  events: readonly AuthoritativeRhythmEvent[],
+): readonly ProductionTimelineEvent[] {
+  const duration = authority.composition.macroCycleDuration;
+  return Object.freeze(
+    events.map((event) => {
+      const compositionTransportOccurrence = exactTransportSeconds(
+        event.macroPosition.numerator * duration.secondsNumerator,
+        event.macroPosition.denominator * duration.secondsDenominator,
+      );
+      return Object.freeze({
+        id: event.id,
+        compositionId: event.compositionId,
+        compositionRevision: event.compositionVersion,
+        voiceId: event.voiceId,
+        voiceOrder: event.voiceOrder,
+        voiceCount: authority.composition.voices.length,
+        voiceEventIndex: event.voiceEventIndex,
+        eventInMacroCycle: event.eventInMacroCycle,
+        exactMacroPosition: event.macroPosition,
+        compositionTransportOccurrence,
+        suppliedTransportOccurrence: addTransportSeconds(
+          compositionOrigin,
+          compositionTransportOccurrence,
+        ),
+        authoritativeEvent: event,
+      });
+    }),
+  );
 }

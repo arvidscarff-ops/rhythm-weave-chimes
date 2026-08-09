@@ -229,6 +229,28 @@ export const stringNetworkScene: Scene<StringNetState> = {
     }
   },
 
+  projectAuthoritativeEvent(state, event, occurrenceSceneTime, g) {
+    const p = state.particles[event.voiceOrder];
+    if (!p) throw new Error(`String Network voice is unavailable: ${event.voiceId}`);
+    const s = state.strings[p.stringIdx];
+    const anchor = p.dir === 1 ? state.anchors[s.a] : state.anchors[s.b];
+    const pt = anchorAt(anchor, occurrenceSceneTime, g.W, g.H);
+    const speedNorm = state.particles.length > 1 ? p.pi / (state.particles.length - 1) : 1;
+    return {
+      slot: p.slot,
+      freq: freqOf(p.pitchSemis + g.pitchSemis),
+      x: pt.x,
+      y: pt.y,
+      hue: p.hue,
+      velocity: 0.45 + speedNorm * 0.5,
+    };
+  },
+
+  consumeAuthoritativeVisualEvent(state, event, occurrenceSceneTime) {
+    const particle = state.particles[event.voiceOrder];
+    if (particle) particle.lastFireT = occurrenceSceneTime;
+  },
+
   eventsIn(state, t0, t1, g) {
     const events: TriggerEvent[] = [];
     if (t1 <= t0) return events;

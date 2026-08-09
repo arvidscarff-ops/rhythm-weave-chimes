@@ -147,6 +147,30 @@ export const voidSheetsScene: Scene<VoidSheetsState> = {
     }
   },
 
+  projectAuthoritativeEvent(state, event, occurrenceSceneTime, g) {
+    const note = state.notes[event.voiceOrder];
+    if (!note) throw new Error(`Void Sheets voice is unavailable: ${event.voiceId}`);
+    const speedNorm = state.notes.length > 1 ? note.id / (state.notes.length - 1) : 1;
+    return {
+      slot: note.slot,
+      freq: freqOf(note.pitchSemis + g.pitchSemis),
+      x: g.W * CENTER_X,
+      y: sheetYNorm(CENTER_X, note.sheetIndex) * g.H,
+      hue: note.hue,
+      velocity: 0.35 + speedNorm * 0.35,
+    };
+  },
+
+  consumeAuthoritativeVisualEvent(state, event, occurrenceSceneTime) {
+    const note = state.notes[event.voiceOrder];
+    if (!note) return;
+    note.lastFireT = occurrenceSceneTime;
+    const impulse = state.impulses[note.sheetIndex];
+    impulse.amp = Math.min(1, impulse.amp + 0.6);
+    impulse.t0 = occurrenceSceneTime;
+    impulse.side = note.side;
+  },
+
   eventsIn(state, t0, t1, g) {
     const events: TriggerEvent[] = [];
     if (t1 <= t0) return events;

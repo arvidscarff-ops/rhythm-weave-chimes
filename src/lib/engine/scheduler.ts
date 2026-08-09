@@ -1,156 +1,319 @@
 /**
- * Phase engine — look-ahead audio scheduler.
+ * Single production look-ahead scheduler.
  *
- * Replaces the imperative `dispatchTriggers` path for scenes that have
- * been migrated to the Phase-Zero contract. Operates on a 25 ms tick;
- * each tick queries `activeScene.eventsIn(t0, t1)` over a 120 ms horizon
- * and schedules voices at precise `AudioContext.currentTime` targets via
- * `triggerPackVoice`. The render loop never touches audio.
- *
- * The scheduler is dormant until `start()` is called and an active
- * scene with `eventsIn` is set. Legacy scenes (no `eventsIn`) cause it
- * to no-op for that frame — the old imperative path keeps running for
- * them. This is the feature flag: per-scene opt-in via the contract.
+ * Migrated Phase-Alignment engines provide presentation metadata for events
+ * already enumerated by the authoritative timeline. Legacy Wheel/Pendulum/Bars
+ * remain on their existing immediate dispatch path and never bind here.
  */
 
-import { engineClock } from "./clock";
-import { triggerPackVoice, BUILTIN_RUNTIME_PACKS, type RuntimePack } from "@/lib/sound/runtimePacks";
+import { engineClock, type EngineTransportLifecycleEvent } from "./clock";
+import {
+  triggerPackVoice,
+  BUILTIN_RUNTIME_PACKS,
+  type RuntimePack,
+} from "@/lib/sound/runtimePacks";
 import type { PackId } from "@/lib/sound/packs";
-import { spawnInkBleed } from "@/lib/visuals/inkBleed";
-import type { Scene, SceneGlobals, TriggerEvent } from "./sceneTypes";
+import type { TriggerEvent } from "./sceneTypes";
 import { applyOverlay } from "./sceneOverlay";
+import {
+  advanceCompositionRevisionSession,
+  type CompositionRevisionSession,
+  type ProductionTimelineEvent,
+} from "@/lib/rhythm/productionRhythmBridge";
+import {
+  addTransportSeconds,
+  compareTransportSeconds,
+  exactTransportSeconds,
+  transportSecondsFromNumber,
+  transportSecondsToNumber,
+  type ExactTransportSeconds,
+} from "@/lib/rhythm/liveTimelineAdapter";
 
-/** How often the scheduler wakes (ms). */
 const TICK_MS = 25;
-/** How far ahead each tick looks (s). Must exceed TICK_MS + jitter. */
 const HORIZON_S = 0.12;
-/**
- * Unison-guard window. Two events whose audio times fall in
- * `[UNISON_EXACT_S, UNISON_GUARD_S)` apart are nudged forward to keep
- * near-misses rhythmically independent. Events closer than
- * `UNISON_EXACT_S` are treated as the SAME instant (an intentional
- * coincidence / chord — e.g. the play-time chord, or a future
- * polyrhythm realignment) and pass through untouched.
- */
-const UNISON_GUARD_S = 0.05;
-const UNISON_NUDGE_S = 0.012;
-const UNISON_EXACT_S = 0.001;
+const MAX_CONSUMED_IDENTITIES = 8_192;
 
-/** Builtin-pack lookup so events with `ev.pack` can route per-layer. */
 const PACK_BY_ID = new Map<PackId, RuntimePack>(
-  BUILTIN_RUNTIME_PACKS.flatMap((p) => (p.kind === "builtin" ? [[p.id, p] as const] : [])),
+  BUILTIN_RUNTIME_PACKS.flatMap((pack) =>
+    pack.kind === "builtin" ? [[pack.id, pack] as const] : [],
+  ),
 );
 
-type ActiveBinding = {
-  scene: Scene<unknown>;
-  /** Late-bound state getter — returns `null` while the scene is lazy-initing. */
-  state: () => unknown | null;
-  globals: () => SceneGlobals;
+export type ScheduledProductionEvent = Readonly<{
+  id: string;
+  timelineEvent: ProductionTimelineEvent;
+  presentation: TriggerEvent;
+  audioContextTime: number;
+}>;
+
+export type ProductionSchedulerBinding = Readonly<{
+  session(): CompositionRevisionSession;
+  setSession(session: CompositionRevisionSession): void;
+  project(event: ProductionTimelineEvent): TriggerEvent;
   audioCtx: AudioContext;
   audioDest: AudioNode;
-  pack: () => RuntimePack;
+  pack(): RuntimePack;
+  visualSink(event: ScheduledProductionEvent): void;
+  onCompositionActivated?(session: CompositionRevisionSession): void;
+}>;
+
+type SchedulerTransport = Readonly<{
+  t(): number;
+  isPaused(): boolean;
+  sceneToAudioTime(sceneTime: number): number;
+  subscribeLifecycle(subscriber: (event: EngineTransportLifecycleEvent) => void): () => void;
+}>;
+
+type SchedulerDependencies = Readonly<{
+  transport: SchedulerTransport;
+  scheduleAudio(
+    audioCtx: AudioContext,
+    audioDest: AudioNode,
+    pack: RuntimePack,
+    event: ScheduledProductionEvent,
+  ): void;
+  setInterval: typeof globalThis.setInterval;
+  clearInterval: typeof globalThis.clearInterval;
+  setTimeout: typeof globalThis.setTimeout;
+  clearTimeout: typeof globalThis.clearTimeout;
+}>;
+
+type ScheduledRecord = {
+  audioContextTime: number;
+  visualTimer: ReturnType<typeof setTimeout> | null;
 };
 
-let timer: ReturnType<typeof setInterval> | null = null;
-let active: ActiveBinding | null = null;
-/** End of the last horizon we scheduled, in scene-time. */
-let lastScheduledT = 0;
+export function createProductionScheduler(dependencies: SchedulerDependencies) {
+  const { transport } = dependencies;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let unsubscribeLifecycle: (() => void) | null = null;
+  let active: ProductionSchedulerBinding | null = null;
+  let schedulingSession: CompositionRevisionSession | null = null;
+  let lastScheduledPosition: ExactTransportSeconds = exactTransportSeconds(0n);
+  let generationGate: GainNode | null = null;
+  let activationTimer: ReturnType<typeof setTimeout> | null = null;
+  const scheduledRecords = new Map<string, ScheduledRecord>();
+  const consumedIds = new Set<string>();
+  const consumedOrder: string[] = [];
 
-function schedulerTick(): void {
-  if (!active) return;
-  if (engineClock.isPaused()) return;
+  const rememberConsumed = (id: string) => {
+    if (consumedIds.has(id)) return;
+    consumedIds.add(id);
+    consumedOrder.push(id);
+    while (consumedOrder.length > MAX_CONSUMED_IDENTITIES) {
+      const oldest = consumedOrder.shift();
+      if (oldest) consumedIds.delete(oldest);
+    }
+  };
 
-  const { scene, state, globals, audioCtx, audioDest, pack } = active;
-  if (!scene.eventsIn) return; // scene not migrated — legacy path owns it
-  const st = state();
-  if (st == null) return; // not yet initialized
+  const forgetConsumed = (id: string) => {
+    consumedIds.delete(id);
+    const index = consumedOrder.indexOf(id);
+    if (index >= 0) consumedOrder.splice(index, 1);
+  };
 
-  const now = engineClock.t();
-  const horizon = now + HORIZON_S;
+  const silenceGeneration = () => {
+    if (!active || !generationGate) return;
+    const now = active.audioCtx.currentTime;
+    generationGate.gain.cancelScheduledValues(now);
+    generationGate.gain.setValueAtTime(0, now);
+    generationGate.disconnect();
+    generationGate = null;
+  };
 
-  // Only clamp when we're genuinely behind (e.g. after a long pause). On
-  // the normal first tick after `resync()`, lastScheduledT is just a hair
-  // behind `now` and we MUST preserve it so the t=0 Big Bang window gets
-  // queried — otherwise every scene loses its first-click chord.
-  if (now - lastScheduledT > HORIZON_S * 2) lastScheduledT = now;
-  if (lastScheduledT >= horizon) return;
+  const invalidateFuture = () => {
+    silenceGeneration();
+    if (activationTimer != null) dependencies.clearTimeout(activationTimer);
+    activationTimer = null;
+    const audioNow = active?.audioCtx.currentTime ?? 0;
+    for (const [id, record] of scheduledRecords) {
+      if (record.visualTimer != null) dependencies.clearTimeout(record.visualTimer);
+      if (record.audioContextTime > audioNow) forgetConsumed(id);
+    }
+    scheduledRecords.clear();
+    schedulingSession = active?.session() ?? null;
+    lastScheduledPosition = transportSecondsFromNumber(transport.t());
+  };
 
-  const g = globals();
+  const resetOrigin = () => {
+    invalidateFuture();
+    consumedIds.clear();
+    consumedOrder.length = 0;
+    lastScheduledPosition = exactTransportSeconds(0n);
+  };
 
-  const rawEvents = scene.eventsIn(st, lastScheduledT, horizon, g);
-  const events = rawEvents.map(applyOverlay);
-  const whenHorizon = engineClock.sceneToAudioTime(horizon);
-  // Compute each event's audio time, then apply the unison guard.
-  const scheduled: { ev: TriggerEvent; when: number }[] = events.map((ev) => ({
-    ev,
-    when: whenHorizon,
-  }));
-  if (scheduled.length > 1) {
-    scheduled.sort((a, b) => a.when - b.when || a.ev.slot - b.ev.slot);
-    for (let i = 1; i < scheduled.length; i++) {
-      const prev = scheduled[i - 1].when;
-      const delta = scheduled[i].when - prev;
-      // Exact coincidence — emergent chord (Big Bang on play, or a
-      // future polyrhythm realignment). Leave it alone.
-      if (delta < UNISON_EXACT_S) continue;
-      // Near miss — nudge forward so the two notes are heard as
-      // distinct rhythmic events, not a smeared unison.
-      if (delta < UNISON_GUARD_S) {
-        scheduled[i].when = prev + UNISON_GUARD_S + UNISON_NUDGE_S;
+  const handleLifecycle = (event: EngineTransportLifecycleEvent) => {
+    if (event === "origin-reset") resetOrigin();
+    else invalidateFuture();
+  };
+
+  const ensureGenerationGate = (binding: ProductionSchedulerBinding): GainNode => {
+    if (generationGate) return generationGate;
+    const gate = binding.audioCtx.createGain();
+    gate.gain.value = 1;
+    gate.connect(binding.audioDest);
+    generationGate = gate;
+    return gate;
+  };
+
+  const scheduleVisual = (
+    binding: ProductionSchedulerBinding,
+    scheduled: ScheduledProductionEvent,
+  ): ReturnType<typeof setTimeout> | null => {
+    const delayMs = Math.max(0, (scheduled.audioContextTime - binding.audioCtx.currentTime) * 1000);
+    if (delayMs < 4) {
+      binding.visualSink(scheduled);
+      return null;
+    }
+    return dependencies.setTimeout(() => {
+      const record = scheduledRecords.get(scheduled.id);
+      if (!record) return;
+      scheduledRecords.delete(scheduled.id);
+      binding.visualSink(scheduled);
+    }, delayMs);
+  };
+
+  const scheduleEvent = (
+    binding: ProductionSchedulerBinding,
+    timelineEvent: ProductionTimelineEvent,
+  ) => {
+    if (consumedIds.has(timelineEvent.id)) return;
+    const presentation = applyOverlay(binding.project(timelineEvent));
+    const occurrence = transportSecondsToNumber(timelineEvent.suppliedTransportOccurrence);
+    const audioContextTime = transport.sceneToAudioTime(occurrence);
+    const scheduled = Object.freeze({
+      id: timelineEvent.id,
+      timelineEvent,
+      presentation,
+      audioContextTime,
+    });
+    const pack = presentation.pack
+      ? (PACK_BY_ID.get(presentation.pack) ?? binding.pack())
+      : binding.pack();
+
+    rememberConsumed(timelineEvent.id);
+    dependencies.scheduleAudio(binding.audioCtx, ensureGenerationGate(binding), pack, scheduled);
+    const visualTimer = scheduleVisual(binding, scheduled);
+    scheduledRecords.set(timelineEvent.id, { audioContextTime, visualTimer });
+  };
+
+  const scheduleCompositionActivation = (
+    binding: ProductionSchedulerBinding,
+    nextSession: CompositionRevisionSession,
+  ) => {
+    if (activationTimer != null) dependencies.clearTimeout(activationTimer);
+    const occurrence = transportSecondsToNumber(nextSession.activeFrom);
+    const audioContextTime = transport.sceneToAudioTime(occurrence);
+    const activate = () => {
+      activationTimer = null;
+      if (active !== binding) return;
+      binding.setSession(nextSession);
+      binding.onCompositionActivated?.(nextSession);
+    };
+    const delayMs = Math.max(0, (audioContextTime - binding.audioCtx.currentTime) * 1000);
+    if (delayMs < 4) activate();
+    else activationTimer = dependencies.setTimeout(activate, delayMs);
+  };
+
+  const tickNow = () => {
+    const binding = active;
+    if (!binding || transport.isPaused()) return;
+
+    // Immediate visual events have no timer callback to remove their record.
+    // Discard them once their audio occurrence has passed so long sessions do
+    // not retain one scheduler record per note.
+    for (const [id, record] of scheduledRecords) {
+      if (record.visualTimer == null && record.audioContextTime <= binding.audioCtx.currentTime) {
+        scheduledRecords.delete(id);
       }
     }
-  }
-  for (const { ev, when } of scheduled) {
-    const packForEvent = ev.pack ? (PACK_BY_ID.get(ev.pack) ?? pack()) : pack();
-    triggerPackVoice(audioCtx, audioDest, packForEvent, ev.slot, ev.freq, when);
-    // Visual lands with the audio: delay ink-bleed by the nudge so
-    // the bloom stays glued to the sound, not the original event time.
-    const delayMs = Math.max(0, (when - audioCtx.currentTime) * 1000);
-    if (delayMs < 4) {
-      spawnInkBleed(ev.x, ev.y, { hue: ev.hue, energy: ev.velocity });
-    } else {
-      setTimeout(() => spawnInkBleed(ev.x, ev.y, { hue: ev.hue, energy: ev.velocity }), delayMs);
+    const now = transportSecondsFromNumber(transport.t());
+    const horizon = addTransportSeconds(now, transportSecondsFromNumber(HORIZON_S));
+
+    if (
+      compareTransportSeconds(lastScheduledPosition, now) < 0 &&
+      transportSecondsToNumber(now) - transportSecondsToNumber(lastScheduledPosition) >
+        HORIZON_S * 2
+    ) {
+      // Suspension or a missed scheduler run: resume at now, never catch up.
+      invalidateFuture();
     }
-  }
-  lastScheduledT = horizon;
+    if (compareTransportSeconds(lastScheduledPosition, horizon) >= 0) return;
+
+    const before = schedulingSession ?? binding.session();
+    const advanced = advanceCompositionRevisionSession(before, lastScheduledPosition, horizon);
+    schedulingSession = advanced.session;
+    const compositionActivated = advanced.session.active !== before.active;
+    if (compositionActivated) {
+      const previousRevision = before.active.composition.revision;
+      for (const event of advanced.input.events) {
+        if (event.compositionRevision === previousRevision) scheduleEvent(binding, event);
+      }
+      scheduleCompositionActivation(binding, advanced.session);
+      for (const event of advanced.input.events) {
+        if (event.compositionRevision !== previousRevision) scheduleEvent(binding, event);
+      }
+    } else {
+      for (const event of advanced.input.events) scheduleEvent(binding, event);
+    }
+    lastScheduledPosition = horizon;
+  };
+
+  return Object.freeze({
+    setActive(binding: ProductionSchedulerBinding | null): void {
+      invalidateFuture();
+      active = binding;
+      schedulingSession = binding?.session() ?? null;
+      lastScheduledPosition = transportSecondsFromNumber(transport.t());
+    },
+
+    start(): void {
+      if (timer != null) return;
+      lastScheduledPosition = transportSecondsFromNumber(transport.t());
+      unsubscribeLifecycle = transport.subscribeLifecycle(handleLifecycle);
+      schedulingSession = active?.session() ?? null;
+      timer = dependencies.setInterval(tickNow, TICK_MS);
+    },
+
+    stop(): void {
+      if (timer != null) dependencies.clearInterval(timer);
+      timer = null;
+      unsubscribeLifecycle?.();
+      unsubscribeLifecycle = null;
+      invalidateFuture();
+      active = null;
+    },
+
+    resync(position?: ExactTransportSeconds): void {
+      invalidateFuture();
+      lastScheduledPosition = position ?? transportSecondsFromNumber(transport.t());
+    },
+
+    invalidateFuture,
+    tickNow,
+
+    isOwningAudio(): boolean {
+      return active != null;
+    },
+  });
 }
 
-export const engineScheduler = {
-  /** Bind the scheduler to the active scene + audio destination. */
-  setActive(binding: ActiveBinding | null): void {
-    active = binding;
-    lastScheduledT = engineClock.t();
+export const engineScheduler = createProductionScheduler({
+  transport: engineClock,
+  scheduleAudio: (audioCtx, audioDest, pack, event) => {
+    triggerPackVoice(
+      audioCtx,
+      audioDest,
+      pack,
+      event.presentation.slot,
+      event.presentation.freq,
+      event.audioContextTime,
+    );
   },
+  setInterval: globalThis.setInterval.bind(globalThis),
+  clearInterval: globalThis.clearInterval.bind(globalThis),
+  setTimeout: globalThis.setTimeout.bind(globalThis),
+  clearTimeout: globalThis.clearTimeout.bind(globalThis),
+});
 
-  /** Begin ticking. Safe to call repeatedly. */
-  start(): void {
-    if (timer != null) return;
-    lastScheduledT = engineClock.t();
-    timer = setInterval(schedulerTick, TICK_MS);
-  },
-
-  /** Stop ticking and clear the active binding. */
-  stop(): void {
-    if (timer != null) {
-      clearInterval(timer);
-      timer = null;
-    }
-    active = null;
-  },
-
-  /**
-   * Reset the scheduling cursor — call on Phase-Zero reset, scene
-   * switch, or transport play.
-   */
-  resync(): void {
-    lastScheduledT = engineClock.t();
-  },
-
-  /** Whether the scheduler owns audio for the currently bound scene. */
-  isOwningAudio(): boolean {
-    return !!(active && active.scene.eventsIn);
-  },
-};
-
-// Re-export the legacy bus type so call sites can import from one place.
 export type { TriggerEvent };

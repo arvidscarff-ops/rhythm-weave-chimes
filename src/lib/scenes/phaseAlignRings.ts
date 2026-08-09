@@ -43,6 +43,20 @@ export const phaseAlignRingsScene: Scene<PhaseAlignRingsState> = {
     if (state.n !== g.noteCount) state.n = g.noteCount;
   },
 
+  projectAuthoritativeEvent(_state, event, _occurrenceSceneTime, g) {
+    const voiceOrder = event.voiceOrder;
+    const count = event.voiceCount;
+    const radius = (Math.min(g.W, g.H) * 0.42 * (voiceOrder + 1)) / Math.max(1, count);
+    return {
+      slot: (voiceOrder % 6) as VoiceSlotIndex,
+      freq: freqOf(SEMIS[voiceOrder % SEMIS.length] + g.pitchSemis),
+      x: g.W / 2,
+      y: g.H / 2 - radius,
+      hue: HUES[voiceOrder % HUES.length],
+      velocity: 0.55 + (voiceOrder / Math.max(1, count - 1)) * 0.4,
+    };
+  },
+
   eventsIn(state, t0, t1, g) {
     const events: TriggerEvent[] = [];
     if (t1 <= t0) return events;

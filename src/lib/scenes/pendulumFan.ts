@@ -89,6 +89,26 @@ export const pendulumFanScene: Scene<PendulumFanState> = {
     }
   },
 
+  projectAuthoritativeEvent(state, event, occurrenceSceneTime, g) {
+    const strand = state.strands[event.voiceOrder];
+    if (!strand) throw new Error(`Pendulum Fan voice is unavailable: ${event.voiceId}`);
+    const stringLen = g.H * 0.68;
+    const speedNorm = state.strands.length > 1 ? strand.pi / (state.strands.length - 1) : 1;
+    return {
+      slot: strand.slot,
+      freq: freqOf(strand.pitchSemis + g.pitchSemis),
+      x: g.W / 2 + Math.sin(strand.angle) * stringLen * TARGET_DIST_NORM,
+      y: g.H * 0.14 + Math.cos(strand.angle) * stringLen * TARGET_DIST_NORM,
+      hue: strand.hue,
+      velocity: 0.55 + speedNorm * 0.4,
+    };
+  },
+
+  consumeAuthoritativeVisualEvent(state, event, occurrenceSceneTime) {
+    const strand = state.strands[event.voiceOrder];
+    if (strand) strand.lastFireT = occurrenceSceneTime;
+  },
+
   eventsIn(state, t0, t1, g) {
     const events: TriggerEvent[] = [];
     if (t1 <= t0) return events;

@@ -27,6 +27,35 @@ export type ProductionPhaseAlignedEngineId =
   | "phaseAlignRings"
   | "voidSheets";
 
+const PRODUCTION_PHASE_ALIGNED_ENGINE_IDS: readonly ProductionPhaseAlignedEngineId[] = [
+  "stringNet",
+  "pendulumFan",
+  "spiralArp",
+  "radialSweep",
+  "mandalaMatrix",
+  "metatronLattice",
+  "fractalNebula",
+  "radialResonator",
+  "phaseAlignRings",
+  "voidSheets",
+];
+
+export function isProductionPhaseAlignedEngineId(
+  value: string,
+): value is ProductionPhaseAlignedEngineId {
+  return PRODUCTION_PHASE_ALIGNED_ENGINE_IDS.includes(value as ProductionPhaseAlignedEngineId);
+}
+
+export function productionEngineIdFromSnapshot(
+  snapshot: CompositionSnapshot,
+): ProductionPhaseAlignedEngineId {
+  const prefix = snapshot.voices[0]?.id.split(":voice:")[0] ?? "";
+  if (!isProductionPhaseAlignedEngineId(prefix)) {
+    throw new Error(`Composition does not identify a migrated production engine: ${prefix}`);
+  }
+  return prefix;
+}
+
 export type ProductionCompositionInput = Readonly<{
   compositionId: string;
   revision: number;

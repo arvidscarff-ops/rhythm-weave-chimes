@@ -79,6 +79,25 @@ export const mandalaMatrixScene: Scene<MandalaMatrixState> = {
     }
   },
 
+  projectAuthoritativeEvent(state, event, occurrenceSceneTime, g) {
+    const note = state.notes[event.voiceOrder];
+    if (!note) throw new Error(`Mandala Matrix voice is unavailable: ${event.voiceId}`);
+    const speedNorm = state.notes.length > 1 ? note.pi / (state.notes.length - 1) : 1;
+    return {
+      slot: note.slot,
+      freq: freqOf(note.pitchSemis - 12 + g.pitchSemis),
+      x: g.W / 2,
+      y: g.H / 2,
+      hue: note.hue,
+      velocity: (0.55 + speedNorm * 0.4) * 0.9,
+    };
+  },
+
+  consumeAuthoritativeVisualEvent(state, event, occurrenceSceneTime) {
+    const note = state.notes[event.voiceOrder];
+    if (note) note.lastFireT = occurrenceSceneTime;
+  },
+
   eventsIn(state, t0, t1, g) {
     const events: TriggerEvent[] = [];
     if (t1 <= t0) return events;

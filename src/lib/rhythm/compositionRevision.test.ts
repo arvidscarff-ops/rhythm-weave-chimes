@@ -57,7 +57,7 @@ describe("Phase-Zero composition revision transition", () => {
       secondsNumerator: 1n,
       secondsDenominator: 1n,
     });
-    expect(afterSkippedFrame.input.events.some((event) => event.compositionVersion === 2)).toBe(
+    expect(afterSkippedFrame.input.events.some((event) => event.compositionRevision === 2)).toBe(
       true,
     );
   });
@@ -75,9 +75,11 @@ describe("Phase-Zero composition revision transition", () => {
     expect(first.input.events).toHaveLength(9);
     expect(second.input.events).toHaveLength(11);
     expect(new Set(joined.map((event) => event.id)).size).toBe(joined.length);
-    expect(first.input.events.every((event) => event.compositionVersion === 1)).toBe(true);
-    expect(second.input.events.every((event) => event.compositionVersion === 2)).toBe(true);
-    expect(second.input.events.slice(0, 2).every((event) => event.isPhaseZero)).toBe(true);
+    expect(first.input.events.every((event) => event.compositionRevision === 1)).toBe(true);
+    expect(second.input.events.every((event) => event.compositionRevision === 2)).toBe(true);
+    expect(
+      second.input.events.slice(0, 2).every((event) => event.authoritativeEvent.isPhaseZero),
+    ).toBe(true);
   });
 
   it("freezes on identical supplied transport positions and resumes deterministically", () => {

@@ -4,8 +4,8 @@
  * Runtime for the Scene Builder. Reads the active `CustomSceneBlueprint`
  * from `activeBlueprint` every frame so aesthetic edits and preset loads
  * apply instantly without touching the audio scheduler or resetting the
- * musical clock. Timing still flows through `phaseAlign` so the
- * macro-cycle Big Bang rule is preserved.
+ * musical clock. During authoritative scheduler migration its geometric
+ * crossings drive visual reactions only; they do not produce note events.
  *
  * Rendering layers, back-to-front:
  *   1. preClear() — fade previous frame by (1 - trail.decay), giving
@@ -18,7 +18,7 @@
  *      Big Bang.
  */
 
-import type { Scene, SceneGlobals, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
+import type { Scene, SceneGlobals } from "@/lib/engine/sceneTypes";
 import { progress } from "@/lib/engine/phaseAlign";
 import {
   crossings as pathCrossings,
@@ -32,15 +32,6 @@ import { getActiveBlueprint } from "@/lib/scenes/activeBlueprint";
 import { orderedPhaseAlignedVoices } from "@/lib/rhythm/compositionSnapshot";
 import { paletteAt, paletteMid, withAlpha } from "@/lib/studio/palettes";
 import { spawnFire, hexToRgb01 } from "@/lib/visuals/fireShaderLayer";
-
-/* ------------------------------------------------------------------ */
-/*  Pitch / voice mapping (unchanged from previous revision)          */
-/* ------------------------------------------------------------------ */
-
-const ROOT_HZ = 220;
-const freqOf = (s: number) => ROOT_HZ * Math.pow(2, s / 12);
-// eslint-disable-next-line prettier/prettier
-const SEMIS = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31, 33, 36, 38, 40, 43, 45, 48, 50, 52, 55];
 
 /* ------------------------------------------------------------------ */
 /*  Mutable scene state — particle systems + trigger history          */
@@ -397,37 +388,6 @@ export const customScene: Scene<CustomSceneState> = {
 
   sample(state) {
     void state; // stateless — blueprint read live in draw()
-  },
-
-  /**
-   * Audio triggers only. Visual reactions (bursts, pulses, climax) are
-   * spawned inside `draw` using progress deltas so the preview canvas
-   * (which doesn't run the scheduler) still gets the same aesthetic.
-   */
-  eventsIn(_state, t0, t1, g) {
-    if (t1 <= t0) return [];
-    const bp = getActiveBlueprint();
-    const N = resolveTrackCount(bp, g);
-    const B = g.baseLaps;
-    const D = g.macroCycleSeconds;
-    const slot = bp.voice.slot as VoiceSlotIndex;
-    const events: TriggerEvent[] = [];
-    for (let i = 0; i < N; i++) {
-      const times = pathCrossings(bp, i, B, D, t0, t1);
-      if (times.length === 0) continue;
-      const scale = trackScale(bp.layout, i, N);
-      const rot = trackRotation(bp.layout, i);
-      const hue = (i / Math.max(1, N)) * 0.9;
-      const freq = freqOf(SEMIS[i % SEMIS.length] + g.pitchSemis);
-      const velocity = 0.55 + (i / Math.max(1, N - 1)) * 0.4;
-      for (const t of times) {
-        const p = progress(t, i, B, D);
-        const pos = positionOn(bp.path, p);
-        const px = toPx(pos.x, pos.y, scale, rot, g.W, g.H);
-        events.push({ slot, freq, x: px.x, y: px.y, hue, velocity });
-      }
-    }
-    return events;
   },
 
   draw(state, ctx, g) {

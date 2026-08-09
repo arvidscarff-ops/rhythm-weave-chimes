@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { TablesUpdate } from "@/integrations/supabase/types";
+import { requireStudioAdmin } from "@/lib/studio/admin-middleware";
 
 export type AdminProgressionStep = {
   id: string;
@@ -25,15 +26,9 @@ async function admin() {
   return supabaseAdmin;
 }
 
-async function gate(passcode: string) {
-  const { assertPasscode } = await import("./gate.server");
-  assertPasscode(passcode);
-}
-
 export const listAdminScales = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string }) => data)
-  .handler(async ({ data }): Promise<AdminScale[]> => {
-    await gate(data.passcode);
+  .middleware([requireStudioAdmin])
+  .handler(async (): Promise<AdminScale[]> => {
     const supa = await admin();
     const { data: rows, error } = await supa
       .from("custom_scales")
@@ -62,9 +57,9 @@ export const listAdminScales = createServerFn({ method: "POST" })
   });
 
 export const createAdminScale = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string; name: string }) => data)
+  .middleware([requireStudioAdmin])
+  .inputValidator((data: { name: string }) => data)
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const { data: row, error } = await supa
       .from("custom_scales")
@@ -84,9 +79,9 @@ export const createAdminScale = createServerFn({ method: "POST" })
   });
 
 export const updateAdminScale = createServerFn({ method: "POST" })
+  .middleware([requireStudioAdmin])
   .inputValidator(
     (data: {
-      passcode: string;
       id: string;
       name?: string;
       pool_size?: number;
@@ -96,7 +91,6 @@ export const updateAdminScale = createServerFn({ method: "POST" })
     }) => data,
   )
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const patch: TablesUpdate<"custom_scales"> = {};
     if (data.name !== undefined) patch.name = data.name;
@@ -110,9 +104,9 @@ export const updateAdminScale = createServerFn({ method: "POST" })
   });
 
 export const deleteAdminScale = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string; id: string }) => data)
+  .middleware([requireStudioAdmin])
+  .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const { error } = await supa.from("custom_scales").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -120,9 +114,9 @@ export const deleteAdminScale = createServerFn({ method: "POST" })
   });
 
 export const addProgressionStep = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string; scale_id: string }) => data)
+  .middleware([requireStudioAdmin])
+  .inputValidator((data: { scale_id: string }) => data)
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const { data: existing, error: e1 } = await supa
       .from("scale_progressions")
@@ -148,9 +142,9 @@ export const addProgressionStep = createServerFn({ method: "POST" })
   });
 
 export const updateProgressionStep = createServerFn({ method: "POST" })
+  .middleware([requireStudioAdmin])
   .inputValidator(
     (data: {
-      passcode: string;
       id: string;
       chord_tones?: number[];
       accent_tones?: number[];
@@ -158,7 +152,6 @@ export const updateProgressionStep = createServerFn({ method: "POST" })
     }) => data,
   )
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const patch: TablesUpdate<"scale_progressions"> = {};
     if (data.chord_tones !== undefined) patch.chord_tones = data.chord_tones;
@@ -170,9 +163,9 @@ export const updateProgressionStep = createServerFn({ method: "POST" })
   });
 
 export const removeProgressionStep = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string; id: string }) => data)
+  .middleware([requireStudioAdmin])
+  .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const { data: step, error: eSel } = await supa
       .from("scale_progressions")

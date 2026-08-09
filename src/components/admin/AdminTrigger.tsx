@@ -5,7 +5,7 @@ import { useRouter } from "@tanstack/react-router";
  * Subtle studio entry point:
  *   - Tiny glowing dot in the bottom-right corner (nearly invisible until hover).
  *   - Global keyboard shortcut: Ctrl/Cmd + . opens My Studio from anywhere.
- * Navigating to /studio triggers its passcode gate.
+ * Navigating to /studio triggers account and administrator-role verification.
  */
 export function AdminTrigger() {
   const router = useRouter();

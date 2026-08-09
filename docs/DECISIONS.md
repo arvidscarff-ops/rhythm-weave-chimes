@@ -1168,6 +1168,61 @@ Explicit project-owner instruction, 2026-08-09; Reconciliation Step 6 legacy qua
 
 ---
 
+## D037 — My Studio uses Supabase identity plus verified administrator authorization
+
+**Status:** ACCEPTED
+**Scope:** My Studio access, privileged server functions, service-role use, and request forgery protection
+**Date:** 2026-08-09
+
+### Context
+
+My Studio and its service-role-backed server functions were protected by a six-digit passcode supplied by the browser. That passcode is not a sufficient identity or authorization boundary. The repository now also has Supabase account authentication, user-role records, and newer August 8 RLS/security policies that must remain authoritative.
+
+### Decision
+
+My Studio's intended security boundary is an authenticated Supabase account followed by a database-verified administrator role. Studio routes fail closed while session or role verification is loading or has failed. Every privileged Studio server function validates the request's Supabase bearer token and confirms the authenticated user's own administrator role before it may use the service-role client.
+
+Server-function requests use the framework's origin-based CSRF middleware. The existing passcode implementation remains temporarily for compatibility and later R6 removal, but it is no longer the authority for My Studio or privileged service-role-backed Studio operations.
+
+### Rationale
+
+Account identity plus a database-owned role is auditable, revocable, and compatible with current RLS. Performing the same checks at the server-function boundary prevents a hidden route or modified browser client from bypassing authorization. Explicit CSRF middleware is required because PHASE supplies custom request middleware rather than relying on the framework's default middleware configuration.
+
+### Consequences
+
+- anonymous requests cannot invoke privileged Studio operations;
+- authenticated non-administrators cannot invoke privileged Studio operations;
+- administrator status is read from current database state and role lookup failures deny access;
+- service-role credentials remain server-only and are reached only after identity and role checks;
+- Studio clients no longer send a passcode as authorization for privileged operations;
+- passcode files and compatibility routes remain present until the separately approved R6 removal;
+- scene publication, archive behavior, asset-path policy, and broader Studio authoring/storage reconciliation remain deferred.
+
+### Alternatives considered
+
+- **Retain the six-digit passcode as the service-role boundary:** rejected because possession of a browser-supplied shared secret is not verified account authorization.
+- **Rely only on hiding the Studio route:** rejected because client-side visibility is not a server authorization boundary.
+- **Replace current migrations and generated types with the older R5 branch versions:** rejected because the newer August 8 RLS work is authoritative and complementary.
+
+### Migration and verification
+
+- retain the current Supabase auth middleware, migrations, generated types, and August 8 policies;
+- add a Studio-specific administrator middleware above privileged server functions;
+- make route loading and error states fail closed;
+- apply origin-based CSRF checking to server-function requests;
+- test anonymous, non-administrator, administrator, role-lookup failure, and CSRF-scope cases;
+- verify all privileged Studio functions use the shared middleware and the production build passes.
+
+### Supersedes / superseded by
+
+Supersedes the passcode as the intended My Studio and service-role authorization boundary. It does not remove the compatibility implementation and does not resolve the deferred Studio publication, archive, validation, or storage architecture.
+
+### Source
+
+Explicit project-owner instruction, 2026-08-09; Reconciliation Step 7A.
+
+---
+
 ## 2. Rejected decision register
 
 The following have been explicitly rejected or superseded:

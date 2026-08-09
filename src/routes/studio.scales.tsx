@@ -15,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { usePasscode } from "@/lib/admin/passcode-context";
 import { allPitchOptions, DEFAULT_PITCH, pitchToMidi } from "@/lib/music/pitch";
 import { noteColor } from "@/lib/music/noteColors";
 import { pitchRegister, type Register } from "@/lib/music/register";
@@ -68,14 +67,13 @@ export const Route = createFileRoute("/studio/scales")({
 
 function AdminUI() {
   const qc = useQueryClient();
-  const { ensure, get: getPass } = usePasscode();
   const list = useServerFn(listAdminScales);
   const create = useServerFn(createAdminScale);
   const del = useServerFn(deleteAdminScale);
 
   const scalesQ = useQuery({
     queryKey: ["admin", "scales"],
-    queryFn: async () => list({ data: { passcode: getPass() || (await ensure()) } }),
+    queryFn: () => list(),
   });
   const scales = scalesQ.data ?? [];
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -85,7 +83,7 @@ function AdminUI() {
   }, [scales, selectedId]);
 
   const createMut = useMutation({
-    mutationFn: async (name: string) => create({ data: { passcode: await ensure(), name } }),
+    mutationFn: (name: string) => create({ data: { name } }),
     onSuccess: async ({ id }) => {
       await qc.invalidateQueries({ queryKey: ["admin", "scales"] });
       await qc.invalidateQueries({ queryKey: ["published-scales"] });
@@ -96,7 +94,7 @@ function AdminUI() {
   });
 
   const delMut = useMutation({
-    mutationFn: async (id: string) => del({ data: { passcode: await ensure(), id } }),
+    mutationFn: (id: string) => del({ data: { id } }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "scales"] });
       await qc.invalidateQueries({ queryKey: ["published-scales"] });
@@ -165,7 +163,6 @@ function AdminUI() {
 
 function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => void }) {
   const qc = useQueryClient();
-  const { ensure } = usePasscode();
   const update = useServerFn(updateAdminScale);
   const addStep = useServerFn(addProgressionStep);
   const updStep = useServerFn(updateProgressionStep);
@@ -213,7 +210,7 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
   });
 
   const addStepMut = useMutation({
-    mutationFn: async () => addStep({ data: { passcode: await ensure(), scale_id: scale.id } }),
+    mutationFn: () => addStep({ data: { scale_id: scale.id } }),
     onSuccess: async ({ id }) => {
       await invalidate();
       setActiveStepId(id);
@@ -226,7 +223,7 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
       chord_tones?: number[];
       accent_tones?: number[];
       duration_bars?: number;
-    }) => updStep({ data: { passcode: await ensure(), ...patch } }),
+    }) => updStep({ data: patch }),
     onSuccess: async (_r, vars) => {
       await invalidate();
       setStepOverrides((o) => {
@@ -238,7 +235,7 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
   });
 
   const rmStepMut = useMutation({
-    mutationFn: async (id: string) => rmStep({ data: { passcode: await ensure(), id } }),
+    mutationFn: (id: string) => rmStep({ data: { id } }),
     onSuccess: invalidate,
   });
 
@@ -255,9 +252,8 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
     updStepMut.mutate({ id: activeStep.id, ...patch });
   };
 
-  const commit = async () =>
+  const commit = () =>
     saveMut.mutate({
-      passcode: await ensure(),
       id: scale.id,
       name,
       pool_size: pitches.length,
@@ -265,8 +261,8 @@ function ScaleEditor({ scale, onDelete }: { scale: AdminScale; onDelete: () => v
     });
 
   const publishMut = useMutation({
-    mutationFn: async (v: boolean) =>
-      update({ data: { passcode: await ensure(), id: scale.id, is_published: v } }),
+    mutationFn: (v: boolean) =>
+      update({ data: { id: scale.id, is_published: v } }),
     onMutate: async (v: boolean) => {
       await qc.cancelQueries({ queryKey: ["admin", "scales"] });
       const prev = qc.getQueryData<AdminScale[]>(["admin", "scales"]);

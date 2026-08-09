@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import type { TablesUpdate } from "@/integrations/supabase/types";
+import { requireStudioAdmin } from "@/lib/studio/admin-middleware";
 
 export const SCENE_ENGINES = [
   "stringNet",
@@ -87,11 +88,6 @@ async function admin() {
   return supabaseAdmin;
 }
 
-async function gate(passcode: string) {
-  const { assertPasscode } = await import("./gate.server");
-  assertPasscode(passcode);
-}
-
 function normalize(row: {
   id: string;
   name: string;
@@ -133,9 +129,8 @@ function normalize(row: {
 }
 
 export const listAdminScenes = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string }) => data)
-  .handler(async ({ data }): Promise<SceneRow[]> => {
-    await gate(data.passcode);
+  .middleware([requireStudioAdmin])
+  .handler(async (): Promise<SceneRow[]> => {
     const supa = await admin();
     const { data: rows, error } = await supa
       .from("app_scenes")
@@ -168,9 +163,9 @@ export const listPublishedScenes = createServerFn({ method: "GET" }).handler(
 );
 
 export const createAdminScene = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string; name: string }) => data)
+  .middleware([requireStudioAdmin])
+  .inputValidator((data: { name: string }) => data)
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const { data: row, error } = await supa
       .from("app_scenes")
@@ -182,9 +177,9 @@ export const createAdminScene = createServerFn({ method: "POST" })
   });
 
 export const updateAdminScene = createServerFn({ method: "POST" })
+  .middleware([requireStudioAdmin])
   .inputValidator(
     (data: {
-      passcode: string;
       id: string;
       name?: string;
       background_type?: "image" | "video";
@@ -200,7 +195,6 @@ export const updateAdminScene = createServerFn({ method: "POST" })
     }) => data,
   )
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const patch: TablesUpdate<"app_scenes"> = {};
     if (data.name !== undefined) patch.name = data.name;
@@ -224,9 +218,9 @@ export const updateAdminScene = createServerFn({ method: "POST" })
   });
 
 export const deleteAdminScene = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string; id: string }) => data)
+  .middleware([requireStudioAdmin])
+  .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
-    await gate(data.passcode);
     const supa = await admin();
     const { error } = await supa.from("app_scenes").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -234,10 +228,10 @@ export const deleteAdminScene = createServerFn({ method: "POST" })
   });
 
 export const createSceneAssetUploadUrl = createServerFn({ method: "POST" })
-  .inputValidator((data: { passcode: string; path: string }) => data)
+  .middleware([requireStudioAdmin])
+  .inputValidator((data: { path: string }) => data)
   .handler(
     async ({ data }): Promise<{ signedUrl: string; token: string; path: string }> => {
-      await gate(data.passcode);
       const supa = await admin();
       const { data: signed, error } = await supa.storage
         .from("scene-assets")
@@ -249,7 +243,7 @@ export const createSceneAssetUploadUrl = createServerFn({ method: "POST" })
 
 /**
  * Public read: resolve a stored scene-assets path to a short-lived signed URL.
- * Not passcode-gated so end users can view published scene media.
+ * Scene publication/storage hardening is deferred to the authoring pass.
  */
 export const signedSceneAssetUrl = createServerFn({ method: "POST" })
   .inputValidator((data: { path: string }) => data)

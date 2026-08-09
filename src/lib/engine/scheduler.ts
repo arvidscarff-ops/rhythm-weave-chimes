@@ -2,8 +2,10 @@
  * Single production look-ahead scheduler.
  *
  * Migrated Phase-Alignment engines provide presentation metadata for events
- * already enumerated by the authoritative timeline. Legacy Wheel/Pendulum/Bars
- * remain on their existing immediate dispatch path and never bind here.
+ * already enumerated by the authoritative timeline. Historical
+ * Wheel/Pendulum/Bars are quarantined at /dev/legacy-rhythm, retain their old
+ * immediate dispatch solely for comparison, and never bind here. Their code
+ * must not be used as a template for new Trigger Engines.
  */
 
 import { engineClock, type EngineTransportLifecycleEvent } from "./clock";

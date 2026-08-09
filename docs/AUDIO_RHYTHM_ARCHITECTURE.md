@@ -420,6 +420,8 @@ The scheduler may maintain a lookahead queue, but it remains subordinate to the 
 
 **ACCEPTED PRODUCTION CONTRACT — D035:** The migrated Phase-Alignment path has one lookahead scheduler. It enumerates exact authoritative envelopes from the active immutable composition session, projects each supplied-transport occurrence individually onto audio-clock time, and passes the same stable identity to audio and visual sinks. Scene geometry supplies presentation metadata only. Legacy Wheel, Pendulum, and Bars remain outside this contract during validation; Custom Scene geometry/contact is visual-only during this migration.
 
+**ACCEPTED LEGACY QUARANTINE — D036:** Wheel, Pendulum, and Bars are historical experiments rather than production rhythm contracts. Their original frame/collision/wrap timing, unseeded behavior, and existing tuning may remain intact only on the explicitly labelled `/dev/legacy-rhythm` comparison surface. They are excluded from production scene selection and all restored/auditioned scene entry passes through an access guard. Legacy code must not be used as a template for new Trigger Engines. If any legacy idea returns to production, it requires a new authoritative, deterministic composition model rather than migration of the historical note authority.
+
 ### 5.5 Visual snapshot
 
 The visual layer receives or derives:

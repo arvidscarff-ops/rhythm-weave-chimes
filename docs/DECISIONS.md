@@ -3,7 +3,7 @@
 **Document role:** Permanent architectural and creative decision memory  
 **Run:** 7 of the PHASE Project Bible documentation plan  
 **Authority:** Accepted decisions outrank general target descriptions where they directly conflict; unresolved items are not decisions  
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-09
 
 ---
 
@@ -1107,6 +1107,64 @@ Completes the scheduler/audio portion deferred by D034. It does not resolve tuni
 ### Source
 
 Explicit project-owner instruction, 2026-08-09; Reconciliation Step 5.
+
+---
+
+## D036 — Wheel, Pendulum, and Bars are quarantined legacy experiments
+
+**Status:** ACCEPTED
+**Scope:** Production scene access, legacy Trigger Engine preservation, and rhythm-authority isolation
+**Date:** 2026-08-09
+
+### Context
+
+Wheel, Pendulum, and Bars predate the authoritative production rhythm architecture. They accumulate musical phase from animation-frame deltas and dispatch notes from rendered collision, sign-change, or floating-point wrap behavior. Their ratios, arbitrary geometry, random phase offsets, Brownian/random composer state, source identity, and 440-derived tuning cannot be moved into the exact production composition model without changing their musical behavior or promoting historical experiments into product contracts.
+
+### Decision
+
+Wheel, Pendulum, and Bars are legacy-only. Their behavior remains intact for historical, parity, and reference use on the development-only `/dev/legacy-rhythm` surface. They are removed from production scene selection, and every scene-entry mechanism—including restored session links and Studio audition handoffs—must pass through an explicit production-versus-legacy access boundary.
+
+Legacy Wheel note/line collisions, Pendulum sign crossings, Bars phase wrapping, random/Brownian behavior, phase offsets, and existing tuning remain confined to legacy mode. They will not be rationalized, recreated as production composition semantics, or used as templates for new Trigger Engines. R4 Pendulum remains a separate future candidate rather than a parity migration. No production Bars offset model is selected.
+
+The quarantine reuses the existing player implementation in an explicit access mode. It does not create another clock, scheduler, audio context owner, or copy of the legacy engines. The production path continues to bind only migrated Phase-Alignment compositions to the shared authoritative scheduler. Custom Scene remains visual-only under D035.
+
+### Rationale
+
+Quarantine preserves useful historical evidence without weakening the one-authority invariant or forcing false parity decisions. An explicit access guard is safer and smaller than extracting or duplicating the large historical player implementation. It also prevents legacy session data or Studio handoffs from accidentally reopening a competing note authority in production.
+
+### Consequences
+
+- the production player defaults to an authoritative migrated engine;
+- `stringNet` is only the temporary safe production fallback after legacy quarantine; it is not the selected final PHASE Trigger Engine, production geometry, or public gateway direction;
+- Wheel, Pendulum, and Bars remain behaviorally available only at `/dev/legacy-rhythm`;
+- legacy session links opened on production fall back to the production default rather than activating legacy timing;
+- production scene links opened in the legacy laboratory fall back to Wheel;
+- legacy tuning and randomness are preserved only as historical behavior;
+- any future production return of these ideas requires explicit exact event relationships and seeded/reconstructable randomness;
+- final production geometry, production tuning, legacy retirement timing, and late-event policy remain unresolved.
+
+### Alternatives considered
+
+- **Migrate legacy musical behavior into the authoritative runtime:** rejected because doing so would require unresolved musical reinterpretation.
+- **Replace legacy engines with R4 families now:** rejected because R4 is comparative laboratory evidence, not approved parity behavior or final production geometry.
+- **Delete legacy implementation:** rejected until historical/parity review is complete.
+- **Duplicate the player into a development route:** rejected because it would create broad maintenance duplication and divergence.
+
+### Migration and verification
+
+- centralize the allowed production and legacy scene sets;
+- guard UI selection, session restoration, and Studio audition entry;
+- expose the unchanged historical implementations through `/dev/legacy-rhythm` with persistent non-authoritative labelling;
+- test that all three legacy identifiers are rejected in production and all migrated identifiers are rejected in legacy mode;
+- verify that no new clock, scheduler, or audio owner is introduced and all existing development routes remain present.
+
+### Supersedes / superseded by
+
+Supersedes only D035's temporary placement of Wheel, Pendulum, and Bars on prior player paths. It does not change D035's production scheduler, Custom Scene treatment, or unresolved late-event policy.
+
+### Source
+
+Explicit project-owner instruction, 2026-08-09; Reconciliation Step 6 legacy quarantine decision.
 
 ---
 

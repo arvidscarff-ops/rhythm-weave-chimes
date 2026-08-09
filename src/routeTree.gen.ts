@@ -21,6 +21,7 @@ import { Route as DevTransmissionsRouteImport } from './routes/dev.transmissions
 import { Route as DevTriggerEnginesRouteImport } from './routes/dev.trigger-engines'
 import { Route as DevPerformanceRouteImport } from './routes/dev.performance'
 import { Route as DevMovementRouteImport } from './routes/dev.movement'
+import { Route as DevLegacyRhythmRouteImport } from './routes/dev.legacy-rhythm'
 import { Route as DevCrossingRouteImport } from './routes/dev.crossing'
 import { Route as AdminUnlockRouteImport } from './routes/admin.unlock'
 import { Route as AdminScenesRouteImport } from './routes/admin.scenes'
@@ -87,6 +88,11 @@ const DevMovementRoute = DevMovementRouteImport.update({
   path: '/dev/movement',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevLegacyRhythmRoute = DevLegacyRhythmRouteImport.update({
+  id: '/dev/legacy-rhythm',
+  path: '/dev/legacy-rhythm',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevCrossingRoute = DevCrossingRouteImport.update({
   id: '/dev/crossing',
   path: '/dev/crossing',
@@ -122,6 +128,7 @@ export interface FileRoutesByFullPath {
   '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
   '/dev/crossing': typeof DevCrossingRoute
+  '/dev/legacy-rhythm': typeof DevLegacyRhythmRoute
   '/dev/movement': typeof DevMovementRoute
   '/dev/performance': typeof DevPerformanceRoute
   '/dev/transmissions': typeof DevTransmissionsRoute
@@ -140,6 +147,7 @@ export interface FileRoutesByTo {
   '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
   '/dev/crossing': typeof DevCrossingRoute
+  '/dev/legacy-rhythm': typeof DevLegacyRhythmRoute
   '/dev/movement': typeof DevMovementRoute
   '/dev/performance': typeof DevPerformanceRoute
   '/dev/transmissions': typeof DevTransmissionsRoute
@@ -160,6 +168,7 @@ export interface FileRoutesById {
   '/admin/scenes': typeof AdminScenesRoute
   '/admin/unlock': typeof AdminUnlockRoute
   '/dev/crossing': typeof DevCrossingRoute
+  '/dev/legacy-rhythm': typeof DevLegacyRhythmRoute
   '/dev/movement': typeof DevMovementRoute
   '/dev/performance': typeof DevPerformanceRoute
   '/dev/transmissions': typeof DevTransmissionsRoute
@@ -181,6 +190,7 @@ export interface FileRouteTypes {
     | '/admin/scenes'
     | '/admin/unlock'
     | '/dev/crossing'
+    | '/dev/legacy-rhythm'
     | '/dev/movement'
     | '/dev/performance'
     | '/dev/transmissions'
@@ -199,6 +209,7 @@ export interface FileRouteTypes {
     | '/admin/scenes'
     | '/admin/unlock'
     | '/dev/crossing'
+    | '/dev/legacy-rhythm'
     | '/dev/movement'
     | '/dev/performance'
     | '/dev/transmissions'
@@ -218,6 +229,7 @@ export interface FileRouteTypes {
     | '/admin/scenes'
     | '/admin/unlock'
     | '/dev/crossing'
+    | '/dev/legacy-rhythm'
     | '/dev/movement'
     | '/dev/performance'
     | '/dev/transmissions'
@@ -238,6 +250,7 @@ export interface RootRouteChildren {
   AdminScenesRoute: typeof AdminScenesRoute
   AdminUnlockRoute: typeof AdminUnlockRoute
   DevCrossingRoute: typeof DevCrossingRoute
+  DevLegacyRhythmRoute: typeof DevLegacyRhythmRoute
   DevMovementRoute: typeof DevMovementRoute
   DevPerformanceRoute: typeof DevPerformanceRoute
   DevTransmissionsRoute: typeof DevTransmissionsRoute
@@ -330,6 +343,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevMovementRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dev/legacy-rhythm': {
+      id: '/dev/legacy-rhythm'
+      path: '/dev/legacy-rhythm'
+      fullPath: '/dev/legacy-rhythm'
+      preLoaderRoute: typeof DevLegacyRhythmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dev/crossing': {
       id: '/dev/crossing'
       path: '/dev/crossing'
@@ -396,6 +416,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminScenesRoute: AdminScenesRoute,
   AdminUnlockRoute: AdminUnlockRoute,
   DevCrossingRoute: DevCrossingRoute,
+  DevLegacyRhythmRoute: DevLegacyRhythmRoute,
   DevMovementRoute: DevMovementRoute,
   DevPerformanceRoute: DevPerformanceRoute,
   DevTransmissionsRoute: DevTransmissionsRoute,

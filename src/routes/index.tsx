@@ -48,6 +48,13 @@ import { engineClock } from "@/lib/engine/clock";
 import { installEngineClockVisibilityFreeze } from "@/lib/engine/visibilityFreeze";
 import { createFireLayer } from "@/lib/visuals/fireShaderLayer";
 import { engineScheduler } from "@/lib/engine/scheduler";
+import {
+  DEFAULT_LEGACY_RHYTHM_SCENE,
+  DEFAULT_PRODUCTION_RHYTHM_SCENE,
+  resolveRhythmSceneAccess,
+  type RhythmSceneAccess,
+  type RhythmSceneId,
+} from "@/lib/engine/rhythmSceneAccess";
 import { publishScheduledVisual } from "@/lib/engine/triggerBus";
 import type { Scene as ProductionScene, SceneGlobals } from "@/lib/engine/sceneTypes";
 import {
@@ -170,29 +177,19 @@ export const Route = createFileRoute("/")({
       },
     ],
   }),
-  component: PhaseApp,
+  component: ProductionPhaseApp,
 });
+
+function ProductionPhaseApp() {
+  return <PhaseApp sceneAccess="production" />;
+}
 
 /* ============================================================
  * Types
  * ============================================================ */
 
 type VoiceKind = "chime" | "pluck" | "bell" | "pad" | "bass" | "none";
-export type SceneKind =
-  | "wheel"
-  | "pendulum"
-  | "bars"
-  | "stringNet"
-  | "pendulumFan"
-  | "spiralArp"
-  | "radialSweep"
-  | "mandalaMatrix"
-  | "metatronLattice"
-  | "fractalNebula"
-  | "radialResonator"
-  | "phaseAlignRings"
-  | "voidSheets"
-  | "custom";
+export type SceneKind = RhythmSceneId;
 
 type Knobs = {
   mainVol: number; // 0..1
@@ -936,9 +933,15 @@ function Dropdown<T extends string>({
  * Main app
  * ============================================================ */
 
-function PhaseApp() {
+export function PhaseApp({ sceneAccess }: { sceneAccess: RhythmSceneAccess }) {
   const [playing, setPlaying] = useState(false);
-  const [scene, setScene] = useState<SceneKind>("wheel");
+  const [scene, setSceneState] = useState<SceneKind>(() =>
+    sceneAccess === "legacy" ? DEFAULT_LEGACY_RHYTHM_SCENE : DEFAULT_PRODUCTION_RHYTHM_SCENE,
+  );
+  const setScene = useCallback(
+    (next: SceneKind) => setSceneState(resolveRhythmSceneAccess(next, sceneAccess)),
+    [sceneAccess],
+  );
   const [bpm, setBpm] = useState(90);
   const [fxState, setFxState] = useState<FxState>(DEFAULT_FX_STATE);
   const [selectedPack, setSelectedPack] = useState<string>("moss");
@@ -1153,7 +1156,8 @@ function PhaseApp() {
    * Only migrated Phase-Alignment engines bind here. Their scene modules
    * project exact authoritative events into presentation metadata; they do
    * not enumerate, retime, or independently dispatch musical events.
-   * Legacy Wheel/Pendulum/Bars remain on their existing direct paths.
+   * Historical Wheel/Pendulum/Bars retain direct dispatch only when this
+   * shared player is mounted by the explicitly guarded legacy dev route.
    * --------------------------------------------------------------- */
   useEffect(() => {
     engineScheduler.start();
@@ -1514,7 +1518,7 @@ function PhaseApp() {
       });
     }
     bumpTopo();
-  }, []);
+  }, [bumpTopo, setScene]);
 
   // Read hash on mount and restore session if present.
   useEffect(() => {
@@ -1578,7 +1582,7 @@ function PhaseApp() {
     } catch {
       /* ignore malformed audition payload */
     }
-  }, []);
+  }, [setScene]);
 
   // Write hash when state changes (debounced).
   const hashDebounceRef = useRef<number | null>(null);
@@ -2278,6 +2282,15 @@ function PhaseApp() {
       style={{ color: "var(--pr-text)" }}
     >
       <PerfProbeMount />
+      {sceneAccess === "legacy" ? (
+        <aside
+          className="pointer-events-none fixed left-1/2 top-4 z-50 w-[min(92vw,52rem)] -translate-x-1/2 border border-amber-200/25 bg-neutral-950/85 px-4 py-3 text-center font-mono text-[10px] uppercase tracking-[0.16em] text-amber-100/75 backdrop-blur-xl"
+          role="note"
+        >
+          Legacy rhythm laboratory · historical behavior only · non-authoritative · do not use as
+          a Trigger Engine template
+        </aside>
+      ) : null}
       <PhaseReadout
         scene={scene}
         wheel={engineRef.current.wheel}
@@ -2319,6 +2332,7 @@ function PhaseApp() {
         )}
       </main>
       <PhaseDock
+        sceneAccess={sceneAccess}
         playing={playing}
         onTogglePlay={togglePlay}
         scene={scene}

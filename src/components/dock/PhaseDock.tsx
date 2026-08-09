@@ -72,24 +72,15 @@ import {
   patternFor,
 } from "@/lib/music/composer";
 import { cn } from "@/lib/utils";
+import type {
+  RhythmSceneAccess,
+  RhythmSceneId,
+} from "@/lib/engine/rhythmSceneAccess";
 
-export type SceneKind =
-  | "wheel"
-  | "pendulum"
-  | "bars"
-  | "stringNet"
-  | "pendulumFan"
-  | "spiralArp"
-  | "radialSweep"
-  | "mandalaMatrix"
-  | "metatronLattice"
-  | "fractalNebula"
-  | "radialResonator"
-  | "phaseAlignRings"
-  | "voidSheets"
-  | "custom";
+export type SceneKind = RhythmSceneId;
 
 type Props = {
+  sceneAccess: RhythmSceneAccess;
   playing: boolean;
   onTogglePlay: () => void;
 
@@ -225,13 +216,16 @@ export function PhaseDock(p: Props) {
         <Divider />
 
         <SceneMenu
+          sceneAccess={p.sceneAccess}
           scene={p.scene}
           onScene={p.onScene}
           multiply={p.multiply}
           onMultiply={p.onMultiply}
           notesCount={p.notesCount}
         />
-        <SceneChips scene={p.scene} onScene={p.onScene} />
+        {p.sceneAccess === "production" ? (
+          <SceneChips scene={p.scene} onScene={p.onScene} />
+        ) : null}
         <FxMenu fx={p.fx} onFx={p.onFx} />
         <ScalesMenu composer={p.composer} onComposer={p.onComposer} authed={p.authed} />
         <PacksMenu packs={p.packs} packId={p.packId} onPackId={p.onPackId} />
@@ -415,12 +409,14 @@ function InlineSlider({
 
 /* =================== Scene menu =================== */
 function SceneMenu({
+  sceneAccess,
   scene,
   onScene,
   multiply,
   onMultiply,
   notesCount,
 }: {
+  sceneAccess: RhythmSceneAccess;
   scene: SceneKind;
   onScene: (s: SceneKind) => void;
   multiply: number;
@@ -435,27 +431,39 @@ function SceneMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="center">
         <DropdownMenuPage id="main">
-          <DropdownMenuLabel>Engine</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={scene} onValueChange={(v) => onScene(v as SceneKind)}>
-            <DropdownMenuRadioItem value="stringNet">String Network</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="pendulumFan">Pendulum Fan</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="spiralArp">Spiral Arpeggiator</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="radialSweep">Radial Sweep</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="mandalaMatrix">Mandala Matrix</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="metatronLattice">Metatron Lattice</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="fractalNebula">Fractal Nebula</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="radialResonator">Radial Resonator</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="phaseAlignRings">Phase-Align Rings</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="voidSheets">Void Sheets</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="custom">Custom (Builder)</DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-foreground/40">Classic</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={scene} onValueChange={(v) => onScene(v as SceneKind)}>
-            <DropdownMenuRadioItem value="wheel">Wheel</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="pendulum">Pendulum</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="bars">Bars</DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
+          {sceneAccess === "production" ? (
+            <>
+              <DropdownMenuLabel>Engine</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={scene}
+                onValueChange={(v) => onScene(v as SceneKind)}
+              >
+                <DropdownMenuRadioItem value="stringNet">String Network</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="pendulumFan">Pendulum Fan</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="spiralArp">Spiral Arpeggiator</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="radialSweep">Radial Sweep</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="mandalaMatrix">Mandala Matrix</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="metatronLattice">Metatron Lattice</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="fractalNebula">Fractal Nebula</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="radialResonator">Radial Resonator</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="phaseAlignRings">Phase-Align Rings</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="voidSheets">Void Sheets</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="custom">Custom (Builder)</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </>
+          ) : (
+            <>
+              <DropdownMenuLabel>Historical engine · non-authoritative</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={scene}
+                onValueChange={(v) => onScene(v as SceneKind)}
+              >
+                <DropdownMenuRadioItem value="wheel">Wheel</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="pendulum">Pendulum</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="bars">Bars</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuPageTrigger targetId="multiply">
             Notes <span className="ml-auto text-foreground/50">{notesCount}</span>

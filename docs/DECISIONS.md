@@ -975,6 +975,79 @@ Explicit project-owner decision, 2026-08-09; Reconciliation Step 2.
 
 ---
 
+## D034 — Production rhythm bridge uses immutable composition snapshots and Phase-Zero revisions
+
+**Status:** ACCEPTED
+**Scope:** Production composition, transport lifecycle, and structural transitions
+**Date:** 2026-08-09
+
+### Context
+
+The exact-rational authority established by D033 needs production-owned structural inputs and a bridge to the existing live `engineClock`. Current scenes can draw base laps, macro duration, note count, and density from mutable UI/backdrop sources; stored scenes predate explicit numeric composition revisions; some visual engines also retain geometric contact behaviors that cannot become musical authority. Immediate mutation or resetting to Phase Zero on every structural edit risks discontinuities, duplicate events, and missed events.
+
+### Decision
+
+Production rhythm structure is captured in an immutable `CompositionSnapshot` containing:
+
+- composition ID;
+- explicit numeric revision;
+- exact physical macro-cycle duration;
+- positive integer base laps;
+- the migrated engine's ordered voice definitions.
+
+Backdrop and UI values may supply constructor inputs, but the resulting snapshot owns those values. `updated_at` is never authoritative composition versioning. A documented legacy revision may bridge stored scenes that do not yet have an explicit revision.
+
+The initial bridge applies only to migrated Phase-Alignment engines. Each such engine exports the ordered voice indices that its runtime actually uses; the snapshot derives integer events-per-macro-cycle from base laps and those indices. Legacy Wheel, Pendulum, and Bars remain outside the bridge. Custom geometry-derived axis intersections also remain outside until they have an authoritative mathematical event model.
+
+The existing `engineClock` remains the single live transport. It supplies physical transport position to the pure live-timeline adapter; the adapter does not read document visibility, own a timer, schedule audio, or advance time. Explicit pause and hidden/background suspension freeze `engineClock`; visibility resume continues from the preserved position and never catches up hidden time in a burst.
+
+A structural change creates a higher numeric composition revision. It is queued while the active snapshot continues unchanged, then activates at the active composition's next exact Phase Zero. The new revision begins at Phase Zero at that same supplied transport position. Event windows remain half-open across the boundary. Non-structural presentation or timbre parameters that do not alter event topology may remain outside this transition policy.
+
+String Network Nexus proximity/contact is visual-only in the authoritative migration contract. The concept is retained as visual behavior and may later return musically only as an explicit deterministic relationship/event derived by the rhythm authority.
+
+### Rationale
+
+An immutable snapshot makes structural ownership and reconstruction explicit. Quantized revision activation lets the current musical form close before a changed form begins, while exact boundary arithmetic prevents frame cadence from affecting the transition. Reusing `engineClock` avoids a competing live clock, and freezing that transport upstream gives audio and visual consumers the same preserved position after suspension.
+
+### Consequences
+
+- macro duration has one owner after snapshot construction;
+- density or any setting that changes voice count/cadence requires a new revision;
+- production Trigger Engines will receive the snapshot, exact supplied/local positions, authoritative snapshot, and authoritative events;
+- a revision transition can be reconstructed from supplied transport position without a running transition clock;
+- hidden time does not advance active transmissions or rhythm under the current First Crossing policy;
+- already-scheduled audio cancellation/gating remains work for the scheduler/audio migration;
+- Studio/database revision persistence remains deferred to R5 reconciliation;
+- production audio scheduling remains on the legacy scheduler until separately migrated; the approved Nexus audio removal is the only scene-event behavior change in this step.
+
+### Alternatives considered
+
+- **Mutate the active composition immediately:** rejected because it can change event topology inside a cycle.
+- **Reset immediately to Phase Zero:** rejected because it interrupts the current form and makes editing the transport authority.
+- **Use `updated_at` as version:** rejected because timestamps do not express deliberate structural identity.
+- **Let each engine resolve a duplicated UI voice count:** rejected because displayed counts can diverge from runtime voice structure.
+- **Allow Nexus contact to emit authoritative notes:** rejected for this migration because geometry cannot own event existence or timing.
+- **Create a new production runtime/clock:** rejected by D003, D007, and the reconciliation ownership target.
+
+### Migration and verification
+
+- introduce immutable snapshot construction and per-engine ordered voice exports;
+- add a pure supplied-position revision state machine that activates at exact Phase Zero;
+- connect read-only reconstruction to the existing `engineClock`;
+- install visibility lifecycle handling upstream on that clock;
+- test immutability, explicit versions, real voice topology, deterministic reconstruction, exact transitions, half-open event continuity, freeze/resume, and absence of a second live transport;
+- migrate the production scheduler/audio consumer separately before removing legacy event paths.
+
+### Supersedes / superseded by
+
+Resolves ARA-002 and ARA-007 for the current production bridge. Resolves ARA-004 for migrated Phase-Alignment compositions by making macro duration explicit rather than inferred. Partially resolves ARA-003; richer voice, tuning, scale, seed, and sound-assignment data remains future work.
+
+### Source
+
+Explicit project-owner decision, 2026-08-09; Reconciliation Step 4.
+
+---
+
 ## 2. Rejected decision register
 
 The following have been explicitly rejected or superseded:

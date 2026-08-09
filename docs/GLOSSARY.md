@@ -508,6 +508,12 @@ Multiple repeating rhythmic relationships derived from one authoritative musical
 
 Versioned parameters sufficient to reproduce a composition’s musical structure.
 
+### Composition snapshot
+
+**Status:** CANONICAL technical concept
+
+An immutable, explicitly revisioned capture of the structural rhythm inputs used by the production authority. For the current bridge it owns composition ID, numeric revision, macro-cycle duration, base laps, and ordered voice definitions. Backdrop values may construct it but cannot mutate it.
+
 ### Audio scheduler
 
 **Status:** CANONICAL technical concept
@@ -819,4 +825,3 @@ Green-blue-white environmental optimism, air/water/curvature, transformed throug
 ## 14. Run boundary
 
 This glossary normalizes terminology for the current Project Bible. It does not resolve open naming, lore, tuning, progression, or visual decisions.
-

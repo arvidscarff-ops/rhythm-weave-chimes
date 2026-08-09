@@ -14,6 +14,7 @@
 
 import type { Scene, SceneGlobals, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
 import { crossings, progress, lapsFor } from "@/lib/engine/phaseAlign";
+import { orderedPhaseAlignedVoices } from "@/lib/rhythm/compositionSnapshot";
 
 const ROOT_HZ = 220;
 const freqOf = (s: number) => ROOT_HZ * Math.pow(2, s / 12);
@@ -25,6 +26,11 @@ export type PhaseAlignRingsState = {
   /** Cached N for hot-detect reseed. */
   n: number;
 };
+
+export function phaseAlignRingsVoiceDefinitions(noteCount: number) {
+  const count = Math.max(4, Math.min(24, Math.floor(noteCount)));
+  return orderedPhaseAlignedVoices("phaseAlignRings", count);
+}
 
 export const phaseAlignRingsScene: Scene<PhaseAlignRingsState> = {
   id: "phaseAlignRings",

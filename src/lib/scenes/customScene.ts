@@ -29,6 +29,7 @@ import {
   type CustomSceneBlueprint,
 } from "@/lib/engine/pathTransformer";
 import { getActiveBlueprint } from "@/lib/scenes/activeBlueprint";
+import { orderedPhaseAlignedVoices } from "@/lib/rhythm/compositionSnapshot";
 import { paletteAt, paletteMid, withAlpha } from "@/lib/studio/palettes";
 import { spawnFire, hexToRgb01 } from "@/lib/visuals/fireShaderLayer";
 
@@ -95,12 +96,19 @@ function makeState(): CustomSceneState {
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
 
+function customSceneVoiceCount(noteCount: number, trackCount: number | null) {
+  const override = trackCount;
+  return typeof override === "number" && override > 0
+    ? Math.max(1, Math.min(48, Math.floor(override)))
+    : Math.max(1, Math.min(48, Math.floor(noteCount)));
+}
+
+export function customSceneVoiceDefinitions(noteCount: number, trackCount: number | null) {
+  return orderedPhaseAlignedVoices("custom", customSceneVoiceCount(noteCount, trackCount));
+}
+
 function resolveTrackCount(bp: CustomSceneBlueprint, g: SceneGlobals): number {
-  const override = bp.layout.trackCount;
-  if (typeof override === "number" && override > 0) {
-    return Math.max(1, Math.min(48, Math.floor(override)));
-  }
-  return Math.max(1, Math.min(48, g.noteCount));
+  return customSceneVoiceCount(g.noteCount, bp.layout.trackCount);
 }
 
 /** Map unit-space (-1..1) to pixels centered on the canvas. */

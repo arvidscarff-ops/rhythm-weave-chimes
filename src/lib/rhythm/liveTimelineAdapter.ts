@@ -110,10 +110,56 @@ export function transportSecondsFromNumber(seconds: number): ExactTransportSecon
   return exactTransportSeconds(numerator, denominator);
 }
 
-function normalizeTransportInput(input: TransportPositionInput): ExactTransportSeconds {
+export function normalizeTransportInput(input: TransportPositionInput): ExactTransportSeconds {
   return typeof input === "number"
     ? transportSecondsFromNumber(input)
     : exactTransportSeconds(input.secondsNumerator, input.secondsDenominator);
+}
+
+export function compareTransportSeconds(
+  leftInput: TransportPositionInput,
+  rightInput: TransportPositionInput,
+): number {
+  const left = normalizeTransportInput(leftInput);
+  const right = normalizeTransportInput(rightInput);
+  const leftScaled = left.secondsNumerator * right.secondsDenominator;
+  const rightScaled = right.secondsNumerator * left.secondsDenominator;
+  return leftScaled < rightScaled ? -1 : leftScaled > rightScaled ? 1 : 0;
+}
+
+export function addTransportSeconds(
+  leftInput: TransportPositionInput,
+  rightInput: TransportPositionInput,
+): ExactTransportSeconds {
+  const left = normalizeTransportInput(leftInput);
+  const right = normalizeTransportInput(rightInput);
+  return exactTransportSeconds(
+    left.secondsNumerator * right.secondsDenominator +
+      right.secondsNumerator * left.secondsDenominator,
+    left.secondsDenominator * right.secondsDenominator,
+  );
+}
+
+export function subtractTransportSeconds(
+  leftInput: TransportPositionInput,
+  rightInput: TransportPositionInput,
+): ExactTransportSeconds {
+  const left = normalizeTransportInput(leftInput);
+  const right = normalizeTransportInput(rightInput);
+  const numerator =
+    left.secondsNumerator * right.secondsDenominator -
+    right.secondsNumerator * left.secondsDenominator;
+  if (numerator < 0n) throw new RangeError("Transport subtraction cannot produce negative time.");
+  return exactTransportSeconds(numerator, left.secondsDenominator * right.secondsDenominator);
+}
+
+export function multiplyTransportSeconds(
+  input: TransportPositionInput,
+  multiplier: bigint,
+): ExactTransportSeconds {
+  if (multiplier < 0n) throw new RangeError("Transport multiplier must be non-negative.");
+  const value = normalizeTransportInput(input);
+  return exactTransportSeconds(value.secondsNumerator * multiplier, value.secondsDenominator);
 }
 
 function greatestCommonDivisor(left: bigint, right: bigint): bigint {

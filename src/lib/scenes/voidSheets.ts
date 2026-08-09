@@ -17,6 +17,7 @@
 
 import type { Scene, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
 import { crossings, progress } from "@/lib/engine/phaseAlign";
+import { orderedPhaseAlignedVoices } from "@/lib/rhythm/compositionSnapshot";
 
 const ROOT_HZ = 220;
 const freqOf = (s: number) => ROOT_HZ * Math.pow(2, s / 12);
@@ -64,6 +65,11 @@ export type VoidSheetsState = {
   /** Latest scene-time the last macro-cycle boundary fired at. */
   lastBangT: number;
 };
+
+export function voidSheetsVoiceDefinitions(noteCount: number) {
+  const count = Math.max(4, Math.min(24, Math.floor(noteCount)));
+  return orderedPhaseAlignedVoices("voidSheets", count);
+}
 
 function buildNotes(N: number): Note[] {
   const notes: Note[] = new Array(N);

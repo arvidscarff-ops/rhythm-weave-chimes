@@ -10,6 +10,7 @@
 
 import type { Scene, SceneGlobals, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
 import { crossings, progress } from "@/lib/engine/phaseAlign";
+import { orderedPhaseAlignedVoices } from "@/lib/rhythm/compositionSnapshot";
 
 type Anchor = {
   cx: number;
@@ -42,8 +43,8 @@ export type StringNetState = {
   strings: StringEdge[];
   particles: Particle[];
   density: number;
-  /** Nexus fires kept for visual variety; not part of Phase-Alignment. */
-  lastNexusFireT: Map<string, number>;
+  /** Visual-only Nexus contacts; never emitted as musical TriggerEvents. */
+  lastNexusFireT: Map<string, { t: number; x: number; y: number }>;
   scratch: {
     anchors: { x: number; y: number }[];
     particles: { x: number; y: number; trail: { x: number; y: number }[] }[];
@@ -73,6 +74,15 @@ function makeAnchors(n: number): Anchor[] {
 
 function anchorCount(density: number) {
   return Math.max(3, Math.min(6, Math.round(3 + (density - 2) * 0.3)));
+}
+
+export function stringNetworkVoiceDefinitions(density: number) {
+  const anchors = anchorCount(density);
+  const particleCount = anchors * (anchors - 1);
+  return orderedPhaseAlignedVoices(
+    "stringNet",
+    Array.from({ length: particleCount }, (_, order) => particleCount - 1 - order),
+  );
 }
 
 function makeStrings(n: number): StringEdge[] {
@@ -248,7 +258,7 @@ export const stringNetworkScene: Scene<StringNetState> = {
       }
     }
 
-    // Nexus events — visual bonus, cadence NOT part of Phase-Alignment.
+    // Nexus contact is visual-only. Geometry must not create musical events.
     const NEXUS_PX = 18;
     const NEXUS_COOL = 0.8;
     const tm = (t0 + t1) * 0.5;
@@ -260,7 +270,7 @@ export const stringNetworkScene: Scene<StringNetState> = {
       for (let j = i + 1; j < state.strings.length; j++) {
         const sj = state.strings[j];
         const key = `${i}_${j}`;
-        const last = state.lastNexusFireT.get(key) ?? -Infinity;
+        const last = state.lastNexusFireT.get(key)?.t ?? -Infinity;
         if (tm - last < NEXUS_COOL) continue;
         const Aj = anc[sj.a];
         const Bj = anc[sj.b];
@@ -268,17 +278,9 @@ export const stringNetworkScene: Scene<StringNetState> = {
         const d2 = segDistSq(Ai.x, Ai.y, Bi.x, Bi.y, Bj.x, Bj.y);
         const dmin = Math.sqrt(Math.min(d1, d2));
         if (dmin < NEXUS_PX) {
-          state.lastNexusFireT.set(key, tm);
           const mx = (Ai.x + Bi.x + Aj.x + Bj.x) * 0.25;
           const my = (Ai.y + Bi.y + Aj.y + Bj.y) * 0.25;
-          events.push({
-            slot: 5 as VoiceSlotIndex,
-            freq: freqOf(-5 + g.pitchSemis),
-            x: mx,
-            y: my,
-            hue: 0.12,
-            velocity: 0.95,
-          });
+          state.lastNexusFireT.set(key, { t: tm, x: mx, y: my });
           break;
         }
       }
@@ -316,6 +318,21 @@ export const stringNetworkScene: Scene<StringNetState> = {
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(a.x, a.y, 22, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    for (const nexus of state.lastNexusFireT.values()) {
+      const age = g.globalTime - nexus.t;
+      if (age < 0) continue;
+      const flash = Math.exp(-age * 4);
+      if (flash < 0.01) continue;
+      const radius = 8 + flash * 18;
+      const grad = ctx.createRadialGradient(nexus.x, nexus.y, 0, nexus.x, nexus.y, radius);
+      grad.addColorStop(0, `oklch(0.96 0.18 70 / ${(flash * 0.8).toFixed(3)})`);
+      grad.addColorStop(1, "oklch(0.72 0.16 45 / 0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(nexus.x, nexus.y, radius, 0, Math.PI * 2);
       ctx.fill();
     }
 

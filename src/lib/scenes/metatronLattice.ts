@@ -10,6 +10,7 @@
 
 import type { Scene, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
 import { crossings, progress, cycleFraction } from "@/lib/engine/phaseAlign";
+import { orderedPhaseAlignedVoices } from "@/lib/rhythm/compositionSnapshot";
 import type { PackId } from "@/lib/sound/packs";
 
 const ROOT_HZ = 220;
@@ -31,6 +32,14 @@ const LAYERS: LayerSpec[] = [
   { vertices: 6,  radiusFrac: 0.34, pack: "prism",    rotLapsPerCycle: 2, pitchBase:  -2, hue: 0.72 },
   { vertices: 12, radiusFrac: 0.42, pack: "obsidian", rotLapsPerCycle: 1, pitchBase: -12, hue: 0.86 },
 ];
+
+export function metatronLatticeVoiceDefinitions() {
+  const count = LAYERS.reduce((sum, layer) => sum + layer.vertices, 0);
+  return orderedPhaseAlignedVoices(
+    "metatronLattice",
+    Array.from({ length: count }, (_, order) => count - 1 - order),
+  );
+}
 
 type Note = {
   layer: number;

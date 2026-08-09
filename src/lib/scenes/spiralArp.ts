@@ -8,6 +8,7 @@
 
 import type { Scene, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
 import { crossings, progress } from "@/lib/engine/phaseAlign";
+import { orderedPhaseAlignedVoices } from "@/lib/rhythm/compositionSnapshot";
 
 const ROOT_HZ = 220;
 const freqOf = (s: number) => ROOT_HZ * Math.pow(2, s / 12);
@@ -33,6 +34,10 @@ function spiralTurns(density: number) {
 }
 function playheadCount(density: number) {
   return Math.max(3, Math.min(8, Math.round(3 + (density - 2) * 0.5)));
+}
+
+export function spiralArpVoiceDefinitions(density: number) {
+  return orderedPhaseAlignedVoices("spiralArp", playheadCount(density));
 }
 
 function buildPlayheads(N: number): Playhead[] {

@@ -8,6 +8,7 @@
 
 import type { Scene, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
 import { crossings, progress } from "@/lib/engine/phaseAlign";
+import { orderedPhaseAlignedVoices } from "@/lib/rhythm/compositionSnapshot";
 
 const ROOT_HZ = 220;
 const freqOf = (s: number) => ROOT_HZ * Math.pow(2, s / 12);
@@ -31,6 +32,14 @@ export type RadialSweepState = {
 
 function armCount(density: number) {
   return Math.max(6, Math.min(16, Math.round(6 + (density - 2) * 1)));
+}
+
+export function radialSweepVoiceDefinitions(density: number) {
+  const count = armCount(density);
+  return orderedPhaseAlignedVoices(
+    "radialSweep",
+    Array.from({ length: count }, (_, order) => count - 1 - order),
+  );
 }
 
 function buildArms(N: number): Arm[] {

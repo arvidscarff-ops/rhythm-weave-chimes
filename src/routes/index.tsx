@@ -45,6 +45,7 @@ import { phaseAlignRingsScene, type PhaseAlignRingsState } from "@/lib/scenes/ph
 import { voidSheetsScene, type VoidSheetsState } from "@/lib/scenes/voidSheets";
 import { customScene, type CustomSceneState } from "@/lib/scenes/customScene";
 import { engineClock } from "@/lib/engine/clock";
+import { installEngineClockVisibilityFreeze } from "@/lib/engine/visibilityFreeze";
 import { createFireLayer } from "@/lib/visuals/fireShaderLayer";
 import { engineScheduler } from "@/lib/engine/scheduler";
 import {
@@ -1051,6 +1052,7 @@ function PhaseApp() {
     engineScheduler.start();
     return () => engineScheduler.stop();
   }, []);
+  useEffect(() => installEngineClockVisibilityFreeze(), []);
   useEffect(() => {
     const a = audioRef.current;
     const e = engineRef.current;

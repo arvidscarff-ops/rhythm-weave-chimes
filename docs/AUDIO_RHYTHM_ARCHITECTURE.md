@@ -375,6 +375,8 @@ The important qualities are:
 - separation between definition and runtime state;
 - no hidden timing rules inside visual components.
 
+**ACCEPTED PRODUCTION BRIDGE — D034:** The current production bridge captures a smaller immutable `CompositionSnapshot`: composition ID, numeric revision, exact physical macro-cycle duration, base laps, and ordered Phase-Alignment voice definitions. Backdrop/UI values are constructor sources only; the snapshot owns the resulting structure. `updated_at` is not a composition revision. The fuller illustrative contract above remains a migration target for tuning, scale, sound assignment, seed, and geometry-mapping metadata.
+
 ### 5.2 Rhythm authority
 
 The rhythm authority owns:
@@ -666,6 +668,8 @@ Phase Zero is the safest default boundary for changes that alter global rhythmic
 - major environment-to-composition remapping.
 
 Not every parameter change must wait for Phase Zero. The policy should be explicit by parameter class.
+
+**ACCEPTED TRANSITION POLICY — D034:** Structural rhythm changes create a queued immutable revision. The active revision continues until its next exact Phase Zero; the new revision begins at Phase Zero at that same transport position. The active snapshot is never mutated mid-cycle. Half-open event windows split at the boundary. Non-structural parameters that do not alter event topology may remain outside this policy.
 
 ---
 
@@ -1233,7 +1237,7 @@ Separate:
 
 ### 18.2 Pause
 
-The exact gameplay pause policy is unresolved.
+**ACCEPTED CURRENT FIRST CROSSING POLICY — D034:** Explicit pause freezes musical transport time. Resume continues from the exact preserved musical position; it does not catch up missed events in a burst.
 
 If musical playback pauses:
 
@@ -1261,6 +1265,8 @@ The system must detect suspension and choose a declared recovery policy:
 - enter a safe paused condition.
 
 It must not unknowingly continue with desynchronized local accumulators.
+
+**ACCEPTED CURRENT FIRST CROSSING POLICY — D034:** Hidden/background suspension freezes the existing live transport upstream. Returning to visibility resumes from the preserved musical position only if it had been playing before suspension. The pure live-timeline adapter has no visibility lifecycle. Active transmission duration freezes with crossing state under the same policy.
 
 ### 18.4 Seek and restore
 
@@ -1616,12 +1622,12 @@ Confirmed implementation findings must remain separate from recommendations.
 | ID | Decision | Status |
 |---|---|---|
 | ARA-001 | Canonical time representation: exact rational macro position plus integer event indices | **RESOLVED BY D033** |
-| ARA-002 | Audio-clock-led versus logical-transport-led architecture | **UNRESOLVED** |
-| ARA-003 | Exact voice/rhythm data model | **UNRESOLVED** |
-| ARA-004 | Formal macro-cycle derivation used by current PHASE compositions | **UNRESOLVED** |
+| ARA-002 | Current bridge is logical-transport-led through the single `engineClock` | **RESOLVED BY D034** |
+| ARA-003 | Exact voice/rhythm data model | **PARTIALLY RESOLVED BY D033/D034** |
+| ARA-004 | Migrated Phase-Alignment snapshots explicitly own macro duration | **RESOLVED BY D034 FOR CURRENT BRIDGE** |
 | ARA-005 | Arrival relationship to Phase Zero/formal closure | **UNRESOLVED** |
 | ARA-006 | Weather-to-duration/composition mapping model | **UNRESOLVED** |
-| ARA-007 | Pause and background-suspension semantics | **UNRESOLVED** |
+| ARA-007 | Pause and hidden/background suspension freeze musical transport | **RESOLVED BY D034 FOR CURRENT FIRST CROSSING** |
 | ARA-008 | Exact 432 Hz reference pitch and temperament | **UNRESOLVED** |
 | ARA-009 | Sound synthesis/sample architecture | **UNRESOLVED** |
 | ARA-010 | Deterministic seed scopes | **UNRESOLVED** |

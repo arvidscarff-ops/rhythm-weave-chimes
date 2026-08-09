@@ -12,9 +12,18 @@
 
 import type { Scene, SceneGlobals, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
 import { crossings, progress } from "@/lib/engine/phaseAlign";
+import { orderedPhaseAlignedVoices } from "@/lib/rhythm/compositionSnapshot";
 
 function strandCount(density: number) {
   return Math.max(5, Math.min(14, Math.round(5 + (density - 2) * 0.9)));
+}
+
+export function pendulumFanVoiceDefinitions(density: number) {
+  const count = strandCount(density);
+  return orderedPhaseAlignedVoices(
+    "pendulumFan",
+    Array.from({ length: count }, (_, order) => count - 1 - order),
+  );
 }
 
 const ROOT_HZ = 220;

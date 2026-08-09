@@ -11,12 +11,17 @@
 
 import type { Scene, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
 import { crossings, progress } from "@/lib/engine/phaseAlign";
+import { orderedPhaseAlignedVoices } from "@/lib/rhythm/compositionSnapshot";
 import type { PackId } from "@/lib/sound/packs";
 
 const ROOT_HZ = 220;
 const freqOf = (s: number) => ROOT_HZ * Math.pow(2, s / 12);
 const SCALE_SEMIS = [0, 2, 3, 5, 7, 10, 12, 14, 15, 17, 19, 22];
 const NOTE_COUNT = 24;
+
+export function radialResonatorVoiceDefinitions() {
+  return orderedPhaseAlignedVoices("radialResonator", NOTE_COUNT);
+}
 
 type Note = {
   id: number;

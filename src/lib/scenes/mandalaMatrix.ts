@@ -12,6 +12,7 @@
 
 import type { Scene, SceneGlobals, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
 import { crossings, progress } from "@/lib/engine/phaseAlign";
+import { orderedPhaseAlignedVoices } from "@/lib/rhythm/compositionSnapshot";
 
 const ROOT_HZ = 220;
 const freqOf = (s: number) => ROOT_HZ * Math.pow(2, s / 12);
@@ -35,6 +36,10 @@ export type MandalaMatrixState = {
 function noteCount(density: number) {
   const raw = Math.round(6 + (density - 2) * 2.4);
   return Math.max(6, Math.min(30, Math.round(raw / 6) * 6));
+}
+
+export function mandalaMatrixVoiceDefinitions(density: number) {
+  return orderedPhaseAlignedVoices("mandalaMatrix", noteCount(density));
 }
 
 function buildNotes(density: number): Note[] {

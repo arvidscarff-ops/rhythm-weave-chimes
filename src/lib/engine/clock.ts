@@ -27,6 +27,8 @@ let speed = 1;
  * user clicks Play. Nothing moves, nothing fires.
  */
 let paused = true;
+let backgroundSuspended = false;
+let resumeAfterBackground = false;
 
 /** Last raw timeline sample, seconds (from performance.now() / 1000). */
 let lastRaw = nowRaw();
@@ -62,15 +64,44 @@ export const engineClock = {
   pause(): void {
     tick();
     paused = true;
+    // An explicit pause while hidden cancels automatic resume.
+    resumeAfterBackground = false;
   },
 
   resume(): void {
     lastRaw = nowRaw();
+    if (backgroundSuspended) {
+      resumeAfterBackground = true;
+      paused = true;
+      return;
+    }
     paused = false;
   },
 
   isPaused(): boolean {
     return paused;
+  },
+
+  /** Freeze upstream transport time while the page is backgrounded. */
+  suspendForBackground(): void {
+    if (backgroundSuspended) return;
+    tick();
+    resumeAfterBackground = !paused;
+    paused = true;
+    backgroundSuspended = true;
+  },
+
+  /** Resume only if transport was playing when background suspension began. */
+  resumeFromBackground(): void {
+    lastRaw = nowRaw();
+    if (!backgroundSuspended) return;
+    backgroundSuspended = false;
+    paused = !resumeAfterBackground;
+    resumeAfterBackground = false;
+  },
+
+  isBackgroundSuspended(): boolean {
+    return backgroundSuspended;
   },
 
   /** Set global speed multiplier (0 .. 2). Continuous in `t`. */

@@ -9,6 +9,7 @@
 
 import type { Scene, TriggerEvent, VoiceSlotIndex } from "@/lib/engine/sceneTypes";
 import { crossings, progress, cycleFraction } from "@/lib/engine/phaseAlign";
+import { orderedPhaseAlignedVoices } from "@/lib/rhythm/compositionSnapshot";
 import { PHI } from "@/lib/engine/polyrhythm";
 import type { PackId } from "@/lib/sound/packs";
 
@@ -35,6 +36,16 @@ const LAYERS: LayerSpec[] = [
 ];
 
 const PARTICLES_PER_LAYER = 10;
+
+export function fractalNebulaVoiceDefinitions() {
+  const phaseIndices = LAYERS.flatMap((_, layer) =>
+    Array.from(
+      { length: PARTICLES_PER_LAYER },
+      (_, particle) => (LAYERS.length - 1 - layer) * PARTICLES_PER_LAYER + particle,
+    ),
+  );
+  return orderedPhaseAlignedVoices("fractalNebula", phaseIndices);
+}
 
 type Particle = {
   id: number;

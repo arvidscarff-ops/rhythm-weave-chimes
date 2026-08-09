@@ -18,6 +18,7 @@ import { Route as StudioScalesRouteImport } from './routes/studio.scales'
 import { Route as StudioPacksRouteImport } from './routes/studio.packs'
 import { Route as StudioBuilderRouteImport } from './routes/studio.builder'
 import { Route as DevTransmissionsRouteImport } from './routes/dev.transmissions'
+import { Route as DevTriggerEnginesRouteImport } from './routes/dev.trigger-engines'
 import { Route as DevPerformanceRouteImport } from './routes/dev.performance'
 import { Route as DevMovementRouteImport } from './routes/dev.movement'
 import { Route as DevCrossingRouteImport } from './routes/dev.crossing'
@@ -71,6 +72,11 @@ const DevTransmissionsRoute = DevTransmissionsRouteImport.update({
   path: '/dev/transmissions',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevTriggerEnginesRoute = DevTriggerEnginesRouteImport.update({
+  id: '/dev/trigger-engines',
+  path: '/dev/trigger-engines',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevPerformanceRoute = DevPerformanceRouteImport.update({
   id: '/dev/performance',
   path: '/dev/performance',
@@ -119,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/dev/movement': typeof DevMovementRoute
   '/dev/performance': typeof DevPerformanceRoute
   '/dev/transmissions': typeof DevTransmissionsRoute
+  '/dev/trigger-engines': typeof DevTriggerEnginesRoute
   '/studio/builder': typeof StudioBuilderRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
@@ -136,6 +143,7 @@ export interface FileRoutesByTo {
   '/dev/movement': typeof DevMovementRoute
   '/dev/performance': typeof DevPerformanceRoute
   '/dev/transmissions': typeof DevTransmissionsRoute
+  '/dev/trigger-engines': typeof DevTriggerEnginesRoute
   '/studio/builder': typeof StudioBuilderRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
@@ -155,6 +163,7 @@ export interface FileRoutesById {
   '/dev/movement': typeof DevMovementRoute
   '/dev/performance': typeof DevPerformanceRoute
   '/dev/transmissions': typeof DevTransmissionsRoute
+  '/dev/trigger-engines': typeof DevTriggerEnginesRoute
   '/studio/builder': typeof StudioBuilderRoute
   '/studio/packs': typeof StudioPacksRoute
   '/studio/scales': typeof StudioScalesRoute
@@ -175,6 +184,7 @@ export interface FileRouteTypes {
     | '/dev/movement'
     | '/dev/performance'
     | '/dev/transmissions'
+    | '/dev/trigger-engines'
     | '/studio/builder'
     | '/studio/packs'
     | '/studio/scales'
@@ -192,6 +202,7 @@ export interface FileRouteTypes {
     | '/dev/movement'
     | '/dev/performance'
     | '/dev/transmissions'
+    | '/dev/trigger-engines'
     | '/studio/builder'
     | '/studio/packs'
     | '/studio/scales'
@@ -210,6 +221,7 @@ export interface FileRouteTypes {
     | '/dev/movement'
     | '/dev/performance'
     | '/dev/transmissions'
+    | '/dev/trigger-engines'
     | '/studio/builder'
     | '/studio/packs'
     | '/studio/scales'
@@ -229,6 +241,7 @@ export interface RootRouteChildren {
   DevMovementRoute: typeof DevMovementRoute
   DevPerformanceRoute: typeof DevPerformanceRoute
   DevTransmissionsRoute: typeof DevTransmissionsRoute
+  DevTriggerEnginesRoute: typeof DevTriggerEnginesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -294,6 +307,13 @@ declare module '@tanstack/react-router' {
       path: '/dev/transmissions'
       fullPath: '/dev/transmissions'
       preLoaderRoute: typeof DevTransmissionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/trigger-engines': {
+      id: '/dev/trigger-engines'
+      path: '/dev/trigger-engines'
+      fullPath: '/dev/trigger-engines'
+      preLoaderRoute: typeof DevTriggerEnginesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dev/performance': {
@@ -379,6 +399,7 @@ const rootRouteChildren: RootRouteChildren = {
   DevMovementRoute: DevMovementRoute,
   DevPerformanceRoute: DevPerformanceRoute,
   DevTransmissionsRoute: DevTransmissionsRoute,
+  DevTriggerEnginesRoute: DevTriggerEnginesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

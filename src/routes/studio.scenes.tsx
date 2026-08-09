@@ -15,7 +15,7 @@ import {
   updateAdminScene,
   deleteAdminScene,
   createSceneAssetUploadUrl,
-  signedSceneAssetUrl,
+  signedAdminSceneAssetUrl,
   SCENE_ENGINES,
   DEFAULT_THEME,
   DEFAULT_FX,
@@ -146,7 +146,7 @@ function SceneEditor({ scene, onDelete }: { scene: SceneRow; onDelete: () => voi
   const qc = useQueryClient();
   const update = useServerFn(updateAdminScene);
   const signUpload = useServerFn(createSceneAssetUploadUrl);
-  const signRead = useServerFn(signedSceneAssetUrl);
+  const signRead = useServerFn(signedAdminSceneAssetUrl);
 
   const [name, setName] = useState(scene.name);
   const [engine, setEngine] = useState<SceneEngineId>(scene.trigger_engine_id);
@@ -675,10 +675,10 @@ function PreviewCanvas({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Label className="text-[10px] uppercase tracking-[0.2em] text-foreground/60">
-          Live preview
+          Styling preview
         </Label>
         <Button size="sm" variant="ghost" onClick={testTone}>
-          <PlayIcon className="h-3 w-3 mr-1" /> Test tone
+          <PlayIcon className="h-3 w-3 mr-1" /> Test pulse
         </Button>
       </div>
       <div
@@ -756,8 +756,9 @@ function PreviewCanvas({
         </div>
       </div>
       <p className="text-[11px] text-foreground/50">
-        Trail persistence and engine physics render in the app when this scene is published and
-        selected. Press <em>Test tone</em> to preview the audio-reactive pulse locally.
+        This checks media, palette, and reactive styling only. It does not simulate musical timing
+        or Trigger Engine geometry. Use the authoritative previews on the Studio overview for those
+        systems.
       </p>
     </div>
   );

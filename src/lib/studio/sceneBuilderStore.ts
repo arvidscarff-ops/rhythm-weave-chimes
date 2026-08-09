@@ -1,7 +1,7 @@
 /**
  * LocalStorage CRUD for Scene Builder presets.
- * Presets are user-owned JSON blueprints; the active one drives
- * the "custom" scene runtime via `activeBlueprint`.
+ * Presets are local legacy-lab JSON blueprints. Loading or previewing one does
+ * not publish it into the production custom-scene runtime.
  */
 
 import type { CustomSceneBlueprint } from "@/lib/engine/pathTransformer";

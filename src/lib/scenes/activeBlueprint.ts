@@ -1,8 +1,7 @@
 /**
- * Runtime slot for the "custom" scene's active blueprint.
- * The Scene Builder writes here (via a Load / Publish action); the
- * customScene runtime reads it on every frame. Kept out of React state
- * so hot changes don't force a full render loop rebuild.
+ * Runtime slot for the legacy "custom" scene's active blueprint.
+ * Production code may read the persisted value, but the quarantined Studio
+ * Builder uses only temporary preview overrides and cannot publish into it.
  */
 
 import type { CustomSceneBlueprint } from "@/lib/engine/pathTransformer";
@@ -34,8 +33,21 @@ export function getActiveBlueprint(): CustomSceneBlueprint {
 }
 
 export function setActiveBlueprint(bp: CustomSceneBlueprint): void {
+  applyBlueprint(bp, true);
+}
+
+/**
+ * Temporary, non-persistent override for the quarantined legacy Builder preview.
+ * This must never be used as a publication path.
+ */
+export function setPreviewBlueprint(bp: CustomSceneBlueprint): void {
+  applyBlueprint(bp, false);
+}
+
+function applyBlueprint(bp: CustomSceneBlueprint, persist: boolean): void {
+  hydrate();
   current = bp;
-  if (typeof window !== "undefined") {
+  if (persist && typeof window !== "undefined") {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(bp));
     } catch {
@@ -45,9 +57,7 @@ export function setActiveBlueprint(bp: CustomSceneBlueprint): void {
   for (const fn of subs) fn(bp);
 }
 
-export function subscribeActiveBlueprint(
-  fn: (bp: CustomSceneBlueprint) => void,
-): () => void {
+export function subscribeActiveBlueprint(fn: (bp: CustomSceneBlueprint) => void): () => void {
   hydrate();
   subs.add(fn);
   return () => {

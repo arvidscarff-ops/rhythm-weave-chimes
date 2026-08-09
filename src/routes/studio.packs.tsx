@@ -173,6 +173,9 @@ function PackEditor({ pack, onDelete }: { pack: AdminPack; onDelete: () => void 
       qc.invalidateQueries({ queryKey: ["admin", "packs"] });
       toast.success(v ? "Published" : "Unpublished");
     },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Publication failed");
+    },
   });
 
   const uploadCover = async (file: File) => {

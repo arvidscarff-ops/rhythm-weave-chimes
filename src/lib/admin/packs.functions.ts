@@ -3,6 +3,8 @@ import { createServerFn } from "@tanstack/react-start";
 import type { Humanization } from "./humanization";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { requireStudioAdmin } from "@/lib/studio/admin-middleware";
+import { assertPublicationReady, validatePackForPublication } from "@/lib/studio/studioValidation";
+import { validatePackAssetPath } from "@/lib/studio/studioSecurity";
 
 export const MAX_SLOTS_PER_PACK = 12;
 export const MAX_SAMPLES_PER_SLOT = 6;
@@ -44,6 +46,64 @@ async function admin() {
   return supabaseAdmin;
 }
 
+async function loadPackForPublication(
+  supa: Awaited<ReturnType<typeof admin>>,
+  id: string,
+): Promise<AdminPack> {
+  const { data: pack, error } = await supa
+    .from("packs")
+    .select(
+      "id,name,slug,description,is_published,cover_image_url,humanization,updated_at,pack_slots(id,slot_index,label,gain_db,pan,pitch_offset_semitones,humanization,pack_slot_samples(position,samples(id,name,storage_path)))",
+    )
+    .eq("id", id)
+    .single();
+  if (error || !pack) throw new Error(error?.message ?? "Pack not found");
+  type SlotSampleRow = {
+    position: number;
+    samples: { id: string; name: string; storage_path: string } | null;
+  };
+  type SlotRawRow = {
+    id: string;
+    slot_index: number;
+    label: string | null;
+    gain_db: number | string;
+    pan: number | string;
+    pitch_offset_semitones: number | string;
+    humanization: unknown;
+    pack_slot_samples: SlotSampleRow[] | null;
+  };
+  return {
+    id: pack.id,
+    name: pack.name,
+    slug: pack.slug,
+    description: pack.description,
+    is_published: pack.is_published,
+    cover_image_url: pack.cover_image_url,
+    humanization: pack.humanization as Humanization | null,
+    updated_at: pack.updated_at,
+    slots: ((pack.pack_slots ?? []) as unknown as SlotRawRow[])
+      .map((slot): AdminSlot => ({
+        id: slot.id,
+        slot_index: slot.slot_index,
+        label: slot.label,
+        gain_db: Number(slot.gain_db),
+        pan: Number(slot.pan),
+        pitch_offset_semitones: Number(slot.pitch_offset_semitones),
+        humanization: slot.humanization as Humanization | null,
+        samples: (slot.pack_slot_samples ?? [])
+          .filter((row) => !!row.samples)
+          .sort((a, b) => a.position - b.position)
+          .map((row) => ({
+            id: row.samples!.id,
+            name: row.samples!.name,
+            storage_path: row.samples!.storage_path,
+            position: row.position,
+          })),
+      }))
+      .sort((a, b) => a.slot_index - b.slot_index),
+  };
+}
+
 export const listAdminPacks = createServerFn({ method: "POST" })
   .middleware([requireStudioAdmin])
   .handler(async (): Promise<AdminPack[]> => {
@@ -55,7 +115,10 @@ export const listAdminPacks = createServerFn({ method: "POST" })
       )
       .order("updated_at", { ascending: false });
     if (error) throw new Error(error.message);
-    type SlotSampleRow = { position: number; samples: { id: string; name: string; storage_path: string } | null };
+    type SlotSampleRow = {
+      position: number;
+      samples: { id: string; name: string; storage_path: string } | null;
+    };
     type SlotRawRow = {
       id: string;
       slot_index: number;
@@ -137,12 +200,27 @@ export const updateAdminPack = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const supa = await admin();
+    if (data.is_published === true) {
+      const current = await loadPackForPublication(supa, data.id);
+      assertPublicationReady(
+        "pack",
+        validatePackForPublication({
+          ...current,
+          name: data.name ?? current.name,
+          description: data.description === undefined ? current.description : data.description,
+          cover_image_url:
+            data.cover_image_url === undefined ? current.cover_image_url : data.cover_image_url,
+          humanization: data.humanization === undefined ? current.humanization : data.humanization,
+        }),
+      );
+    }
     const patch: TablesUpdate<"packs"> = {};
     if (data.name !== undefined) patch.name = data.name;
     if (data.description !== undefined) patch.description = data.description;
     if (data.is_published !== undefined) patch.is_published = data.is_published;
     if (data.cover_image_url !== undefined) patch.cover_image_url = data.cover_image_url;
-    if (data.humanization !== undefined) patch.humanization = data.humanization as unknown as TablesUpdate<"packs">["humanization"];
+    if (data.humanization !== undefined)
+      patch.humanization = data.humanization as unknown as TablesUpdate<"packs">["humanization"];
     const { error } = await supa.from("packs").update(patch).eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -178,7 +256,9 @@ export const updateAdminSlot = createServerFn({ method: "POST" })
     if (data.pan !== undefined) patch.pan = data.pan;
     if (data.pitch_offset_semitones !== undefined)
       patch.pitch_offset_semitones = data.pitch_offset_semitones;
-    if (data.humanization !== undefined) patch.humanization = data.humanization as unknown as TablesUpdate<"pack_slots">["humanization"];
+    if (data.humanization !== undefined)
+      patch.humanization =
+        data.humanization as unknown as TablesUpdate<"pack_slots">["humanization"];
     const { error } = await supa.from("pack_slots").update(patch).eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -197,7 +277,8 @@ export const addAdminSlot = createServerFn({ method: "POST" })
       .limit(1);
     if (e1) throw new Error(e1.message);
     const nextIndex = (existing?.[0]?.slot_index ?? -1) + 1;
-    if (nextIndex >= MAX_SLOTS_PER_PACK) throw new Error(`Max ${MAX_SLOTS_PER_PACK} slots per pack`);
+    if (nextIndex >= MAX_SLOTS_PER_PACK)
+      throw new Error(`Max ${MAX_SLOTS_PER_PACK} slots per pack`);
     const { data: row, error } = await supa
       .from("pack_slots")
       .insert({ pack_id: data.pack_id, slot_index: nextIndex })
@@ -269,9 +350,10 @@ export const setAdminSlotSamples = createServerFn({ method: "POST" })
 
 export const registerAdminSample = createServerFn({ method: "POST" })
   .middleware([requireStudioAdmin])
-  .inputValidator(
-    (data: { name: string; storage_path: string; mime_type?: string }) => data,
-  )
+  .inputValidator((data: { name: string; storage_path: string; mime_type?: string }) => ({
+    ...data,
+    storage_path: validatePackAssetPath("samples", data.storage_path),
+  }))
   .handler(async ({ data }) => {
     const supa = await admin();
     const { data: row, error } = await supa
@@ -290,7 +372,9 @@ export const registerAdminSample = createServerFn({ method: "POST" })
 
 export const signedCoverUrl = createServerFn({ method: "POST" })
   .middleware([requireStudioAdmin])
-  .inputValidator((data: { storage_path: string }) => data)
+  .inputValidator((data: { storage_path: string }) => ({
+    storage_path: validatePackAssetPath("pack-covers", data.storage_path),
+  }))
   .handler(async ({ data }): Promise<{ url: string }> => {
     const supa = await admin();
     const { data: signed, error } = await supa.storage
@@ -305,21 +389,20 @@ export type AdminBucket = (typeof ADMIN_BUCKETS)[number];
 
 export const createAdminUploadUrl = createServerFn({ method: "POST" })
   .middleware([requireStudioAdmin])
-  .inputValidator(
-    (data: { bucket: AdminBucket; path: string; upsert?: boolean }) => {
-      if (!ADMIN_BUCKETS.includes(data.bucket)) {
-        throw new Error(`Bucket not allowed: ${data.bucket}`);
-      }
-      return data;
-    },
-  )
-  .handler(
-    async ({ data }): Promise<{ signedUrl: string; token: string; path: string }> => {
-      const supa = await admin();
-      const { data: signed, error } = await supa.storage
-        .from(data.bucket)
-        .createSignedUploadUrl(data.path, { upsert: data.upsert ?? true });
-      if (error || !signed) throw new Error(error?.message ?? "sign upload failed");
-      return { signedUrl: signed.signedUrl, token: signed.token, path: signed.path };
-    },
-  );
+  .inputValidator((data: { bucket: AdminBucket; path: string; upsert?: boolean }) => {
+    if (!ADMIN_BUCKETS.includes(data.bucket)) {
+      throw new Error(`Bucket not allowed: ${data.bucket}`);
+    }
+    return {
+      ...data,
+      path: validatePackAssetPath(data.bucket, data.path),
+    };
+  })
+  .handler(async ({ data }): Promise<{ signedUrl: string; token: string; path: string }> => {
+    const supa = await admin();
+    const { data: signed, error } = await supa.storage
+      .from(data.bucket)
+      .createSignedUploadUrl(data.path, { upsert: data.upsert ?? true });
+    if (error || !signed) throw new Error(error?.message ?? "sign upload failed");
+    return { signedUrl: signed.signedUrl, token: signed.token, path: signed.path };
+  });

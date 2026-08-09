@@ -1223,6 +1223,66 @@ Explicit project-owner instruction, 2026-08-09; Reconciliation Step 7A.
 
 ---
 
+## D038 — Studio exports versioned inventories and enforces publication boundaries
+
+**Status:** ACCEPTED
+**Scope:** Private Studio authoring, backup/export, publication validation, preview isolation, and storage paths
+**Date:** 2026-08-09
+
+### Context
+
+The older R5 work introduced useful integrity contracts, but its archive described obsolete per-family R3/R4 runtime fixtures and its Builder preview could persist local preview state into the application runtime. Current reconciliation instead has one exact shared R4 laboratory authority, quarantined legacy experiments, newer Supabase security/RLS, and the D037 account-plus-administrator boundary.
+
+### Decision
+
+My Studio exposes an export-only, explicitly versioned private archive contract. Version 1 inventories packs, scales, scenes, authenticated composer presets, local legacy Builder blueprints, and current R4 comparative-laboratory evidence. Archive collections are deterministically ordered, exact integer/rational laboratory values are serialized as decimal strings, and the R4 metadata is labelled development-only rather than production geometry, tuning, or gateway selection. Export does not import, publish, overwrite, migrate, or delete content.
+
+Publishing a pack, scale, or scene requires a server-side integrity check against its complete stored definition plus the proposed publication change. Rules mirror established database, editor, and existing runtime bounds; they do not define new musical or product semantics.
+
+The legacy Builder may save and export local blueprints and render a temporary preview. It cannot persist that preview into production runtime state or present itself as a production publication path. Scene styling preview remains a media, palette, and reactive-style check rather than a musical timing authority.
+
+Service-role-backed upload and signing operations accept only safe relative paths and approved file extensions for their bucket category. Draft scene media is signed only through the administrator boundary. Public scene-media signing succeeds only for a path currently referenced by published scene content.
+
+### Rationale
+
+Versioned deterministic exports provide a recoverable authoring inventory without creating an unresolved import/migration policy. Validation prevents visibly incomplete drafts from crossing the publication boundary. Preview and storage isolation preserve the authoritative runtime and reduce the blast radius of service-role storage access.
+
+### Consequences
+
+- archive schema changes require a new numeric version rather than silent reinterpretation;
+- current R4 laboratory evidence is archived without restoring obsolete clocks, runtimes, tuning fixtures, or route patches;
+- invalid publication attempts return actionable field-level summaries;
+- legacy local blueprints remain recoverable but cannot silently become production state;
+- upload paths reject absolute paths, traversal, empty segments, backslashes, and unsupported media extensions;
+- current Supabase migrations, generated types, RLS, D037 authorization, and the passcode compatibility files remain unchanged;
+- archive import/restore, full media-content inspection, and later passcode removal remain separate work.
+
+### Alternatives considered
+
+- **Port the old R3 fixture archive verbatim:** rejected because those per-family runtime/tick/tuning fields are obsolete after reconciliation.
+- **Let the Builder continue live-publishing preview state:** rejected because preview state is not an authoritative production contract.
+- **Rely only on client-side validation:** rejected because privileged calls can be made without the supplied interface.
+- **Replace current storage migrations or policies:** rejected because newer August 8 security work remains authoritative.
+
+### Migration and verification
+
+- adapt archive metadata to the shared R4 exact-rational laboratory and current geometry consumers;
+- sort archive collections and test stable serialization with fixed export metadata;
+- validate complete pack, scale, and scene definitions before setting them published;
+- use temporary, non-persistent Builder preview overrides and restore prior state on unmount;
+- validate upload/signing paths at server-function boundaries and separate draft-admin from published-public scene signing;
+- test valid and invalid publication payloads, archive determinism/version rejection, preview persistence isolation, path/media rejection, D037 middleware coverage, unchanged migrations/types, and the production build.
+
+### Supersedes / superseded by
+
+Resolves the R5 archive, publication-validation, legacy-preview, and storage-boundary reconciliation scope deferred by D037. It does not select final Trigger Engine geometry or tuning, define archive import semantics, remove passcodes, or alter the production rhythm scheduler.
+
+### Source
+
+Explicit project-owner instruction, 2026-08-09; Reconciliation Step 7B.
+
+---
+
 ## 2. Rejected decision register
 
 The following have been explicitly rejected or superseded:

@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { requireStudioAdmin } from "@/lib/studio/admin-middleware";
+import { validateSceneMediaPath } from "@/lib/studio/studioSecurity";
+import { assertPublicationReady, validateSceneForPublication } from "@/lib/studio/studioValidation";
 
 export const SCENE_ENGINES = [
   "stringNet",
@@ -114,17 +116,18 @@ function normalize(row: {
     trigger_engine_id: engine,
     ui_theme_colors: { ...DEFAULT_THEME, ...(row.ui_theme_colors as Partial<ThemeColors> | null) },
     visual_fx: { ...DEFAULT_FX, ...(row.visual_fx as Partial<VisualFx> | null) },
-    audio_reactive: { ...DEFAULT_REACTIVE, ...(row.audio_reactive as Partial<AudioReactive> | null) },
+    audio_reactive: {
+      ...DEFAULT_REACTIVE,
+      ...(row.audio_reactive as Partial<AudioReactive> | null),
+    },
     is_published: row.is_published,
     updated_at: row.updated_at,
-    base_laps:
-      typeof row.base_laps === "number" ? row.base_laps : DEFAULT_CYCLE.base_laps,
+    base_laps: typeof row.base_laps === "number" ? row.base_laps : DEFAULT_CYCLE.base_laps,
     macro_cycle_seconds:
       row.macro_cycle_seconds != null
         ? Number(row.macro_cycle_seconds)
         : DEFAULT_CYCLE.macro_cycle_seconds,
-    note_count:
-      typeof row.note_count === "number" ? row.note_count : DEFAULT_CYCLE.note_count,
+    note_count: typeof row.note_count === "number" ? row.note_count : DEFAULT_CYCLE.note_count,
   };
 }
 
@@ -145,11 +148,9 @@ export const listAdminScenes = createServerFn({ method: "POST" })
 export const listPublishedScenes = createServerFn({ method: "GET" }).handler(
   async (): Promise<SceneRow[]> => {
     const { createClient } = await import("@supabase/supabase-js");
-    const supa = createClient(
-      process.env.SUPABASE_URL!,
-      process.env.SUPABASE_PUBLISHABLE_KEY!,
-      { auth: { storage: undefined, persistSession: false, autoRefreshToken: false } },
-    );
+    const supa = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_PUBLISHABLE_KEY!, {
+      auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+    });
     const { data: rows, error } = await supa
       .from("app_scenes")
       .select(
@@ -196,17 +197,49 @@ export const updateAdminScene = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const supa = await admin();
+    if (data.is_published === true) {
+      const { data: currentRow, error: currentError } = await supa
+        .from("app_scenes")
+        .select(
+          "id,name,background_type,background_path,trigger_engine_id,ui_theme_colors,visual_fx,audio_reactive,is_published,updated_at,base_laps,macro_cycle_seconds,note_count",
+        )
+        .eq("id", data.id)
+        .single();
+      if (currentError || !currentRow) {
+        throw new Error(currentError?.message ?? "Scene not found");
+      }
+      const current = normalize(currentRow as unknown as Parameters<typeof normalize>[0]);
+      assertPublicationReady(
+        "scene",
+        validateSceneForPublication({
+          ...current,
+          name: data.name ?? current.name,
+          background_type: data.background_type ?? current.background_type,
+          background_path:
+            data.background_path === undefined ? current.background_path : data.background_path,
+          trigger_engine_id: data.trigger_engine_id ?? current.trigger_engine_id,
+          ui_theme_colors: data.ui_theme_colors ?? current.ui_theme_colors,
+          visual_fx: data.visual_fx ?? current.visual_fx,
+          audio_reactive: data.audio_reactive ?? current.audio_reactive,
+          base_laps: data.base_laps ?? current.base_laps,
+          macro_cycle_seconds: data.macro_cycle_seconds ?? current.macro_cycle_seconds,
+          note_count: data.note_count ?? current.note_count,
+        }),
+      );
+    }
     const patch: TablesUpdate<"app_scenes"> = {};
     if (data.name !== undefined) patch.name = data.name;
     if (data.background_type !== undefined) patch.background_type = data.background_type;
     if (data.background_path !== undefined) patch.background_path = data.background_path;
     if (data.trigger_engine_id !== undefined) patch.trigger_engine_id = data.trigger_engine_id;
     if (data.ui_theme_colors !== undefined)
-      patch.ui_theme_colors = data.ui_theme_colors as unknown as TablesUpdate<"app_scenes">["ui_theme_colors"];
+      patch.ui_theme_colors =
+        data.ui_theme_colors as unknown as TablesUpdate<"app_scenes">["ui_theme_colors"];
     if (data.visual_fx !== undefined)
       patch.visual_fx = data.visual_fx as unknown as TablesUpdate<"app_scenes">["visual_fx"];
     if (data.audio_reactive !== undefined)
-      patch.audio_reactive = data.audio_reactive as unknown as TablesUpdate<"app_scenes">["audio_reactive"];
+      patch.audio_reactive =
+        data.audio_reactive as unknown as TablesUpdate<"app_scenes">["audio_reactive"];
     if (data.is_published !== undefined) patch.is_published = data.is_published;
     if (data.base_laps !== undefined) patch.base_laps = data.base_laps;
     if (data.macro_cycle_seconds !== undefined)
@@ -229,26 +262,50 @@ export const deleteAdminScene = createServerFn({ method: "POST" })
 
 export const createSceneAssetUploadUrl = createServerFn({ method: "POST" })
   .middleware([requireStudioAdmin])
-  .inputValidator((data: { path: string }) => data)
-  .handler(
-    async ({ data }): Promise<{ signedUrl: string; token: string; path: string }> => {
-      const supa = await admin();
-      const { data: signed, error } = await supa.storage
-        .from("scene-assets")
-        .createSignedUploadUrl(data.path, { upsert: true });
-      if (error || !signed) throw new Error(error?.message ?? "sign upload failed");
-      return { signedUrl: signed.signedUrl, token: signed.token, path: signed.path };
-    },
-  );
+  .inputValidator((data: { path: string }) => ({
+    path: validateSceneMediaPath(data.path),
+  }))
+  .handler(async ({ data }): Promise<{ signedUrl: string; token: string; path: string }> => {
+    const supa = await admin();
+    const { data: signed, error } = await supa.storage
+      .from("scene-assets")
+      .createSignedUploadUrl(data.path, { upsert: true });
+    if (error || !signed) throw new Error(error?.message ?? "sign upload failed");
+    return { signedUrl: signed.signedUrl, token: signed.token, path: signed.path };
+  });
 
-/**
- * Public read: resolve a stored scene-assets path to a short-lived signed URL.
- * Scene publication/storage hardening is deferred to the authoring pass.
- */
-export const signedSceneAssetUrl = createServerFn({ method: "POST" })
-  .inputValidator((data: { path: string }) => data)
+/** Private Studio read for draft and published scene media. */
+export const signedAdminSceneAssetUrl = createServerFn({ method: "POST" })
+  .middleware([requireStudioAdmin])
+  .inputValidator((data: { path: string }) => ({
+    path: validateSceneMediaPath(data.path),
+  }))
   .handler(async ({ data }): Promise<{ url: string }> => {
     const supa = await admin();
+    const { data: signed, error } = await supa.storage
+      .from("scene-assets")
+      .createSignedUrl(data.path, 60 * 60 * 6);
+    if (error || !signed) throw new Error(error?.message ?? "sign failed");
+    return { url: signed.signedUrl };
+  });
+
+/** Public runtime read, restricted to media referenced by a published scene. */
+export const signedSceneAssetUrl = createServerFn({ method: "POST" })
+  .inputValidator((data: { path: string }) => ({
+    path: validateSceneMediaPath(data.path),
+  }))
+  .handler(async ({ data }): Promise<{ url: string }> => {
+    const supa = await admin();
+    const { data: publishedScene, error: lookupError } = await supa
+      .from("app_scenes")
+      .select("id")
+      .eq("background_path", data.path)
+      .eq("is_published", true)
+      .limit(1)
+      .maybeSingle();
+    if (lookupError || !publishedScene) {
+      throw new Error("Scene asset is not referenced by published content");
+    }
     const { data: signed, error } = await supa.storage
       .from("scene-assets")
       .createSignedUrl(data.path, 60 * 60 * 6);

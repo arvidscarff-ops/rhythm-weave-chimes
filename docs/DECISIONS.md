@@ -908,6 +908,73 @@ Explicit project-owner selection, 2026-08-02; `TRIGGER_ENGINE_REFERENCE.md`
 
 ---
 
+## D033 — Musical authority uses exact rational macro position and integer event indices
+
+**Status:** ACCEPTED
+**Scope:** Rhythm architecture/data contract
+**Date:** 2026-08-09
+
+### Context
+
+Reset R3 proved deterministic closure and event identity with integer microticks, but its fixed `1,000,000` ticks-per-second scale was explicitly prototype-only. Reconciliation Step 2 requires a production bridge from the existing time-based transport without silently promoting that proof scale, an arbitrary ticks-per-cycle multiplier, or floating-point rendering phase into musical authority.
+
+### Decision
+
+Canonical musical authority uses a hybrid exact-rational model:
+
+- an immutable composition ID and version identify the musical definition;
+- absolute macro-cycle position is represented as a non-negative exact rational number;
+- the completed macro-cycle index is a `bigint`;
+- every voice declares a positive integer event count per macro-cycle;
+- voice event indices are integers, with absolute indices represented as `bigint`;
+- an event's exact macro position is derived from `eventIndex / eventCount`;
+- stable event identity derives from composition identity/version, voice identity, and exact integer event index;
+- normalized phase values in `[0,1)` are derived projections for rendering and display only.
+
+There is no canonical global musical ticks-per-second value, million-ticks-per-cycle grid, or arbitrary resolution multiplier.
+
+The live transport may remain time-based. A supplied transport position and declared macro-cycle duration are converted into exact rational macro position. An integer physical-time unit may be used internally only when its rate and precision come from the underlying clock source. Physical transport units are not musical ticks and must not be exposed as a musical event grid.
+
+Phase Zero is the exact state where the rational macro-cycle remainder is zero. Musical event boundaries and half-open interval comparisons use integer/rational arithmetic or cross-multiplication, never epsilon-based floating-point equality.
+
+### Rationale
+
+Musical events occur at exact rational relationships even when visuals require continuous interpolation. Keeping integer event identity and rational musical position authoritative preserves closure, deterministic reconstruction, cadence independence, and long-session stability without inventing false temporal precision.
+
+### Consequences
+
+- event enumeration is defined mathematically from integer indices and event counts;
+- audio and visual consumers can share event identity while renderers use derived floating-point phase;
+- geometry cannot create or modify authoritative events;
+- pause, suspension, remount, and restoration preserve musical state by preserving the supplied transport position and composition version;
+- transport clock precision must remain explicit at the adapter boundary;
+- R3's fixed microtick conversion remains laboratory evidence only and is not a production default;
+- future R4 geometry families must consume injected snapshots/events and must not retain private transports.
+
+### Alternatives considered
+
+- **Composition-declared arbitrary tick grids:** rejected because multiple resolutions encode the same musical relationships and invite false authority.
+- **One global ticks-per-second value:** rejected because it conflates physical transport representation with musical structure.
+- **Floating-point phase as event authority:** rejected because equality and accumulated error cannot guarantee exact boundaries.
+- **Per-engine clocks or runtimes:** rejected by D003 and D007.
+
+### Migration and verification
+
+- replace the Step 1 proof's musical tick-grid contract with exact rational macro position;
+- add a pure supplied-transport adapter with no clock, scheduler, audio, rendering, or geometry ownership;
+- test exact Phase Zero, stable identity/order, deterministic reconstruction, pause/freeze behavior, half-open boundaries, cadence independence, and long-duration conversion;
+- leave the current production `engineClock`, scheduler, routes, and Trigger Engines unchanged until a separately approved migration.
+
+### Supersedes / superseded by
+
+Resolves ARA-001. It constrains but does not fully resolve ARA-002, ARA-003, or ARA-004.
+
+### Source
+
+Explicit project-owner decision, 2026-08-09; Reconciliation Step 2.
+
+---
+
 ## 2. Rejected decision register
 
 The following have been explicitly rejected or superseded:
@@ -931,6 +998,7 @@ The following have been explicitly rejected or superseded:
 | R015 | Artifact as random powerful loot | Provenance and stewardship |
 | R016 | Darkness/gore/jump scares as primary horror | Beautiful daylight horror |
 | R017 | Degradation/corruption as universal transformation | Convergence |
+| R018 | Arbitrary global musical tick grid | Exact rational macro position plus integer event indices |
 
 ---
 

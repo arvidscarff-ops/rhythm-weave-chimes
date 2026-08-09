@@ -1291,6 +1291,12 @@ for canonical musical relationships where possible.
 
 Convert to floating-point seconds/phase at system boundaries.
 
+**ACCEPTED BY D033**
+
+Canonical musical authority combines exact rational macro-cycle position with integer event counts and indices. Event boundaries are derived from exact `eventIndex / eventCount` relationships. PHASE does not use a global musical ticks-per-second value, million-ticks-per-cycle grid, or arbitrary resolution multiplier.
+
+Physical transport time remains a separate domain. It may use an integer unit only when that unit and its precision come from the underlying clock source; a physical-time unit must not be reinterpreted as a musical tick grid. Normalized floating-point phase is a derived rendering/display projection and never determines whether an event exists.
+
 ### 19.2 Floating-point tolerance
 
 Tolerance may be used for:
@@ -1609,7 +1615,7 @@ Confirmed implementation findings must remain separate from recommendations.
 
 | ID | Decision | Status |
 |---|---|---|
-| ARA-001 | Canonical time representation: samples, ticks, seconds, or hybrid | **UNRESOLVED** |
+| ARA-001 | Canonical time representation: exact rational macro position plus integer event indices | **RESOLVED BY D033** |
 | ARA-002 | Audio-clock-led versus logical-transport-led architecture | **UNRESOLVED** |
 | ARA-003 | Exact voice/rhythm data model | **UNRESOLVED** |
 | ARA-004 | Formal macro-cycle derivation used by current PHASE compositions | **UNRESOLVED** |

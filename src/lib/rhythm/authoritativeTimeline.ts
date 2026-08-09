@@ -1,51 +1,51 @@
 /**
- * Pure integer rhythm timeline for the Reset reconciliation.
+ * Exact musical event authority for the Reset reconciliation.
  *
- * This module projects a caller-supplied musical position into exact cycle
- * state and deterministic events. It deliberately does not read a platform
- * clock, own transport state, schedule audio, or render geometry. The current
- * `engineClock` therefore remains the application's only live rhythm clock
- * until a later migration explicitly connects the two layers.
+ * Musical position is an exact rational number of macro-cycles. Events are
+ * identified by integer voice indices and occur at exact
+ * `voiceEventIndex / eventsPerMacroCycle` relationships. There is no musical
+ * ticks-per-second value or arbitrary tick grid in this model.
  *
- * Tick duration is intentionally caller-defined. This preserves the exact
- * integer relationships proven by R3 without prematurely resolving the
- * Project Bible's open production time-representation decision.
+ * Floating-point normalized phases are derived for rendering only. They never
+ * decide whether an event exists or where an event boundary lies.
  */
 
-export type RhythmTick = bigint;
+export type ExactMacroPosition = Readonly<{
+  numerator: bigint;
+  denominator: bigint;
+}>;
 
 export type RhythmVoiceDefinition = Readonly<{
   id: string;
-  /** Number of evenly spaced event boundaries within one macro-cycle. */
   eventsPerMacroCycle: number;
 }>;
 
 export type RhythmCompositionDefinition = Readonly<{
   id: string;
   version: number;
-  macroCycleTicks: RhythmTick;
   voices: readonly RhythmVoiceDefinition[];
 }>;
 
-/** Exact cycle position plus a normalized rendering-boundary projection. */
 export type ExactRhythmPhase = Readonly<{
-  cycleTick: RhythmTick;
-  cycleLengthTicks: RhythmTick;
-  normalized: number;
+  numerator: bigint;
+  denominator: bigint;
+  /** Derived projection for rendering/display only; never event authority. */
+  normalizedForRendering: number;
 }>;
 
 export type RhythmVoiceSnapshot = Readonly<{
   id: string;
   voiceOrder: number;
+  absoluteEventIndex: bigint;
+  eventInMacroCycle: number;
   phase: ExactRhythmPhase;
-  eventIndex: bigint;
-  nextEventTick: RhythmTick;
+  nextEventMacroPosition: ExactMacroPosition;
 }>;
 
 export type RhythmTimelineSnapshot = Readonly<{
   compositionId: string;
   compositionVersion: number;
-  positionTick: RhythmTick;
+  macroPosition: ExactMacroPosition;
   macroCycleIndex: bigint;
   macroPhase: ExactRhythmPhase;
   isPhaseZero: boolean;
@@ -56,9 +56,9 @@ export type AuthoritativeRhythmEvent = Readonly<{
   id: string;
   compositionId: string;
   compositionVersion: number;
-  tick: RhythmTick;
+  macroPosition: ExactMacroPosition;
   macroCycleIndex: bigint;
-  macroTick: RhythmTick;
+  macroPhase: ExactRhythmPhase;
   voiceId: string;
   voiceOrder: number;
   voiceEventIndex: bigint;
@@ -68,92 +68,117 @@ export type AuthoritativeRhythmEvent = Readonly<{
 
 export type AuthoritativeRhythmTimeline = Readonly<{
   definition: RhythmCompositionDefinition;
-  snapshotAt(positionTick: RhythmTick): RhythmTimelineSnapshot;
-  /** Enumerate every event in the half-open interval [startTick, endTick). */
-  eventsBetween(startTick: RhythmTick, endTick: RhythmTick): readonly AuthoritativeRhythmEvent[];
+  snapshotAt(position: ExactMacroPosition): RhythmTimelineSnapshot;
+  /** Enumerate every event in the exact half-open interval [start, end). */
+  eventsBetween(
+    start: ExactMacroPosition,
+    end: ExactMacroPosition,
+  ): readonly AuthoritativeRhythmEvent[];
 }>;
 
+/** Create a reduced, non-negative exact macro-cycle position. */
+export function exactMacroPosition(numerator: bigint, denominator = 1n): ExactMacroPosition {
+  if (numerator < 0n) throw new RangeError("Macro position must be non-negative.");
+  if (denominator <= 0n) throw new RangeError("Macro position denominator must be positive.");
+  const divisor = greatestCommonDivisor(numerator, denominator);
+  return Object.freeze({
+    numerator: numerator / divisor,
+    denominator: denominator / divisor,
+  });
+}
+
+export function compareMacroPositions(left: ExactMacroPosition, right: ExactMacroPosition): number {
+  const leftScaled = left.numerator * right.denominator;
+  const rightScaled = right.numerator * left.denominator;
+  return leftScaled < rightScaled ? -1 : leftScaled > rightScaled ? 1 : 0;
+}
+
 /**
- * Build an immutable, side-effect-free timeline projection.
+ * Build an immutable, side-effect-free musical timeline.
  *
- * Voice array order is meaningful: it is the deterministic tie-breaker when
- * multiple voices share the same event tick.
+ * Voice array order is the deterministic tie-breaker for simultaneous events.
  */
 export function createAuthoritativeRhythmTimeline(
   input: RhythmCompositionDefinition,
 ): AuthoritativeRhythmTimeline {
   const definition = validateAndFreezeDefinition(input);
-  const voices = definition.voices.map((voice, voiceOrder) => {
-    const spacingTicks = definition.macroCycleTicks / BigInt(voice.eventsPerMacroCycle);
-    return Object.freeze({ voice, voiceOrder, spacingTicks });
-  });
 
   return Object.freeze({
     definition,
 
-    snapshotAt(positionTick: RhythmTick): RhythmTimelineSnapshot {
-      assertNonNegativeTick(positionTick, "positionTick");
-      const macroTick = positionTick % definition.macroCycleTicks;
-      const voiceSnapshots = voices.map(({ voice, voiceOrder, spacingTicks }) => {
-        const voiceTick = positionTick % spacingTicks;
-        const eventIndex = positionTick / spacingTicks;
+    snapshotAt(positionInput: ExactMacroPosition): RhythmTimelineSnapshot {
+      const position = exactMacroPosition(positionInput.numerator, positionInput.denominator);
+      const macroCycleIndex = position.numerator / position.denominator;
+      const macroRemainder = position.numerator % position.denominator;
+      const voiceSnapshots = definition.voices.map((voice, voiceOrder) => {
+        const eventCount = BigInt(voice.eventsPerMacroCycle);
+        const scaledPosition = position.numerator * eventCount;
+        const absoluteEventIndex = scaledPosition / position.denominator;
+        const voiceRemainder = scaledPosition % position.denominator;
+
         return Object.freeze({
           id: voice.id,
           voiceOrder,
-          phase: exactPhase(voiceTick, spacingTicks),
-          eventIndex,
-          nextEventTick: (eventIndex + 1n) * spacingTicks,
+          absoluteEventIndex,
+          eventInMacroCycle: Number(absoluteEventIndex % eventCount),
+          phase: exactPhase(voiceRemainder, position.denominator),
+          nextEventMacroPosition: exactMacroPosition(absoluteEventIndex + 1n, eventCount),
         });
       });
 
       return Object.freeze({
         compositionId: definition.id,
         compositionVersion: definition.version,
-        positionTick,
-        macroCycleIndex: positionTick / definition.macroCycleTicks,
-        macroPhase: exactPhase(macroTick, definition.macroCycleTicks),
-        isPhaseZero: macroTick === 0n,
+        macroPosition: position,
+        macroCycleIndex,
+        macroPhase: exactPhase(macroRemainder, position.denominator),
+        isPhaseZero: macroRemainder === 0n,
         voices: Object.freeze(voiceSnapshots),
       });
     },
 
-    eventsBetween(startTick: RhythmTick, endTick: RhythmTick): readonly AuthoritativeRhythmEvent[] {
-      assertNonNegativeTick(startTick, "startTick");
-      assertNonNegativeTick(endTick, "endTick");
-      if (endTick <= startTick) return Object.freeze([]);
+    eventsBetween(
+      startInput: ExactMacroPosition,
+      endInput: ExactMacroPosition,
+    ): readonly AuthoritativeRhythmEvent[] {
+      const start = exactMacroPosition(startInput.numerator, startInput.denominator);
+      const end = exactMacroPosition(endInput.numerator, endInput.denominator);
+      if (compareMacroPositions(end, start) <= 0) return Object.freeze([]);
 
       const events: AuthoritativeRhythmEvent[] = [];
-      for (const { voice, voiceOrder, spacingTicks } of voices) {
-        const firstEventIndex = ceilDiv(startTick, spacingTicks);
-        const endEventIndex = ceilDiv(endTick, spacingTicks);
+      definition.voices.forEach((voice, voiceOrder) => {
+        const eventCount = BigInt(voice.eventsPerMacroCycle);
+        const firstEventIndex = ceilDiv(start.numerator * eventCount, start.denominator);
+        const endEventIndex = ceilDiv(end.numerator * eventCount, end.denominator);
 
         for (
           let voiceEventIndex = firstEventIndex;
           voiceEventIndex < endEventIndex;
           voiceEventIndex += 1n
         ) {
-          const tick = voiceEventIndex * spacingTicks;
-          const macroTick = tick % definition.macroCycleTicks;
+          const eventInMacroCycle = voiceEventIndex % eventCount;
           events.push(
             Object.freeze({
-              id: eventIdentity(definition, tick, voice.id, voiceEventIndex),
+              id: eventIdentity(definition, voice.id, voiceEventIndex),
               compositionId: definition.id,
               compositionVersion: definition.version,
-              tick,
-              macroCycleIndex: tick / definition.macroCycleTicks,
-              macroTick,
+              macroPosition: exactMacroPosition(voiceEventIndex, eventCount),
+              macroCycleIndex: voiceEventIndex / eventCount,
+              macroPhase: exactPhase(eventInMacroCycle, eventCount),
               voiceId: voice.id,
               voiceOrder,
               voiceEventIndex,
-              eventInMacroCycle: Number(macroTick / spacingTicks),
-              isPhaseZero: macroTick === 0n,
+              eventInMacroCycle: Number(eventInMacroCycle),
+              isPhaseZero: eventInMacroCycle === 0n,
             }),
           );
         }
-      }
+      });
 
       events.sort(
-        (left, right) => compareTicks(left.tick, right.tick) || left.voiceOrder - right.voiceOrder,
+        (left, right) =>
+          compareMacroPositions(left.macroPosition, right.macroPosition) ||
+          left.voiceOrder - right.voiceOrder,
       );
       return Object.freeze(events);
     },
@@ -169,9 +194,6 @@ function validateAndFreezeDefinition(
   if (!Number.isSafeInteger(input.version) || input.version < 0) {
     throw new Error("Rhythm composition version must be a non-negative safe integer.");
   }
-  if (input.macroCycleTicks <= 0n) {
-    throw new Error("Rhythm composition requires a positive macro-cycle.");
-  }
   if (input.voices.length === 0) {
     throw new Error("Rhythm composition requires at least one voice.");
   }
@@ -185,14 +207,9 @@ function validateAndFreezeDefinition(
       throw new Error(`Rhythm voice id must be unique: ${voice.id}`);
     }
     voiceIds.add(voice.id);
-
     if (!Number.isSafeInteger(voice.eventsPerMacroCycle) || voice.eventsPerMacroCycle <= 0) {
       throw new Error(`Voice ${voice.id} requires a positive safe-integer event count.`);
     }
-    if (input.macroCycleTicks % BigInt(voice.eventsPerMacroCycle) !== 0n) {
-      throw new Error(`Voice ${voice.id} does not divide the macro-cycle exactly.`);
-    }
-
     return Object.freeze({
       id: voice.id,
       eventsPerMacroCycle: voice.eventsPerMacroCycle,
@@ -202,49 +219,47 @@ function validateAndFreezeDefinition(
   return Object.freeze({
     id: input.id,
     version: input.version,
-    macroCycleTicks: input.macroCycleTicks,
     voices: Object.freeze(voices),
   });
 }
 
-function exactPhase(cycleTick: RhythmTick, cycleLengthTicks: RhythmTick): ExactRhythmPhase {
+function exactPhase(numerator: bigint, denominator: bigint): ExactRhythmPhase {
+  const reduced = exactMacroPosition(numerator, denominator);
   return Object.freeze({
-    cycleTick,
-    cycleLengthTicks,
-    normalized: ratioToNormalizedNumber(cycleTick, cycleLengthTicks),
+    ...reduced,
+    normalizedForRendering: rationalToRenderingNumber(reduced),
   });
 }
 
 function eventIdentity(
   definition: RhythmCompositionDefinition,
-  tick: RhythmTick,
   voiceId: string,
   voiceEventIndex: bigint,
 ): string {
   return [
-    "rhythm-event:v1",
+    "rhythm-event:v2",
     `${encodeURIComponent(definition.id)}@${definition.version}`,
-    tick.toString(),
     encodeURIComponent(voiceId),
     voiceEventIndex.toString(),
   ].join(":");
 }
 
-function ceilDiv(value: bigint, divisor: bigint): bigint {
-  return (value + divisor - 1n) / divisor;
+function ceilDiv(numerator: bigint, denominator: bigint): bigint {
+  return (numerator + denominator - 1n) / denominator;
 }
 
-function compareTicks(left: RhythmTick, right: RhythmTick): number {
-  return left < right ? -1 : left > right ? 1 : 0;
+function greatestCommonDivisor(left: bigint, right: bigint): bigint {
+  let a = left;
+  let b = right;
+  while (b !== 0n) {
+    const remainder = a % b;
+    a = b;
+    b = remainder;
+  }
+  return a === 0n ? 1n : a;
 }
 
-function assertNonNegativeTick(value: RhythmTick, name: string): void {
-  if (value < 0n) throw new RangeError(`${name} must be non-negative.`);
-}
-
-function ratioToNormalizedNumber(numerator: bigint, denominator: bigint): number {
-  // Keep the BigInt ratio canonical. This bounded projection is only for
-  // consumers such as renderers that need a number in [0, 1).
+function rationalToRenderingNumber(value: ExactMacroPosition): number {
   const precision = 1_000_000_000_000n;
-  return Number((numerator * precision) / denominator) / Number(precision);
+  return Number((value.numerator * precision) / value.denominator) / Number(precision);
 }

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "stage": "Reset R7 graphics laboratory",
+  "externalAssetsIntroduced": false,
+  "records": [
+    {
+      "id": "r7-procedural-atmosphere",
+      "sourceType": "project-authored",
+      "author": "PHASE",
+      "licenseId": "PROJECT-AUTHORED",
+      "sourceUrl": null,
+      "sourcePath": "src/lib/graphics/atmosphereRenderer.ts",
+      "attribution": "Project-authored procedural Canvas 2D and WebGL2 laboratory code.",
+      "approvedForDistribution": true
+    }
+  ],
+  "requiredForFutureThirdPartyAssets": [
+    "stable asset ID",
+    "source type",
+    "author",
+    "license identifier",
+    "source URL",
+    "attribution text",
+    "distribution approval"
+  ]
+}

@@ -1344,6 +1344,62 @@ Explicit project-owner instruction, 2026-08-09; Reconciliation Step 7C.
 
 ---
 
+## D040 — R7 renderers remain isolated comparative graphics evidence
+
+**Status:** ACCEPTED
+**Scope:** Reset R7 graphics-laboratory recovery and measurement boundary
+**Date:** 2026-08-11
+
+### Context
+
+The Reset R7 branch contains useful Canvas 2D and WebGL2 atmosphere experiments, but also contains obsolete query-parameter routing, an independent frame meter, cockpit framing, and a provisional renderer recommendation. The current repository already has isolated `/dev/*` routes and SYS-005 as its performance-measurement authority. The final rendering stack remains unresolved.
+
+### Decision
+
+Preserve the Canvas 2D and WebGL2 atmosphere implementations as comparative evidence on the isolated `/dev/graphics` surface. Give both implementations the same decorative renderer contract and measure the surface only through SYS-005 and `?perf=1`.
+
+The laboratory may own one local `requestAnimationFrame` loop and bounded decorative visual time. That time never enters rhythm, audio, crossing, route, or gameplay state. Reduced motion freezes decorative time and lowers decorative work. The primary comparison view is an unobstructed exterior high-altitude view with no cockpit, canopy, wings, nose, dashboard, or other hardware framing.
+
+No production renderer is selected by this recovery.
+
+### Rationale
+
+Keeping the experiments behind one narrow boundary preserves useful visual and performance evidence without letting an old prototype route, metric system, or visual assumption become production architecture. Reusing SYS-005 keeps render measurements comparable with other development surfaces.
+
+### Consequences
+
+- Canvas 2D and WebGL2 can be switched and compared without touching the production player;
+- the recovered graphics code imports no musical or audio authority;
+- no second performance metrics system is restored;
+- the current exterior atmosphere target can be reviewed without prematurely defining vehicle hardware;
+- renderer selection, production budgets, asset strategy, context-loss policy, and device support remain unresolved.
+
+### Alternatives considered
+
+- **Restore the old query-parameter laboratory:** rejected because the current `/dev/*` convention provides cleaner isolation.
+- **Restore `GraphicsFrameMetrics`:** rejected because SYS-005 already owns frame measurement.
+- **Restore cockpit framing:** rejected for this primary exterior comparison target.
+- **Select Canvas, WebGL2, or a hybrid now:** rejected because the required visual, device, and long-session evidence does not yet exist.
+
+### Migration and verification
+
+- recover and adapt only project-authored Canvas 2D and WebGL2 atmosphere code;
+- expose it at `/dev/graphics` without changing the production player;
+- verify renderer switching and reduced motion in a live browser;
+- verify `/dev/graphics?perf=1` mounts the SYS-005 probe;
+- run focused tests, lint, and the production build;
+- confirm rhythm/runtime and SYS-005/006/007/010 files remain unchanged.
+
+### Supersedes / superseded by
+
+Supersedes only the obsolete R7 prototype integration and private metric approach. It does not resolve the rendering stack listed under unresolved matters.
+
+### Source
+
+Explicit project-owner instruction, 2026-08-11; Reconciliation Step 7D.
+
+---
+
 ## 2. Rejected decision register
 
 The following have been explicitly rejected or superseded:

@@ -10,7 +10,10 @@
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createCrossingRuntime, type CrossingState } from "@/lib/crossing/crossingRuntime";
+import {
+  createCrossingDebugRuntime,
+  type DebugCrossingState,
+} from "@/lib/crossing/crossingDebugRuntime";
 import { FIRST_CROSSING_ROUTE } from "@/lib/crossing/routes";
 import { createTransmissionRuntime, type TransmissionState } from "@/lib/transmissions/transmissionRuntime";
 import { SAMPLE_TRANSMISSIONS } from "@/lib/transmissions/sampleTransmissions";
@@ -37,7 +40,7 @@ const labelFor = (id: string) =>
 function TransmissionSandbox() {
   const crossing = useMemo(
     () =>
-      createCrossingRuntime({
+      createCrossingDebugRuntime({
         id: FIRST_CROSSING_ROUTE.id,
         originId: FIRST_CROSSING_ROUTE.originId,
         destinationId: FIRST_CROSSING_ROUTE.destinationId,
@@ -57,7 +60,7 @@ function TransmissionSandbox() {
   );
 
   const [seedInput, setSeedInput] = useState("1234");
-  const [crossingState, setCrossingState] = useState<CrossingState>(() => crossing.peek());
+  const [crossingState, setCrossingState] = useState<DebugCrossingState>(() => crossing.peek());
   const [txState, setTxState] = useState<TransmissionState>(() => transmissions.peek());
   const [log, setLog] = useState<string[]>([]);
   const logRef = useRef<string[]>([]);

@@ -1,287 +1,391 @@
 /**
- * SYS-007 — First Crossing route runtime (PROTOTYPE).
+ * SYS-007 — pure finite crossing lifecycle authority.
  *
- * The single authoritative owner of one crossing's journey state:
- *
- *   origin → launch → transit → approach → arrival
- *
- * Architecture notes (intentional, non-obvious):
- * - This is deliberately NOT `engineClock`. Scene time is a wrapped rhythmic
- *   phase authority; a crossing is finite, non-wrapping route progress. Those
- *   are distinct concepts and must not share an authority.
- * - There is exactly ONE progress value. Graphics/audio/HUD/movement must all
- *   consume it; none of them may compute their own.
- * - The runtime owns no rAF loop and no timer. `sample()` pulls the current
- *   time from the injected `TimeSource` and recomputes state; consumers poll
- *   at whatever cadence suits them. Frame rate therefore cannot influence
- *   journey state — only elapsed monotonic time can.
- * - Events are emitted only when a `sample()` (or an explicit command)
- *   detects a material change.
+ * The runtime consumes freeze-aware active journey time supplied by its caller.
+ * It owns no clock, pause policy, browser lifecycle, loop, musical state, audio,
+ * movement, rendering, or hidden side-effect emitter.
  */
 
-import { performanceTimeSource, type TimeSource } from "./timeSource";
+export const CROSSING_RUNTIME_SNAPSHOT_VERSION = 1 as const;
 
 export type CrossingPhase = "idle" | "launching" | "in_transit" | "approaching" | "arrived";
 
-/**
- * Phase boundaries as normalized progress. Prototype defaults only — these are
- * NOT product canon and are parameterized on purpose.
- */
-export type CrossingPhaseThresholds = {
-  /** progress < launchUntil → "launching" */
+export type CrossingPhaseThresholds = Readonly<{
+  /** End of launching; must be greater than zero. */
   launchUntil: number;
-  /** progress >= approachFrom → "approaching" */
+  /** Beginning of approach; must be after launchUntil and before arrival. */
   approachFrom: number;
-  /** progress >= arriveAt → "arrived" */
-  arriveAt: number;
-};
+  /** Route arrival boundary. Production First Crossing requires exactly 1. */
+  arriveAt: 1;
+}>;
 
-export const DEFAULT_THRESHOLDS: CrossingPhaseThresholds = {
+/** Existing prototype values retained as explicit test/dev input, not product canon. */
+export const PROVISIONAL_CROSSING_THRESHOLDS: CrossingPhaseThresholds = Object.freeze({
   launchUntil: 0.05,
   approachFrom: 0.9,
   arriveAt: 1,
-};
+});
 
-/** Immutable snapshot handed to consumers. */
-export type CrossingState = {
-  id: string;
-  originId: string;
-  destinationId: string;
+export type CrossingRuntimeConfig = Readonly<{
+  runId: string;
+  routeDefinitionId: string;
+  durationSeconds: number;
+  thresholds: CrossingPhaseThresholds;
+}>;
+
+export type FrozenCrossingRuntimeConfig = Readonly<{
+  runId: string;
+  routeDefinitionId: string;
+  durationSeconds: number;
+  thresholds: CrossingPhaseThresholds;
+}>;
+
+export type CrossingTransitionId =
+  "launch_started" | "transit_started" | "approach_started" | "arrived";
+
+export type CrossingTransition = Readonly<{
+  id: CrossingTransitionId;
+  from: CrossingPhase;
+  to: Exclude<CrossingPhase, "idle">;
+  atProgress: number;
+}>;
+
+export type CrossingRuntimeSnapshotV1 = Readonly<{
+  schemaVersion: typeof CROSSING_RUNTIME_SNAPSHOT_VERSION;
+  config: FrozenCrossingRuntimeConfig;
+  started: boolean;
   phase: CrossingPhase;
   elapsedSeconds: number;
-  durationSeconds: number;
-  /** Authoritative normalized journey progress, clamped to [0, 1]. */
   progress: number;
-  /**
-   * Monotonic runtime seconds from the injected `TimeSource` — NOT an epoch
-   * timestamp and NOT persistence-safe. Null until the run starts / arrives.
-   */
-  startedAtMonotonicSeconds: number | null;
-  arrivedAtMonotonicSeconds: number | null;
-  paused: boolean;
+  arrived: boolean;
+  consumedTransitionIds: readonly CrossingTransitionId[];
+}>;
+
+export type CrossingSampleResult = Readonly<{
+  snapshot: CrossingRuntimeSnapshotV1;
+  transitions: readonly CrossingTransition[];
+}>;
+
+export type CrossingRuntime = Readonly<{
+  readonly config: FrozenCrossingRuntimeConfig;
+  start(): CrossingSampleResult;
+  sample(activeElapsedSeconds: number): CrossingSampleResult;
+  peek(): CrossingRuntimeSnapshotV1;
+  snapshot(): CrossingRuntimeSnapshotV1;
+}>;
+
+export type CrossingIdentityExpectation = Readonly<{
+  runId: string;
+  routeDefinitionId: string;
+}>;
+
+type MutableLifecycle = {
+  started: boolean;
+  phase: CrossingPhase;
+  elapsedSeconds: number;
+  arrived: boolean;
+  consumedTransitionIds: CrossingTransitionId[];
 };
 
-export type CrossingListener = {
-  crossingStarted?: (s: CrossingState) => void;
-  phaseChanged?: (phase: CrossingPhase, s: CrossingState) => void;
-  progressChanged?: (progress: number, s: CrossingState) => void;
-  crossingArrived?: (s: CrossingState) => void;
-};
+function assertIdentifier(value: unknown, field: string): asserts value is string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`Crossing runtime ${field} must be a non-empty string.`);
+  }
+}
 
-export type CrossingRuntimeOptions = {
-  id: string;
-  originId: string;
-  destinationId: string;
-  durationSeconds: number;
-  timeSource?: TimeSource;
-  thresholds?: Partial<CrossingPhaseThresholds>;
-  /** Minimum progress delta before `progressChanged` is emitted. */
-  progressEpsilon?: number;
-};
+function assertFiniteNonNegative(value: unknown, field: string): asserts value is number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error(`Crossing runtime ${field} must be a finite non-negative number.`);
+  }
+}
 
-export type StartOptions = {
-  durationSeconds?: number;
-};
+function asRecord(value: unknown, field: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`Crossing runtime ${field} must be an object.`);
+  }
+  return value as Record<string, unknown>;
+}
 
-const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+function freezeThresholds(source: CrossingPhaseThresholds): CrossingPhaseThresholds {
+  if (typeof source !== "object" || source === null || Array.isArray(source)) {
+    throw new Error("Crossing runtime thresholds must be supplied as an object.");
+  }
+  const { launchUntil, approachFrom, arriveAt } = source;
+  if (
+    !Number.isFinite(launchUntil) ||
+    !Number.isFinite(approachFrom) ||
+    !Number.isFinite(arriveAt)
+  ) {
+    throw new Error("Crossing runtime thresholds must all be finite.");
+  }
+  if (!(launchUntil > 0 && launchUntil < approachFrom && approachFrom < arriveAt)) {
+    throw new Error(
+      "Crossing runtime thresholds must satisfy 0 < launchUntil < approachFrom < arriveAt.",
+    );
+  }
+  if (arriveAt !== 1) {
+    throw new Error("Crossing runtime arriveAt must equal normalized route completion 1.");
+  }
+  return Object.freeze({ launchUntil, approachFrom, arriveAt });
+}
+
+function freezeConfig(source: CrossingRuntimeConfig): FrozenCrossingRuntimeConfig {
+  assertIdentifier(source.runId, "runId");
+  assertIdentifier(source.routeDefinitionId, "routeDefinitionId");
+  if (!Number.isFinite(source.durationSeconds) || source.durationSeconds <= 0) {
+    throw new Error("Crossing runtime durationSeconds must be finite and greater than zero.");
+  }
+  return Object.freeze({
+    runId: source.runId,
+    routeDefinitionId: source.routeDefinitionId,
+    durationSeconds: source.durationSeconds,
+    thresholds: freezeThresholds(source.thresholds),
+  });
+}
+
+function progressFor(elapsedSeconds: number, durationSeconds: number): number {
+  return Math.min(elapsedSeconds / durationSeconds, 1);
+}
 
 export function phaseForProgress(
   progress: number,
   thresholds: CrossingPhaseThresholds,
 ): Exclude<CrossingPhase, "idle"> {
+  if (!Number.isFinite(progress) || progress < 0 || progress > 1) {
+    throw new Error("Crossing progress must be finite and within [0, 1].");
+  }
   if (progress >= thresholds.arriveAt) return "arrived";
   if (progress >= thresholds.approachFrom) return "approaching";
-  if (progress < thresholds.launchUntil) return "launching";
-  return "in_transit";
+  if (progress >= thresholds.launchUntil) return "in_transit";
+  return "launching";
 }
 
-export function createCrossingRuntime(opts: CrossingRuntimeOptions) {
-  const time: TimeSource = opts.timeSource ?? performanceTimeSource;
-  const thresholds: CrossingPhaseThresholds = { ...DEFAULT_THRESHOLDS, ...opts.thresholds };
-  const epsilon = opts.progressEpsilon ?? 0.001;
-
-  const listeners = new Set<CrossingListener>();
-
-  let running = false;
-  let paused = false;
-  let phase: CrossingPhase = "idle";
-  let durationSeconds = Math.max(0.001, opts.durationSeconds);
-  let elapsedSeconds = 0;
-  let startedAtMonotonicSeconds: number | null = null;
-  let arrivedAtMonotonicSeconds: number | null = null;
-  /** Per-run latch: arrival may be announced exactly once between resets. */
-  let arrivalEmitted = false;
-  /** Last monotonic reading folded into `elapsedSeconds`. */
-  let lastTick = 0;
-  let lastEmittedProgress = 0;
-
-  function progressNow(): number {
-    return clamp01(elapsedSeconds / durationSeconds);
+function transitionFor(
+  id: CrossingTransitionId,
+  thresholds: CrossingPhaseThresholds,
+): CrossingTransition {
+  switch (id) {
+    case "launch_started":
+      return Object.freeze({ id, from: "idle", to: "launching", atProgress: 0 });
+    case "transit_started":
+      return Object.freeze({
+        id,
+        from: "launching",
+        to: "in_transit",
+        atProgress: thresholds.launchUntil,
+      });
+    case "approach_started":
+      return Object.freeze({
+        id,
+        from: "in_transit",
+        to: "approaching",
+        atProgress: thresholds.approachFrom,
+      });
+    case "arrived":
+      return Object.freeze({
+        id,
+        from: "approaching",
+        to: "arrived",
+        atProgress: thresholds.arriveAt,
+      });
   }
+}
 
-  function snapshot(): CrossingState {
+function requiredTransitionIds(
+  started: boolean,
+  progress: number,
+  thresholds: CrossingPhaseThresholds,
+): CrossingTransitionId[] {
+  if (!started) return [];
+  const ids: CrossingTransitionId[] = ["launch_started"];
+  if (progress >= thresholds.launchUntil) ids.push("transit_started");
+  if (progress >= thresholds.approachFrom) ids.push("approach_started");
+  if (progress >= thresholds.arriveAt) ids.push("arrived");
+  return ids;
+}
+
+function phaseFromConsumed(ids: readonly CrossingTransitionId[]): CrossingPhase {
+  const last = ids.at(-1);
+  switch (last) {
+    case "launch_started":
+      return "launching";
+    case "transit_started":
+      return "in_transit";
+    case "approach_started":
+      return "approaching";
+    case "arrived":
+      return "arrived";
+    default:
+      return "idle";
+  }
+}
+
+function sameTransitionIds(a: readonly unknown[], b: readonly CrossingTransitionId[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function createRuntime(
+  sourceConfig: CrossingRuntimeConfig,
+  initialLifecycle: MutableLifecycle,
+): CrossingRuntime {
+  const config = freezeConfig(sourceConfig);
+  const lifecycle: MutableLifecycle = {
+    ...initialLifecycle,
+    consumedTransitionIds: [...initialLifecycle.consumedTransitionIds],
+  };
+
+  function currentSnapshot(): CrossingRuntimeSnapshotV1 {
+    const progress = progressFor(lifecycle.elapsedSeconds, config.durationSeconds);
     return Object.freeze({
-      id: opts.id,
-      originId: opts.originId,
-      destinationId: opts.destinationId,
-      phase,
-      elapsedSeconds,
-      durationSeconds,
-      progress: progressNow(),
-      startedAtMonotonicSeconds,
-      arrivedAtMonotonicSeconds,
-      paused,
+      schemaVersion: CROSSING_RUNTIME_SNAPSHOT_VERSION,
+      config,
+      started: lifecycle.started,
+      phase: lifecycle.phase,
+      elapsedSeconds: lifecycle.elapsedSeconds,
+      progress,
+      arrived: lifecycle.arrived,
+      consumedTransitionIds: Object.freeze([...lifecycle.consumedTransitionIds]),
     });
   }
 
-  function emit<K extends keyof CrossingListener>(
-    key: K,
-    call: (l: NonNullable<CrossingListener[K]>) => void,
-  ) {
-    for (const l of Array.from(listeners)) {
-      const fn = l[key];
-      if (fn) call(fn as NonNullable<CrossingListener[K]>);
-    }
+  function result(transitions: CrossingTransition[]): CrossingSampleResult {
+    return Object.freeze({
+      snapshot: currentSnapshot(),
+      transitions: Object.freeze(transitions),
+    });
   }
 
-  /**
-   * Fold elapsed time forward, then reconcile phase/progress and emit any
-   * material changes. This is the ONLY place transitions happen, so scrubbing
-   * and natural advancement share identical semantics by construction.
-   */
-  function reconcile(): CrossingState {
-    if (running && !paused) {
-      const now = time();
-      const dt = Math.max(0, now - lastTick);
-      lastTick = now;
-      elapsedSeconds = Math.min(elapsedSeconds + dt, durationSeconds);
-    } else {
-      lastTick = time();
-    }
+  return Object.freeze({
+    config,
 
-    const nextPhase: CrossingPhase = running ? phaseForProgress(progressNow(), thresholds) : phase;
-    const arriving = nextPhase === "arrived" && !arrivalEmitted;
+    start(): CrossingSampleResult {
+      if (lifecycle.started) {
+        throw new Error("Crossing runtime cannot start an already-started run.");
+      }
+      lifecycle.started = true;
+      lifecycle.phase = "launching";
+      lifecycle.consumedTransitionIds.push("launch_started");
+      return result([transitionFor("launch_started", config.thresholds)]);
+    },
 
-    if (arriving) {
-      // Arrival pins progress to exactly 1.0 so every consumer observes the
-      // terminal value, regardless of sampling cadence.
-      elapsedSeconds = durationSeconds;
-      arrivedAtMonotonicSeconds = time();
-    }
+    sample(activeElapsedSeconds: number): CrossingSampleResult {
+      if (!lifecycle.started) {
+        throw new Error("Crossing runtime must start before it can be sampled.");
+      }
+      assertFiniteNonNegative(activeElapsedSeconds, "activeElapsedSeconds");
+      const nextElapsed = Math.min(activeElapsedSeconds, config.durationSeconds);
+      if (nextElapsed < lifecycle.elapsedSeconds) {
+        throw new Error("Crossing runtime activeElapsedSeconds cannot regress.");
+      }
 
-    const phaseChanged = nextPhase !== phase;
-    phase = nextPhase;
+      lifecycle.elapsedSeconds = nextElapsed;
+      const progress = progressFor(nextElapsed, config.durationSeconds);
+      const requiredIds = requiredTransitionIds(true, progress, config.thresholds);
+      const transitions: CrossingTransition[] = [];
 
-    const p = progressNow();
-    const state = snapshot();
+      for (const id of requiredIds) {
+        if (!lifecycle.consumedTransitionIds.includes(id)) {
+          lifecycle.consumedTransitionIds.push(id);
+          transitions.push(transitionFor(id, config.thresholds));
+        }
+      }
 
-    if (phaseChanged) emit("phaseChanged", (fn) => fn(phase, state));
-    // Arrival bypasses epsilon suppression: the final 1.0 is always observable.
-    if (arriving || Math.abs(p - lastEmittedProgress) >= epsilon) {
-      lastEmittedProgress = p;
-      emit("progressChanged", (fn) => fn(p, state));
-    }
-    if (arriving) {
-      arrivalEmitted = true;
-      emit("crossingArrived", (fn) => fn(state));
-    }
-    return state;
+      lifecycle.phase = phaseFromConsumed(lifecycle.consumedTransitionIds);
+      lifecycle.arrived = lifecycle.consumedTransitionIds.includes("arrived");
+      return result(transitions);
+    },
+
+    peek: currentSnapshot,
+    snapshot: currentSnapshot,
+  });
+}
+
+export function createCrossingRuntime(config: CrossingRuntimeConfig): CrossingRuntime {
+  return createRuntime(config, {
+    started: false,
+    phase: "idle",
+    elapsedSeconds: 0,
+    arrived: false,
+    consumedTransitionIds: [],
+  });
+}
+
+function validateSnapshot(
+  snapshot: unknown,
+  expectedIdentity?: CrossingIdentityExpectation,
+): { config: FrozenCrossingRuntimeConfig; lifecycle: MutableLifecycle } {
+  const root = asRecord(snapshot, "snapshot");
+  if (root.schemaVersion !== CROSSING_RUNTIME_SNAPSHOT_VERSION) {
+    throw new Error(
+      `Unsupported crossing runtime snapshot version: ${String(root.schemaVersion)}.`,
+    );
+  }
+
+  const configRecord = asRecord(root.config, "snapshot.config");
+  const thresholdsRecord = asRecord(configRecord.thresholds, "snapshot.config.thresholds");
+  const config = freezeConfig({
+    runId: configRecord.runId as string,
+    routeDefinitionId: configRecord.routeDefinitionId as string,
+    durationSeconds: configRecord.durationSeconds as number,
+    thresholds: {
+      launchUntil: thresholdsRecord.launchUntil as number,
+      approachFrom: thresholdsRecord.approachFrom as number,
+      arriveAt: thresholdsRecord.arriveAt as 1,
+    },
+  });
+
+  if (
+    expectedIdentity &&
+    (config.runId !== expectedIdentity.runId ||
+      config.routeDefinitionId !== expectedIdentity.routeDefinitionId)
+  ) {
+    throw new Error(
+      "Crossing runtime snapshot identity does not match the expected run and route.",
+    );
+  }
+
+  if (typeof root.started !== "boolean" || typeof root.arrived !== "boolean") {
+    throw new Error("Crossing runtime snapshot lifecycle flags must be boolean.");
+  }
+  assertFiniteNonNegative(root.elapsedSeconds, "snapshot.elapsedSeconds");
+  if (root.elapsedSeconds > config.durationSeconds) {
+    throw new Error("Crossing runtime snapshot elapsedSeconds cannot exceed durationSeconds.");
+  }
+  if (!Array.isArray(root.consumedTransitionIds)) {
+    throw new Error("Crossing runtime snapshot consumedTransitionIds must be an array.");
+  }
+
+  const progress = progressFor(root.elapsedSeconds, config.durationSeconds);
+  const expectedIds = requiredTransitionIds(root.started, progress, config.thresholds);
+  const expectedPhase: CrossingPhase = phaseFromConsumed(expectedIds);
+  const expectedArrived = expectedPhase === "arrived";
+
+  if (root.progress !== progress) {
+    throw new Error("Crossing runtime snapshot progress is inconsistent with elapsed time.");
+  }
+  if (root.phase !== expectedPhase || root.arrived !== expectedArrived) {
+    throw new Error("Crossing runtime snapshot phase or arrival latch is inconsistent.");
+  }
+  if (!sameTransitionIds(root.consumedTransitionIds, expectedIds)) {
+    throw new Error("Crossing runtime snapshot consumed transitions are inconsistent.");
   }
 
   return {
-    /** Recompute from the time source and emit material changes. */
-    sample(): CrossingState {
-      return reconcile();
-    },
-
-    /** Read state without advancing time or emitting. */
-    peek(): CrossingState {
-      return snapshot();
-    },
-
-    start(start?: StartOptions): CrossingState {
-      if (typeof start?.durationSeconds === "number") {
-        durationSeconds = Math.max(0.001, start.durationSeconds);
-      }
-      running = true;
-      paused = false;
-      elapsedSeconds = 0;
-      arrivalEmitted = false;
-      arrivedAtMonotonicSeconds = null;
-      lastEmittedProgress = 0;
-      lastTick = time();
-      startedAtMonotonicSeconds = lastTick;
-      phase = phaseForProgress(0, thresholds);
-      const state = snapshot();
-      emit("crossingStarted", (fn) => fn(state));
-      emit("phaseChanged", (fn) => fn(phase, state));
-      return state;
-    },
-
-    pause(): CrossingState {
-      if (running && !paused) {
-        reconcile();
-        paused = true;
-      }
-      return snapshot();
-    },
-
-    resume(): CrossingState {
-      if (running && paused) {
-        paused = false;
-        lastTick = time();
-      }
-      return snapshot();
-    },
-
-    reset(): CrossingState {
-      running = false;
-      paused = false;
-      phase = "idle";
-      elapsedSeconds = 0;
-      startedAtMonotonicSeconds = null;
-      arrivedAtMonotonicSeconds = null;
-      arrivalEmitted = false;
-      lastEmittedProgress = 0;
-      lastTick = time();
-      const state = snapshot();
-      emit("phaseChanged", (fn) => fn(phase, state));
-      return state;
-    },
-
-    /**
-     * DEVELOPER-ONLY. Jumps the run to a normalized progress value and then
-     * runs the exact same transition logic as natural advancement — so
-     * scrubbing to 1.0 produces a genuine `arrived` phase and one
-     * `crossingArrived` event. That equivalence is intentional: it keeps the
-     * prototype honest about lifecycle behaviour. The arrival latch is
-     * per-run, so scrubbing back below the arrival threshold and forward
-     * again cannot announce arrival twice; only `start()`/`reset()` re-arms.
-     */
-    scrubTo(progress: number): CrossingState {
-      if (!running) {
-        running = true;
-        startedAtMonotonicSeconds = time();
-      }
-      elapsedSeconds = clamp01(progress) * durationSeconds;
-      lastTick = time();
-      return reconcile();
-    },
-
-    setDuration(seconds: number): CrossingState {
-      durationSeconds = Math.max(0.001, seconds);
-      return reconcile();
-    },
-
-    subscribe(listener: CrossingListener): () => void {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-
-    get thresholds(): CrossingPhaseThresholds {
-      return { ...thresholds };
+    config,
+    lifecycle: {
+      started: root.started,
+      phase: expectedPhase,
+      elapsedSeconds: root.elapsedSeconds,
+      arrived: expectedArrived,
+      consumedTransitionIds: expectedIds,
     },
   };
 }
 
-export type CrossingRuntime = ReturnType<typeof createCrossingRuntime>;
+export function hydrateCrossingRuntime(
+  snapshot: unknown,
+  expectedIdentity?: CrossingIdentityExpectation,
+): CrossingRuntime {
+  const validated = validateSnapshot(snapshot, expectedIdentity);
+  return createRuntime(validated.config, validated.lifecycle);
+}

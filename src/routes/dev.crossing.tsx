@@ -8,10 +8,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  createCrossingRuntime,
-  type CrossingPhase,
-  type CrossingState,
-} from "@/lib/crossing/crossingRuntime";
+  createCrossingDebugRuntime,
+  type DebugCrossingPhase,
+  type DebugCrossingState,
+} from "@/lib/crossing/crossingDebugRuntime";
 import { FIRST_CROSSING_ROUTE, nodeLabel } from "@/lib/crossing/routes";
 
 export const Route = createFileRoute("/dev/crossing")({
@@ -29,7 +29,7 @@ export const Route = createFileRoute("/dev/crossing")({
 function CrossingSandbox() {
   const runtime = useMemo(
     () =>
-      createCrossingRuntime({
+      createCrossingDebugRuntime({
         id: FIRST_CROSSING_ROUTE.id,
         originId: FIRST_CROSSING_ROUTE.originId,
         destinationId: FIRST_CROSSING_ROUTE.destinationId,
@@ -38,7 +38,7 @@ function CrossingSandbox() {
     [],
   );
 
-  const [state, setState] = useState<CrossingState>(() => runtime.peek());
+  const [state, setState] = useState<DebugCrossingState>(() => runtime.peek());
   const [duration, setDuration] = useState(FIRST_CROSSING_ROUTE.defaultDurationSeconds);
   const [log, setLog] = useState<string[]>([]);
   const logRef = useRef<string[]>([]);
@@ -50,7 +50,7 @@ function CrossingSandbox() {
     };
     const off = runtime.subscribe({
       crossingStarted: () => push("crossingStarted"),
-      phaseChanged: (p: CrossingPhase) => push(`phaseChanged → ${p}`),
+      phaseChanged: (p: DebugCrossingPhase) => push(`phaseChanged → ${p}`),
       crossingArrived: () => push("crossingArrived"),
     });
     let raf = 0;

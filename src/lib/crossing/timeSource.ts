@@ -1,14 +1,12 @@
 /**
- * Tiny injectable monotonic time source (SYS-007 prototype).
+ * LEGACY SYS-007 DEBUG time source.
  *
- * The crossing runtime never calls `performance.now()` directly, so tests —
- * and any future coordinated time authority — can swap this boundary without
- * touching runtime logic. Deliberately not a clock framework: one function,
- * seconds, monotonic, no epoch meaning.
+ * Retained only for the quarantined crossing debug adapter. The production
+ * crossing runtime accepts supplied active journey time and owns no clock.
  */
 export type TimeSource = () => number;
 
-/** Production default: monotonic seconds. */
+/** Legacy debug-adapter default. Not a production journey-time authority. */
 export const performanceTimeSource: TimeSource = () =>
   typeof performance !== "undefined" ? performance.now() / 1000 : Date.now() / 1000;
 

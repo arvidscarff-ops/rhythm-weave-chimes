@@ -7,7 +7,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { PROVISIONAL_CROSSING_THRESHOLDS } from "@/lib/crossing/crossingRuntime";
-import { FIRST_CROSSING_ROUTE } from "@/lib/crossing/routes";
 import {
   createFirstCrossingCoordinator,
   hydrateFirstCrossingCoordinator,
@@ -15,6 +14,8 @@ import {
   type FirstCrossingCoordinatorResult,
   type FirstCrossingCoordinatorSnapshotV1,
 } from "@/lib/journey/firstCrossingCoordinator";
+import { coordinatorConfigFromFirstCrossingBinding } from "@/lib/journey/firstCrossingBindingCoordinator";
+import { resolveProvisionalFirstCrossingBinding } from "@/lib/journey/firstCrossingBindingFixture";
 import { installFirstCrossingVisibility } from "@/lib/journey/firstCrossingVisibility";
 import {
   createKeyboardInputAdapter,
@@ -46,25 +47,25 @@ export const Route = createFileRoute("/dev/journey")({
 });
 
 const NEUTRAL_INPUT: MovementInput = Object.freeze({ steerX: 0, steerY: 0 });
+const PROVISIONAL_BINDING = resolveProvisionalFirstCrossingBinding();
 
 function newRunId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `journey-lab-${Date.now()}`;
 }
 
 function createLabCoordinator(runId = newRunId()): FirstCrossingCoordinator {
-  return createFirstCrossingCoordinator({
-    runId,
-    routeDefinitionId: FIRST_CROSSING_ROUTE.id,
-    durationSeconds: FIRST_CROSSING_ROUTE.defaultDurationSeconds,
-    thresholds: PROVISIONAL_CROSSING_THRESHOLDS,
-    transmissions: {
-      definitionSetId: "journey-lab-transmissions-v1",
-      seed: `journey-lab:${runId}`,
-      definitions: SAMPLE_TRANSMISSIONS,
-      admissionChance: 1,
-      minGapSeconds: 4,
-    },
-  });
+  return createFirstCrossingCoordinator(
+    coordinatorConfigFromFirstCrossingBinding(PROVISIONAL_BINDING, runId, {
+      thresholds: PROVISIONAL_CROSSING_THRESHOLDS,
+      transmissions: {
+        definitionSetId: "journey-lab-transmissions-v1",
+        seed: `journey-lab:${runId}`,
+        definitions: SAMPLE_TRANSMISSIONS,
+        admissionChance: 1,
+        minGapSeconds: 4,
+      },
+    }),
+  );
 }
 
 function lifecycleLabel(snapshot: FirstCrossingCoordinatorSnapshotV1): string {
@@ -297,8 +298,26 @@ function JourneyLab() {
         }}
       >
         <DiagnosticPanel title="Coordinator">
+          <Row
+            label="BINDING"
+            value={`${PROVISIONAL_BINDING.authored.id}@${PROVISIONAL_BINDING.authored.revision}`}
+          />
+          <Row label="BINDING STATUS" value={PROVISIONAL_BINDING.authored.status} />
           <Row label="RUN" value={snapshot.identity.runId} />
           <Row label="ROUTE" value={snapshot.identity.routeDefinitionId} />
+          <Row
+            label="COMPOSITION"
+            value={`${PROVISIONAL_BINDING.compositionSnapshot.id}@${PROVISIONAL_BINDING.compositionSnapshot.revision}`}
+          />
+          <Row
+            label="TRIGGER PRESENTATION"
+            value={`${PROVISIONAL_BINDING.triggerEnginePresentation.id} (${PROVISIONAL_BINDING.authored.triggerEnginePresentation.status})`}
+          />
+          <Row
+            label="SOUND / SCALE"
+            value={`${PROVISIONAL_BINDING.sound.pack.id} / ${PROVISIONAL_BINDING.sound.scale.id}`}
+          />
+          <Row label="ENVIRONMENT" value={PROVISIONAL_BINDING.environment.id} />
           <Row label="SESSION" value={lifecycleLabel(snapshot)} />
           <Row label="ACTIVE TIME" value={`${lifecycle.activeElapsedSeconds.toFixed(3)} s`} />
           <Row label="CROSSING PHASE" value={snapshot.crossing.phase} />

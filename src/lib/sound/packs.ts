@@ -1,11 +1,13 @@
+import { PACK_IDS, type PackId } from "./packIds";
+
+export { PACK_IDS, type PackId } from "./packIds";
+
 /* ============================================================
  * Sound Packs — pure Web Audio voice presets (stereo, layered)
  * Each pack ships 6 voices, mapped to ring index (mod 6).
  * Phase 1 engine: per-voice layered partials, per-layer pan,
  * proper ADSR, Haas micro-delay widening, light vibrato.
  * ============================================================ */
-
-export type PackId = "moss" | "prism" | "obsidian";
 
 export type VoiceKindEx =
   | "chime"
@@ -134,8 +136,6 @@ export const PACKS: Record<PackId, Pack> = {
     ],
   },
 };
-
-export const PACK_IDS: PackId[] = ["moss", "prism", "obsidian"];
 
 /* ---------- voice playback dispatcher ---------- */
 

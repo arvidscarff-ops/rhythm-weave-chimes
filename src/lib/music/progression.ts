@@ -13,6 +13,7 @@
  */
 
 import { engineClock } from "@/lib/engine/clock";
+import { FALLBACK_SCALE_ID } from "./scaleIds";
 
 export type ProgressionStep = {
   step_order: number;
@@ -39,7 +40,7 @@ let tempoBpm = 90;
 
 /** Global fallback if no scale is loaded — chromatic single-tone. */
 const FALLBACK: ActiveScale = {
-  id: "__fallback",
+  id: FALLBACK_SCALE_ID,
   name: "Fallback",
   pool_size: 5,
   intervals: [0, 3, 5, 7, 10],

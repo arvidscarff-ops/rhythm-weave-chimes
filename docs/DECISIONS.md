@@ -1659,6 +1659,63 @@ Trigger Engine Evolution / Crystallization Relay handoff; approved reconciliatio
 
 ---
 
+## D045 — First Crossing authored composition uses an immutable binding boundary
+
+**Status:** ACCEPTED
+**Scope:** SYS-009 authored First Crossing composition binding
+**Date:** 2026-08-12
+
+### Context
+
+The First Crossing now has separate rhythm, journey, crossing, transmission, movement, graphics-lab, and content systems. One authored experience needs to state which route, production composition, Trigger Engine presentation, sound/scale context, environment intent, and optional transmission set belong together without becoming another runtime or content authority.
+
+### Decision
+
+`FirstCrossingBinding` is a versioned immutable authored relationship. It contains binding identity and revision, route-definition identity, the existing production composition constructor input, stable versioned content references, and explicit maturity labels. It never contains a runtime `runId`.
+
+Resolution is explicit and fail-closed: an authored binding is validated, its route and content references are resolved through injected content boundaries, and its structural music input is resolved through the existing `ProductionCompositionInput` → `CompositionSnapshot` path. Development-only references can resolve only while explicitly marked provisional. An accepted binding cannot contain provisional selections.
+
+SYS-009 owns no clock, musical event, Phase Zero, journey time, crossing progress, transmission scheduling, movement, rendering loop, audio playback, Studio publication, or progression state. A resolved binding may supply immutable configuration to a new `FirstCrossingCoordinator`, but runtime run identity and lifecycle policy remain caller-owned and the coordinator does not store binding state.
+
+The initial proof binding is explicitly provisional. It references the placeholder First Crossing route, the migrated `phaseAlignRings` composition/presentation path, the existing MOSS pack, the existing runtime fallback scale, an exterior-forward extreme-altitude cloud intent, and the development transmission fixture. These choices validate integration only; they do not select final music, Trigger Engine identity, graphics renderer, environment art, scale, sound world, or transmission canon. Crystallization is absent.
+
+### Rationale
+
+An immutable declarative seam lets one crossing become coherent without coupling authored meaning to a particular runtime attempt. Reusing the existing composition and content models avoids parallel schemas, while injected resolution makes unavailable or stale references explicit rather than silently falling back.
+
+### Consequences
+
+- binding revisions preserve the meaning of already resolved running crossings;
+- one authored binding can configure multiple coordinator runs with distinct runtime IDs;
+- route and environment metadata cannot alter musical timing implicitly;
+- final Trigger Engine family, renderer, artistic presets, and reviewed transmission content remain unresolved;
+- future Studio publication may author this model only through a separately approved versioned workflow.
+
+### Alternatives considered
+
+- **Store binding fields inside `FirstCrossingCoordinator`:** rejected because authored configuration and runtime state have different identities and lifecycles.
+- **Duplicate pack, scale, route, or composition definitions inside the binding:** rejected in favor of stable references and existing constructors.
+- **Use the current string-network fallback as the First Crossing product decision:** rejected because D036 explicitly marks it temporary.
+- **Add crystallization configuration now:** rejected because D044 keeps it exploratory and outside the First Crossing.
+- **Let environment or route data modify rhythm implicitly:** rejected because composition structure must remain explicit and authoritative.
+
+### Migration and verification
+
+- validate exact schema fields, stable IDs, positive revisions, reference coherence, and explicit provisional status;
+- prove deterministic `CompositionSnapshot` resolution and immutability across binding revisions;
+- prove the same binding configures independent runtime run IDs without entering coordinator snapshots;
+- keep the development journey surface diagnostic and leave production audio/graphics integration for later tasks.
+
+### Supersedes / superseded by
+
+Adds the SYS-009 boundary between D034 production composition and D041 First Crossing runtime ownership. It does not resolve final Trigger Engine, tuning, renderer, environment, or transmission-content decisions.
+
+### Source
+
+Explicit project-owner instruction, Forward Development Step 11B.
+
+---
+
 ## 2. Rejected decision register
 
 The following have been explicitly rejected or superseded:
@@ -1756,4 +1813,4 @@ Why?
 
 ## 5. Run boundary
 
-The original D001–D030 decision set and `PRODUCT_ROADMAP.md` completed **Run 7** of the Project Bible documentation plan. D031–D044 were added through later explicitly approved project checkpoints. `GLOSSARY.md`, root `AGENTS.md`, and the governing documentation set now exist; this historical run boundary does not describe pending work.
+The original D001–D030 decision set and `PRODUCT_ROADMAP.md` completed **Run 7** of the Project Bible documentation plan. D031–D045 were added through later explicitly approved project checkpoints. `GLOSSARY.md`, root `AGENTS.md`, and the governing documentation set now exist; this historical run boundary does not describe pending work.

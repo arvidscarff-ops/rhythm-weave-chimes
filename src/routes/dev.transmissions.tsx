@@ -1,12 +1,13 @@
 /**
- * SYS-010 developer sandbox — diagnostic surface for the transmission runtime.
+ * SYS-010 legacy developer sandbox — diagnostic surface for the original
+ * private-clock prototype, preserved separately from the production runtime.
  *
  * PROTOTYPE-ONLY. Deliberately unstyled so it is never mistaken for PHASE comms
  * UI. No audio, no subtitles, no radio art direction. This component owns the
  * polling cadence (its own rAF); neither runtime owns a loop.
  *
  * It wires SYS-007 → SYS-010 through the minimal read-only snapshot only:
- *   crossingRuntime.sample() → { crossingId, progress, phase } → transmissionRuntime.update()
+ *   crossingDebugRuntime.sample() → legacy debug transmission adapter
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -15,7 +16,10 @@ import {
   type DebugCrossingState,
 } from "@/lib/crossing/crossingDebugRuntime";
 import { FIRST_CROSSING_ROUTE } from "@/lib/crossing/routes";
-import { createTransmissionRuntime, type TransmissionState } from "@/lib/transmissions/transmissionRuntime";
+import {
+  createTransmissionDebugRuntime,
+  type DebugTransmissionState,
+} from "@/lib/transmissions/transmissionDebugRuntime";
 import { SAMPLE_TRANSMISSIONS } from "@/lib/transmissions/sampleTransmissions";
 
 export const Route = createFileRoute("/dev/transmissions")({
@@ -28,7 +32,7 @@ export const Route = createFileRoute("/dev/transmissions")({
       {
         name: "description",
         content:
-          "Developer diagnostic surface for the SYS-010 transmission runtime prototype driven by the crossing runtime.",
+          "Legacy developer diagnostic surface for the original SYS-010 private-clock prototype.",
       },
     ],
   }),
@@ -51,7 +55,7 @@ function TransmissionSandbox() {
 
   const transmissions = useMemo(
     () =>
-      createTransmissionRuntime({
+      createTransmissionDebugRuntime({
         definitions: SAMPLE_TRANSMISSIONS,
         admissionChance: 0.7,
         minGapSeconds: 4,
@@ -61,7 +65,7 @@ function TransmissionSandbox() {
 
   const [seedInput, setSeedInput] = useState("1234");
   const [crossingState, setCrossingState] = useState<DebugCrossingState>(() => crossing.peek());
-  const [txState, setTxState] = useState<TransmissionState>(() => transmissions.peek());
+  const [txState, setTxState] = useState<DebugTransmissionState>(() => transmissions.peek());
   const [log, setLog] = useState<string[]>([]);
   const logRef = useRef<string[]>([]);
 
@@ -114,9 +118,10 @@ function TransmissionSandbox() {
 
   return (
     <main style={{ fontFamily: "monospace", padding: 24, maxWidth: 620 }}>
-      <h1 style={{ fontSize: 16, marginBottom: 4 }}>SYS-010 transmission runtime sandbox</h1>
+      <h1 style={{ fontSize: 16, marginBottom: 4 }}>SYS-010 legacy transmission sandbox</h1>
       <p style={{ fontSize: 12, opacity: 0.7, marginBottom: 16 }}>
-        Diagnostic only — prototype pending Codex review. Placeholder content, no audio, not PHASE comms UI.
+        Legacy diagnostic only — private-clock prototype preserved for comparison. Placeholder content,
+        no audio, not PHASE comms UI, and not the production runtime.
       </p>
 
       <table style={{ fontSize: 13, marginBottom: 16 }}>

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MOVEMENT_PARAMS,
-  MAX_STEP_DT,
   createMovementState,
   headingOf,
   lateralSpeedOf,
@@ -85,12 +84,15 @@ describe("SYS-006 movement model", () => {
     expect(s.velocity.z).toBeCloseTo(P.baseSpeed, 6);
   });
 
-  it("clamps pathological deltas so a stalled tab cannot teleport", () => {
+  it("uses the complete supplied active delta instead of silently truncating it", () => {
     const before = createMovementState(P);
-    const big = stepMovement(before, { steerX: 1, steerY: 0 }, 5, P);
-    const clamped = stepMovement(before, { steerX: 1, steerY: 0 }, MAX_STEP_DT, P);
-    expect(big).toEqual(clamped);
-    expect(big.position.z).toBeLessThan(P.baseSpeed * MAX_STEP_DT + 1e-6);
+    const advanced = stepMovement(before, NEUTRAL, 5, P);
+    expect(advanced.position.z).toBeCloseTo(P.baseSpeed * 5, 10);
+  });
+
+  it("does not advance when the supplied active delta is frozen at zero", () => {
+    const before = run(20, { steerX: 1, steerY: -1 });
+    expect(stepMovement(before, { steerX: -1, steerY: 1 }, 0, P)).toEqual(before);
   });
 
   it("stays finite with hostile inputs and params", () => {
@@ -103,7 +105,14 @@ describe("SYS-006 movement model", () => {
     for (let i = 0; i < 100; i++) {
       s = stepMovement(s, { steerX: Number.NaN, steerY: 99 }, Number.NaN, bad);
     }
-    for (const v of [s.position.x, s.position.y, s.position.z, s.velocity.x, s.velocity.y, s.velocity.z]) {
+    for (const v of [
+      s.position.x,
+      s.position.y,
+      s.position.z,
+      s.velocity.x,
+      s.velocity.y,
+      s.velocity.z,
+    ]) {
       expect(Number.isFinite(v)).toBe(true);
     }
   });

@@ -15,6 +15,7 @@ export const SAMPLE_TRANSMISSIONS: TransmissionDefinition[] = [
     windowEnd: 0.25,
     durationSeconds: 6,
     weight: 1,
+    priority: 0,
     oncePerCrossing: true,
   },
   {
@@ -24,6 +25,7 @@ export const SAMPLE_TRANSMISSIONS: TransmissionDefinition[] = [
     windowEnd: 0.55,
     durationSeconds: 8,
     weight: 1,
+    priority: 0,
     oncePerCrossing: true,
   },
   {
@@ -33,6 +35,7 @@ export const SAMPLE_TRANSMISSIONS: TransmissionDefinition[] = [
     windowEnd: 0.88,
     durationSeconds: 5,
     weight: 1,
+    priority: 0,
     oncePerCrossing: true,
   },
 ];

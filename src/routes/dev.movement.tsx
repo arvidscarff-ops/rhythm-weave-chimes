@@ -148,12 +148,21 @@ function MovementSandbox() {
     };
     resize();
     window.addEventListener("resize", resize);
+    const freezeFrameDeltaWhileHidden = () => {
+      if (document.hidden) {
+        last = 0;
+        dtRef.current = 0;
+      }
+    };
+    document.addEventListener("visibilitychange", freezeFrameDeltaWhileHidden);
 
     const loop = (t: number) => {
       raf = requestAnimationFrame(loop);
-      // dt from monotonic rAF timestamps; the model clamps pathological values.
-      const dt = last === 0 ? 0 : (t - last) / 1000;
-      last = t;
+      // Diagnostic route only: discard hidden wall time before supplying the
+      // movement-specific active delta. Production will receive this delta
+      // from FirstCrossingSession coordination.
+      const dt = last === 0 || document.hidden ? 0 : (t - last) / 1000;
+      last = document.hidden ? 0 : t;
       dtRef.current = dt;
 
       const input = keyboard.read();
@@ -173,6 +182,7 @@ function MovementSandbox() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", freezeFrameDeltaWhileHidden);
       keyboard.dispose();
     };
   }, []);

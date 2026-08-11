@@ -28,10 +28,18 @@ export interface KeyboardInputAdapter {
   dispose(): void;
 }
 
+export type KeyboardInputLifecycleTargets = Readonly<{
+  blurTarget?: Window;
+  visibilityTarget?: Document;
+}>;
+
 export function createKeyboardInputAdapter(
   target: Window | HTMLElement = window,
+  lifecycleTargets: KeyboardInputLifecycleTargets = {},
 ): KeyboardInputAdapter {
   const pressed = new Set<string>();
+  const blurTarget = lifecycleTargets.blurTarget ?? window;
+  const visibilityTarget = lifecycleTargets.visibilityTarget ?? document;
 
   const onDown = (e: Event) => {
     const ev = e as KeyboardEvent;
@@ -40,12 +48,18 @@ export function createKeyboardInputAdapter(
     if (ev.cancelable) ev.preventDefault();
   };
   const onUp = (e: Event) => pressed.delete((e as KeyboardEvent).code);
-  // Losing focus must release everything, otherwise a key can stick down.
+  // Losing focus or becoming hidden must release everything, otherwise a key
+  // can remain logically held while no keyup event is delivered.
   const onBlur = () => pressed.clear();
+  const onVisibilityChange = () => {
+    if (visibilityTarget.hidden) pressed.clear();
+  };
 
   target.addEventListener("keydown", onDown);
   target.addEventListener("keyup", onUp);
-  window.addEventListener("blur", onBlur);
+  blurTarget.addEventListener("blur", onBlur);
+  visibilityTarget.addEventListener("visibilitychange", onVisibilityChange);
+  onVisibilityChange();
 
   return {
     read() {
@@ -68,7 +82,8 @@ export function createKeyboardInputAdapter(
       pressed.clear();
       target.removeEventListener("keydown", onDown);
       target.removeEventListener("keyup", onUp);
-      window.removeEventListener("blur", onBlur);
+      blurTarget.removeEventListener("blur", onBlur);
+      visibilityTarget.removeEventListener("visibilitychange", onVisibilityChange);
     },
   };
 }

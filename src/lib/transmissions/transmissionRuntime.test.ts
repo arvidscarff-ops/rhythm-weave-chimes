@@ -1,244 +1,341 @@
 import { describe, expect, it } from "vitest";
-import { createManualTimeSource } from "@/lib/crossing/timeSource";
-import { createTransmissionRuntime } from "./transmissionRuntime";
-import type { TransmissionDefinition } from "./transmissionTypes";
+import {
+  createTransmissionRuntime,
+  hydrateTransmissionRuntime,
+  type TransmissionRuntimeConfig,
+} from "./transmissionRuntime";
+import type {
+  TransmissionCrossingInput,
+  TransmissionDefinition,
+  TransmissionRuntimeEvent,
+} from "./transmissionTypes";
 
-const DEFS: TransmissionDefinition[] = [
-  { id: "a", label: "Transmission A", windowStart: 0.1, windowEnd: 0.25, durationSeconds: 6, weight: 1, oncePerCrossing: true },
-  { id: "b", label: "Transmission B", windowStart: 0.35, windowEnd: 0.55, durationSeconds: 8, weight: 1, oncePerCrossing: true },
-  { id: "c", label: "Transmission C", windowStart: 0.7, windowEnd: 0.88, durationSeconds: 5, weight: 1, oncePerCrossing: true },
+const DEFINITIONS: readonly TransmissionDefinition[] = [
+  {
+    id: "a",
+    label: "Transmission A",
+    windowStart: 0.1,
+    windowEnd: 0.25,
+    durationSeconds: 4,
+    weight: 1,
+    priority: 0,
+    oncePerCrossing: true,
+  },
+  {
+    id: "b",
+    label: "Transmission B",
+    windowStart: 0.35,
+    windowEnd: 0.55,
+    durationSeconds: 5,
+    weight: 1,
+    priority: 0,
+    oncePerCrossing: true,
+  },
+  {
+    id: "c",
+    label: "Transmission C",
+    windowStart: 0.7,
+    windowEnd: 0.88,
+    durationSeconds: 3,
+    weight: 1,
+    priority: 0,
+    oncePerCrossing: true,
+  },
 ];
 
-function make(opts: Partial<Parameters<typeof createTransmissionRuntime>[0]> = {}) {
-  const clock = createManualTimeSource(100);
-  const rt = createTransmissionRuntime({
-    definitions: DEFS,
-    timeSource: clock.source,
+function config(overrides: Partial<TransmissionRuntimeConfig> = {}): TransmissionRuntimeConfig {
+  return {
+    runId: "run-1",
+    routeDefinitionId: "route-first-crossing",
+    definitionSetId: "transmissions-v1",
+    seed: "seed-1",
+    definitions: DEFINITIONS,
     admissionChance: 1,
     minGapSeconds: 0,
-    ...opts,
-  });
-  return { rt, clock };
+    ...overrides,
+  };
 }
 
-const snap = (progress: number, phase = "in_transit") => ({
-  crossingId: "run-1",
-  progress,
-  phase,
-});
-
-describe("transmission runtime — eligibility", () => {
-  it("fires nothing outside any eligibility window", () => {
-    const { rt } = make();
-    rt.startCrossing({ crossingId: "run-1", seed: "s" });
-    for (const p of [0, 0.05, 0.3, 0.6, 0.95]) {
-      const s = rt.update(snap(p));
-      expect(s.current).toBeNull();
-      expect(s.eligibleTransmissionIds).toEqual([]);
-    }
-  });
-
-  it("starts an eligible transmission inside its window", () => {
-    const { rt } = make();
-    rt.startCrossing({ crossingId: "run-1", seed: "s" });
-    const s = rt.update(snap(0.15));
-    expect(s.current?.definition.id).toBe("a");
-    expect(s.eligibleTransmissionIds).toEqual(["a"]);
-  });
-});
-
-describe("transmission runtime — scheduling constraints", () => {
-  it("never repeats a oncePerCrossing item within a run", () => {
-    const { rt, clock } = make();
-    rt.startCrossing({ crossingId: "run-1", seed: "s" });
-    rt.update(snap(0.15));
-    clock.advance(6);
-    rt.update(snap(0.2));
-    expect(rt.peek().current).toBeNull();
-    const s = rt.update(snap(0.22));
-    expect(s.current).toBeNull();
-    expect(s.playedTransmissionIds).toEqual(["a"]);
-  });
-
-  it("allows a non-once item to recur in a later episode", () => {
-    const recurring: TransmissionDefinition[] = [
-      { ...DEFS[0], oncePerCrossing: false },
-    ];
-    const { rt, clock } = make({ definitions: recurring });
-    rt.startCrossing({ crossingId: "run-1", seed: "s" });
-    rt.update(snap(0.15));
-    expect(rt.peek().current?.definition.id).toBe("a");
-    clock.advance(6);
-    rt.update(snap(0.2));
-    expect(rt.peek().current).toBeNull();
-    // Same episode: no replay.
-    rt.update(snap(0.21));
-    expect(rt.peek().current).toBeNull();
-    // Leave and re-enter the window → new episode → may play again.
-    rt.update(snap(0.05));
-    const s = rt.update(snap(0.15));
-    expect(s.current?.definition.id).toBe("a");
-  });
-
-  it("keeps only one transmission active at a time (overlapping windows)", () => {
-    const overlapping: TransmissionDefinition[] = [
-      { ...DEFS[0], id: "x", windowStart: 0.1, windowEnd: 0.5, durationSeconds: 10 },
-      { ...DEFS[1], id: "y", windowStart: 0.1, windowEnd: 0.5, durationSeconds: 10 },
-    ];
-    const { rt, clock } = make({ definitions: overlapping });
-    rt.startCrossing({ crossingId: "run-1", seed: "s" });
-    const first = rt.update(snap(0.2)).current?.definition.id;
-    expect(first).toBeDefined();
-    clock.advance(1);
-    const s = rt.update(snap(0.25));
-    expect(s.current?.definition.id).toBe(first);
-  });
-
-  it("ends an active transmission when its duration elapses", () => {
-    const { rt, clock } = make();
-    const ended: string[] = [];
-    rt.subscribe({ transmissionEnded: (t, reason) => ended.push(`${t.definition.id}:${reason}`) });
-    rt.startCrossing({ crossingId: "run-1", seed: "s" });
-    rt.update(snap(0.15));
-    clock.advance(5.9);
-    expect(rt.sample().current).not.toBeNull();
-    clock.advance(0.2);
-    expect(rt.sample().current).toBeNull();
-    expect(ended).toEqual(["a:completed"]);
-  });
-
-  it("respects the minimum gap between transmissions", () => {
-    const back2back: TransmissionDefinition[] = [
-      { ...DEFS[0], id: "x", windowStart: 0.1, windowEnd: 0.9, durationSeconds: 2, oncePerCrossing: true },
-      { ...DEFS[1], id: "y", windowStart: 0.1, windowEnd: 0.9, durationSeconds: 2, oncePerCrossing: true },
-    ];
-    const { rt, clock } = make({ definitions: back2back, minGapSeconds: 5 });
-    rt.startCrossing({ crossingId: "run-1", seed: "s" });
-    rt.update(snap(0.2));
-    clock.advance(2);
-    rt.update(snap(0.3));
-    expect(rt.peek().current).toBeNull();
-    clock.advance(1);
-    expect(rt.update(snap(0.35)).current).toBeNull();
-    clock.advance(5);
-    expect(rt.update(snap(0.4)).current).not.toBeNull();
-  });
-
-  it("reset clears per-run state", () => {
-    const { rt } = make();
-    rt.startCrossing({ crossingId: "run-1", seed: "s" });
-    rt.update(snap(0.15));
-    const s = rt.reset();
-    expect(s.current).toBeNull();
-    expect(s.playedTransmissionIds).toEqual([]);
-    expect(s.eligibleTransmissionIds).toEqual([]);
-  });
-});
-
-describe("transmission runtime — determinism", () => {
-  const runWithSeed = (seed: string) => {
-    const { rt, clock } = make({ admissionChance: 0.5 });
-    const started: string[] = [];
-    rt.subscribe({ transmissionStarted: (t) => started.push(t.definition.id) });
-    rt.startCrossing({ crossingId: "run-1", seed });
-    for (let i = 0; i <= 100; i++) {
-      rt.update(snap(i / 100));
-      clock.advance(0.5);
-    }
-    return started;
+function input(
+  progress: number,
+  activeElapsedSeconds = progress * 100,
+  phase: TransmissionCrossingInput["phase"] = progress === 1 ? "arrived" : "in_transit",
+): TransmissionCrossingInput {
+  return {
+    runId: "run-1",
+    routeDefinitionId: "route-first-crossing",
+    progress,
+    phase,
+    activeElapsedSeconds,
+    transitions: phase === "arrived" ? [{ id: "arrived" }] : [],
   };
+}
 
-  it("same seed + same inputs produce the same selection", () => {
-    expect(runWithSeed("seed-1")).toEqual(runWithSeed("seed-1"));
+function eventTypes(events: readonly TransmissionRuntimeEvent[]) {
+  return events.map((event) => `${event.type}:${event.definitionId}`);
+}
+
+describe("SYS-010 production configuration", () => {
+  it("validates and deeply freezes definitions and run configuration", () => {
+    const sourceDefinition = { ...DEFINITIONS[0] };
+    const runtime = createTransmissionRuntime(
+      config({ definitions: [sourceDefinition], admissionChance: 0.5, minGapSeconds: 2 }),
+    );
+    sourceDefinition.durationSeconds = 999;
+
+    expect(runtime.config.definitions[0]?.durationSeconds).toBe(4);
+    expect(Object.isFrozen(runtime.config)).toBe(true);
+    expect(Object.isFrozen(runtime.config.definitions)).toBe(true);
+    expect(Object.isFrozen(runtime.config.definitions[0])).toBe(true);
   });
 
-  it("a different seed can produce a different valid selection", () => {
-    const results = ["s1", "s2", "s3", "s4", "s5", "s6"].map(runWithSeed);
-    const distinct = new Set(results.map((r) => r.join(",")));
-    expect(distinct.size).toBeGreaterThan(1);
-    for (const r of results) {
-      for (const id of r) expect(["a", "b", "c"]).toContain(id);
-    }
-  });
-
-  it("admission does not depend on update frequency", () => {
-    const run = (step: number) => {
-      const { rt, clock } = make({ admissionChance: 0.5 });
-      const started: string[] = [];
-      rt.subscribe({ transmissionStarted: (t) => started.push(t.definition.id) });
-      rt.startCrossing({ crossingId: "run-1", seed: "rate" });
-      // Both runs traverse identical progress *and* identical elapsed time;
-      // only the sampling granularity differs.
-      const totalSeconds = 60;
-      for (let t = 0; t <= totalSeconds; t += step) {
-        clock.set(100 + t);
-        rt.update(snap(t / totalSeconds));
-      }
-      return started;
-    };
-    const dense = run(0.1);
-    const sparse = run(2);
-    expect(sparse).toEqual(dense);
+  it("rejects duplicate IDs and malformed authored values", () => {
+    expect(() =>
+      createTransmissionRuntime(config({ definitions: [DEFINITIONS[0], DEFINITIONS[0]] })),
+    ).toThrow("Duplicate");
+    expect(() =>
+      createTransmissionRuntime(config({ definitions: [{ ...DEFINITIONS[0], windowEnd: 0.1 }] })),
+    ).toThrow("half-open window");
+    expect(() =>
+      createTransmissionRuntime(config({ definitions: [{ ...DEFINITIONS[0], weight: 0 }] })),
+    ).toThrow("weight must be positive");
+    expect(() =>
+      createTransmissionRuntime(config({ definitions: [{ ...DEFINITIONS[0], priority: 1.5 }] })),
+    ).toThrow("priority");
+    expect(() => createTransmissionRuntime(config({ admissionChance: 1.1 }))).toThrow(
+      "admissionChance",
+    );
+    expect(() => createTransmissionRuntime(config({ minGapSeconds: -1 }))).toThrow("minGapSeconds");
   });
 });
 
-describe("transmission runtime — progress jumps and arrival", () => {
-  it("does not retroactively fire a window that was skipped over", () => {
-    const { rt } = make();
-    const started: string[] = [];
-    rt.subscribe({ transmissionStarted: (t) => started.push(t.definition.id) });
-    rt.startCrossing({ crossingId: "run-1", seed: "s" });
-    rt.update(snap(0.2));   // inside A
-    rt.update(snap(0.8));   // jumped past B entirely, now inside C
-    expect(started).toEqual(["a"]);
-    expect(rt.peek().current?.definition.id).toBe("a");
+describe("SYS-010 cadence-independent eligibility", () => {
+  function run(samples: readonly number[], seed = "cadence-seed") {
+    const runtime = createTransmissionRuntime(config({ seed }));
+    const events: TransmissionRuntimeEvent[] = [];
+    for (const progress of samples) events.push(...runtime.update(input(progress)).events);
+    return { events, snapshot: runtime.snapshot() };
+  }
+
+  it("produces identical results for dense and sparse polling of the same path", () => {
+    const dense = run(Array.from({ length: 101 }, (_, index) => index / 100));
+    const sparse = run([0, 0.3, 0.6, 0.9, 1]);
+
+    const stableEventResult = (events: readonly TransmissionRuntimeEvent[]) =>
+      events.map(({ id, type, definitionId, episodeId }) => ({
+        id,
+        type,
+        definitionId,
+        episodeId,
+      }));
+    expect(stableEventResult(sparse.events)).toEqual(stableEventResult(dense.events));
+    expect(sparse.snapshot.playedTransmissionIds).toEqual(dense.snapshot.playedTransmissionIds);
+    expect(
+      sparse.snapshot.evaluatedEpisodes.map(({ episodeId, definitionId, admitted }) => ({
+        episodeId,
+        definitionId,
+        admitted,
+      })),
+    ).toEqual(
+      dense.snapshot.evaluatedEpisodes.map(({ episodeId, definitionId, admitted }) => ({
+        episodeId,
+        definitionId,
+        admitted,
+      })),
+    );
   });
 
-  it("jumping 0.20 → 0.80 never plays the 0.35–0.55 item", () => {
-    const onlyB = [DEFS[1]];
-    const { rt } = make({ definitions: onlyB });
-    rt.startCrossing({ crossingId: "run-1", seed: "s" });
-    rt.update(snap(0.2));
-    const s = rt.update(snap(0.8));
-    expect(s.current).toBeNull();
-    expect(s.playedTransmissionIds).toEqual([]);
+  it("evaluates and schedules a complete window crossed by one sparse update", () => {
+    const runtime = createTransmissionRuntime(
+      config({ definitions: [DEFINITIONS[0]], seed: "window-jump" }),
+    );
+    runtime.update(input(0));
+    const result = runtime.update(input(0.3));
+
+    expect(eventTypes(result.events)).toEqual([
+      "transmissionAdmitted:a",
+      "transmissionStarted:a",
+      "transmissionCompleted:a",
+    ]);
+    expect(result.snapshot.evaluatedEpisodes).toHaveLength(1);
+    expect(result.snapshot.playedTransmissionIds).toEqual(["a"]);
   });
 
-  it("scrubbing backwards does not replay a oncePerCrossing transmission", () => {
-    const { rt, clock } = make();
-    const started: string[] = [];
-    rt.subscribe({ transmissionStarted: (t) => started.push(t.definition.id) });
-    rt.startCrossing({ crossingId: "run-1", seed: "s" });
-    rt.update(snap(0.15));
-    clock.advance(6);
-    rt.update(snap(0.4));
-    rt.update(snap(0.05));
-    rt.update(snap(0.15)); // back inside A's window: new episode, but played
-    expect(started.filter((id) => id === "a")).toHaveLength(1);
+  it("evaluates each episode once and emits nothing for repeated samples", () => {
+    const runtime = createTransmissionRuntime(config({ definitions: [DEFINITIONS[0]] }));
+    const first = runtime.update(input(0.15));
+    const repeated = runtime.update(input(0.15));
+
+    expect(first.events.some((event) => event.type === "transmissionAdmitted")).toBe(true);
+    expect(repeated.events).toEqual([]);
+    expect(runtime.snapshot().evaluatedEpisodes).toHaveLength(1);
   });
 
-  it("arrival ends the active transmission immediately, exactly once", () => {
-    const { rt } = make();
-    const ended: string[] = [];
-    rt.subscribe({ transmissionEnded: (t, reason) => ended.push(`${t.definition.id}:${reason}`) });
-    rt.startCrossing({ crossingId: "run-1", seed: "s" });
-    rt.update(snap(0.15));
-    expect(rt.peek().current).not.toBeNull();
-    rt.update(snap(1, "arrived"));
-    rt.update(snap(1, "arrived"));
-    rt.sample();
-    expect(ended).toEqual(["a:arrival"]);
-    expect(rt.peek().current).toBeNull();
+  it("does not allow a once-per-crossing definition to replay", () => {
+    const runtime = createTransmissionRuntime(config({ definitions: [DEFINITIONS[0]] }));
+    runtime.update(input(0.1));
+    runtime.update(input(0.3));
+    runtime.update(input(0.8));
+
+    expect(runtime.snapshot().playedTransmissionIds).toEqual(["a"]);
+    expect(runtime.snapshot().startedEpisodeIds).toHaveLength(1);
   });
 
-  it("starts nothing after arrival and leaves valid state", () => {
-    const late = [{ ...DEFS[2], windowStart: 0.7, windowEnd: 1.01 }];
-    const { rt } = make({ definitions: late });
-    rt.startCrossing({ crossingId: "run-1", seed: "s" });
-    const s = rt.update(snap(1, "arrived"));
-    expect(s.current).toBeNull();
-    expect(s.activeUntilSeconds).toBeNull();
-    expect(s.remainingSeconds).toBeNull();
-    expect(s.playedTransmissionIds).toEqual([]);
+  it("rejects progress regression instead of treating it as developer scrub", () => {
+    const runtime = createTransmissionRuntime(config());
+    runtime.update(input(0.5));
+    const before = runtime.snapshot();
+
+    expect(() => runtime.update(input(0.4))).toThrow("progress cannot regress");
+    expect(runtime.snapshot()).toEqual(before);
+  });
+});
+
+describe("SYS-010 priority, weighting, and active-time constraints", () => {
+  const candidate = (id: string, priority: number, weight = 1): TransmissionDefinition => ({
+    id,
+    label: id,
+    windowStart: 0.1,
+    windowEnd: 0.9,
+    durationSeconds: 2,
+    weight,
+    priority,
+    oncePerCrossing: true,
+  });
+
+  it("selects the highest authored priority before applying weights", () => {
+    const runtime = createTransmissionRuntime(
+      config({ definitions: [candidate("low", 1, 1_000), candidate("high", 10, 1)] }),
+    );
+    const result = runtime.update(input(0.1));
+    const started = result.events.find((event) => event.type === "transmissionStarted");
+
+    expect(started?.definitionId).toBe("high");
+  });
+
+  it("makes deterministic seeded weighted choices inside one priority tier", () => {
+    const definitions = [candidate("x", 5, 1), candidate("y", 5, 4)];
+    const choose = (seed: string) => {
+      const runtime = createTransmissionRuntime(config({ definitions, seed }));
+      return runtime.update(input(0.1)).events.find((event) => event.type === "transmissionStarted")
+        ?.definitionId;
+    };
+
+    expect(choose("same-seed")).toBe(choose("same-seed"));
+    expect(["x", "y"]).toContain(choose("same-seed"));
+  });
+
+  it("measures duration and minimum gap only in supplied active journey time", () => {
+    const runtime = createTransmissionRuntime(
+      config({ definitions: [candidate("x", 1), candidate("y", 1)], minGapSeconds: 5 }),
+    );
+    runtime.update(input(0.1, 10));
+
+    const frozen = runtime.update(input(0.1, 10));
+    expect(frozen.events).toEqual([]);
+    expect(frozen.snapshot.remainingSeconds).toBe(2);
+
+    const completed = runtime.update(input(0.12, 12));
+    expect(completed.events.map((event) => event.type)).toContain("transmissionCompleted");
+    expect(completed.snapshot.current).toBeNull();
+
+    expect(runtime.update(input(0.16, 16)).snapshot.current).toBeNull();
+    const afterGap = runtime.update(input(0.17, 17));
+    expect(afterGap.events.map((event) => event.type)).toContain("transmissionStarted");
+  });
+
+  it("rejects progress movement while active time is frozen", () => {
+    const runtime = createTransmissionRuntime(config());
+    runtime.update(input(0.1, 10));
+    expect(() => runtime.update(input(0.2, 10))).toThrow("active time is frozen");
+  });
+});
+
+describe("SYS-010 identity, arrival, and reconstruction", () => {
+  it("rejects a crossing snapshot from another run or route", () => {
+    const runtime = createTransmissionRuntime(config());
+    expect(() => runtime.update({ ...input(0.1), runId: "wrong-run" })).toThrow(
+      "identity does not match",
+    );
+    expect(() => runtime.update({ ...input(0.1), routeDefinitionId: "wrong-route" })).toThrow(
+      "identity does not match",
+    );
+  });
+
+  it("requests one arrival fade without ending or delaying the crossing", () => {
+    const long: TransmissionDefinition = {
+      ...DEFINITIONS[0],
+      durationSeconds: 200,
+      windowEnd: 0.99,
+    };
+    const runtime = createTransmissionRuntime(config({ definitions: [long] }));
+    runtime.update(input(0.1, 10));
+
+    const arrival = runtime.update(input(1, 100, "arrived"));
+    expect(arrival.snapshot.arrived).toBe(true);
+    expect(arrival.snapshot.current?.definitionId).toBe("a");
+    expect(
+      arrival.events.filter((event) => event.type === "transmissionArrivalFadeRequested"),
+    ).toHaveLength(1);
+    expect(runtime.update(input(1, 100, "arrived")).events).toEqual([]);
+  });
+
+  it("hydrates an active transmission without counting time away or emitting", () => {
+    const long: TransmissionDefinition = { ...DEFINITIONS[0], durationSeconds: 20 };
+    const runtime = createTransmissionRuntime(config({ definitions: [long] }));
+    runtime.update(input(0.1, 10));
+    runtime.update(input(0.15, 15));
+    const before = runtime.snapshot();
+
+    const restored = hydrateTransmissionRuntime(JSON.parse(JSON.stringify(before)), {
+      runId: "run-1",
+      routeDefinitionId: "route-first-crossing",
+    });
+    expect(restored.snapshot()).toEqual(before);
+    expect(restored.update(input(0.15, 15)).events).toEqual([]);
+    expect(restored.snapshot().remainingSeconds).toBe(15);
+  });
+
+  it("does not retroactively admit anything merely because state was hydrated", () => {
+    const runtime = createTransmissionRuntime(config());
+    runtime.update(input(0.6));
+    const restored = hydrateTransmissionRuntime(runtime.snapshot());
+
+    expect(restored.snapshot().evaluatedEpisodes).toEqual(runtime.snapshot().evaluatedEpisodes);
+    expect(restored.update(input(0.6)).events).toEqual([]);
+  });
+
+  it("preserves arrival fade and consumed episode state through hydration", () => {
+    const long: TransmissionDefinition = {
+      ...DEFINITIONS[0],
+      durationSeconds: 200,
+      windowEnd: 0.99,
+    };
+    const runtime = createTransmissionRuntime(config({ definitions: [long] }));
+    runtime.update(input(0.1, 10));
+    runtime.update(input(1, 100, "arrived"));
+
+    const restored = hydrateTransmissionRuntime(runtime.snapshot());
+    expect(restored.snapshot()).toEqual(runtime.snapshot());
+    expect(restored.update(input(1, 100, "arrived")).events).toEqual([]);
+  });
+
+  it("rejects snapshot hydration under another expected identity", () => {
+    const runtime = createTransmissionRuntime(config());
+    expect(() =>
+      hydrateTransmissionRuntime(runtime.snapshot(), {
+        runId: "another-run",
+        routeDefinitionId: "route-first-crossing",
+      }),
+    ).toThrow("identity does not match");
+  });
+
+  it("exposes no private clock, callbacks, reset, or scrub API", () => {
+    const runtime = createTransmissionRuntime(config());
+    expect("sample" in runtime).toBe(false);
+    expect("subscribe" in runtime).toBe(false);
+    expect("reset" in runtime).toBe(false);
+    expect("scrubTo" in runtime).toBe(false);
+    expect("startCrossing" in runtime).toBe(false);
   });
 });

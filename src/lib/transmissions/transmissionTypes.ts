@@ -1,44 +1,75 @@
-/**
- * SYS-010 — transmission definition types (PROTOTYPE).
- *
- * Deliberately minimal: only the fields the scheduling prototype needs.
- * No channel/region/source/category fields — WORLD_LORE §24 describes the tone
- * of transmissions but defines no taxonomy, and this task is runtime
- * architecture, not writing.
- */
+import type { CrossingPhase, CrossingTransitionId } from "../crossing/crossingRuntime";
 
-export type TransmissionDefinition = {
+/** Immutable authored scheduling input. Content/voice remains WRLD-owned. */
+export type TransmissionDefinition = Readonly<{
   id: string;
-  /** Developer placeholder label. NOT narrative content. */
+  /** Developer/content label only; the runtime does not present it. */
   label: string;
-  /** Normalized crossing progress window: eligible when start <= p < end. */
+  /** Half-open normalized eligibility interval: [windowStart, windowEnd). */
   windowStart: number;
   windowEnd: number;
-  /** Prototype active duration, seconds, measured on the injected time source. */
+  /** Active journey seconds, never wall-clock seconds. */
   durationSeconds: number;
-  /** Relative weight for the seeded selection layer. */
+  /** Positive relative weight inside an equal-priority candidate tier. */
   weight: number;
-  /** true → one play per crossing run. false → may recur under normal rules. */
+  /** Higher numeric values win before weighted selection is considered. */
+  priority: number;
   oncePerCrossing: boolean;
-};
+}>;
 
-/**
- * The ONLY thing SYS-010 knows about a crossing. Structural on purpose so
- * SYS-007 can be refactored or replaced without touching this runtime.
- */
-export type CrossingSnapshot = {
-  crossingId: string;
-  /** Normalized journey progress in [0,1]. */
+/** Structural SYS-007 input; SYS-010 does not import or own its runtime. */
+export type TransmissionCrossingInput = Readonly<{
+  runId: string;
+  routeDefinitionId: string;
   progress: number;
-  /** Free-form phase string; only "arrived" carries scheduling meaning here. */
-  phase: string;
-};
+  phase: CrossingPhase;
+  activeElapsedSeconds: number;
+  transitions?: readonly Readonly<{ id: CrossingTransitionId }>[];
+}>;
 
-export type TransmissionEndReason = "completed" | "arrival" | "reset";
+export type TransmissionEpisodeSnapshot = Readonly<{
+  episodeId: string;
+  definitionId: string;
+  admitted: boolean;
+  evaluatedAtProgress: number;
+  evaluatedAtActiveSeconds: number;
+}>;
 
-export type ActiveTransmission = {
-  definition: TransmissionDefinition;
-  /** Monotonic seconds from the injected time source. */
-  startedAtSeconds: number;
-  endsAtSeconds: number;
-};
+export type ActiveTransmissionSnapshot = Readonly<{
+  definitionId: string;
+  episodeId: string;
+  startedAtActiveSeconds: number;
+  completesAtActiveSeconds: number;
+  startEventId: string;
+}>;
+
+export type TransmissionRuntimeEvent =
+  | Readonly<{
+      id: string;
+      type: "transmissionAdmitted";
+      definitionId: string;
+      episodeId: string;
+      atActiveSeconds: number;
+    }>
+  | Readonly<{
+      id: string;
+      type: "transmissionStarted";
+      definitionId: string;
+      episodeId: string;
+      atActiveSeconds: number;
+      completesAtActiveSeconds: number;
+    }>
+  | Readonly<{
+      id: string;
+      type: "transmissionCompleted";
+      definitionId: string;
+      episodeId: string;
+      atActiveSeconds: number;
+    }>
+  | Readonly<{
+      id: string;
+      type: "transmissionArrivalFadeRequested";
+      definitionId: string;
+      episodeId: string;
+      atActiveSeconds: number;
+    }>;

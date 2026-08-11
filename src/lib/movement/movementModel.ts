@@ -70,13 +70,6 @@ export interface MovementParams {
   forwardResponse: number;
 }
 
-/**
- * Pathological-delta clamp. Tab stalls, breakpoints and background throttling
- * hand us multi-second deltas; clamping at the simulation boundary keeps a
- * resumed tab from teleporting. 50 ms ~= 20 fps worst case.
- */
-export const MAX_STEP_DT = 0.05;
-
 export const DEFAULT_MOVEMENT_PARAMS: MovementParams = {
   baseSpeed: 30,
   steeringStrength: 1,
@@ -114,8 +107,9 @@ export const resetMovementState = createMovementState;
 const approach = (rate: number, dt: number) => 1 - Math.exp(-Math.max(0, rate) * dt);
 
 /**
- * Advance the simulation by `dt` seconds. Pure: returns a new state and never
- * mutates its arguments. One small object per call — cheap enough for a sandbox.
+ * Advance by a caller-supplied ACTIVE journey delta. The movement core neither
+ * reads wall time nor truncates valid active time. Pause/background policy
+ * belongs upstream; supplying zero produces an exact frozen step.
  */
 export function stepMovement(
   state: MovementState,
@@ -123,7 +117,7 @@ export function stepMovement(
   dt: number,
   params: MovementParams,
 ): MovementState {
-  const step = clamp(finite(dt), 0, MAX_STEP_DT);
+  const step = Math.max(0, finite(dt));
 
   const steerX = clamp(finite(input.steerX), -1, 1);
   const steerY = clamp(finite(input.steerY), -1, 1);

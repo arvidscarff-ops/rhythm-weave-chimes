@@ -51,6 +51,9 @@ export function stepCamera(
   dt: number,
   params: CameraParams,
 ): CameraState {
+  // Presentation-only smoothing guard. This does not own, represent, or
+  // silently discard journey time; the movement model receives its complete
+  // freeze-aware active delta separately.
   const step = Math.max(0, Math.min(dt, 0.05));
   const kf = approach(params.followStrength, step);
   const kd = approach(params.damping, step);

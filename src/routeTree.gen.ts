@@ -25,6 +25,7 @@ import { Route as DevLegacyRhythmRouteImport } from './routes/dev.legacy-rhythm'
 import { Route as DevGraphicsRouteImport } from './routes/dev.graphics'
 import { Route as DevJourneyRouteImport } from './routes/dev.journey'
 import { Route as DevCrossingRouteImport } from './routes/dev.crossing'
+import { Route as DevCrystallizationRouteImport } from './routes/dev.crystallization'
 import { Route as AdminScenesRouteImport } from './routes/admin.scenes'
 import { Route as AdminScalesRouteImport } from './routes/admin.scales'
 import { Route as AdminPacksRouteImport } from './routes/admin.packs'
@@ -109,6 +110,11 @@ const DevCrossingRoute = DevCrossingRouteImport.update({
   path: '/dev/crossing',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevCrystallizationRoute = DevCrystallizationRouteImport.update({
+  id: '/dev/crystallization',
+  path: '/dev/crystallization',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminScenesRoute = AdminScenesRouteImport.update({
   id: '/admin/scenes',
   path: '/admin/scenes',
@@ -133,6 +139,7 @@ export interface FileRoutesByFullPath {
   '/admin/scales': typeof AdminScalesRoute
   '/admin/scenes': typeof AdminScenesRoute
   '/dev/crossing': typeof DevCrossingRoute
+  '/dev/crystallization': typeof DevCrystallizationRoute
   '/dev/graphics': typeof DevGraphicsRoute
   '/dev/journey': typeof DevJourneyRoute
   '/dev/legacy-rhythm': typeof DevLegacyRhythmRoute
@@ -153,6 +160,7 @@ export interface FileRoutesByTo {
   '/admin/scales': typeof AdminScalesRoute
   '/admin/scenes': typeof AdminScenesRoute
   '/dev/crossing': typeof DevCrossingRoute
+  '/dev/crystallization': typeof DevCrystallizationRoute
   '/dev/graphics': typeof DevGraphicsRoute
   '/dev/journey': typeof DevJourneyRoute
   '/dev/legacy-rhythm': typeof DevLegacyRhythmRoute
@@ -175,6 +183,7 @@ export interface FileRoutesById {
   '/admin/scales': typeof AdminScalesRoute
   '/admin/scenes': typeof AdminScenesRoute
   '/dev/crossing': typeof DevCrossingRoute
+  '/dev/crystallization': typeof DevCrystallizationRoute
   '/dev/graphics': typeof DevGraphicsRoute
   '/dev/journey': typeof DevJourneyRoute
   '/dev/legacy-rhythm': typeof DevLegacyRhythmRoute
@@ -198,6 +207,7 @@ export interface FileRouteTypes {
     | '/admin/scales'
     | '/admin/scenes'
     | '/dev/crossing'
+    | '/dev/crystallization'
     | '/dev/graphics'
     | '/dev/journey'
     | '/dev/legacy-rhythm'
@@ -218,6 +228,7 @@ export interface FileRouteTypes {
     | '/admin/scales'
     | '/admin/scenes'
     | '/dev/crossing'
+    | '/dev/crystallization'
     | '/dev/graphics'
     | '/dev/journey'
     | '/dev/legacy-rhythm'
@@ -239,6 +250,7 @@ export interface FileRouteTypes {
     | '/admin/scales'
     | '/admin/scenes'
     | '/dev/crossing'
+    | '/dev/crystallization'
     | '/dev/graphics'
     | '/dev/journey'
     | '/dev/legacy-rhythm'
@@ -261,6 +273,7 @@ export interface RootRouteChildren {
   AdminScalesRoute: typeof AdminScalesRoute
   AdminScenesRoute: typeof AdminScenesRoute
   DevCrossingRoute: typeof DevCrossingRoute
+  DevCrystallizationRoute: typeof DevCrystallizationRoute
   DevGraphicsRoute: typeof DevGraphicsRoute
   DevJourneyRoute: typeof DevJourneyRoute
   DevLegacyRhythmRoute: typeof DevLegacyRhythmRoute
@@ -384,6 +397,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevCrossingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dev/crystallization': {
+      id: '/dev/crystallization'
+      path: '/dev/crystallization'
+      fullPath: '/dev/crystallization'
+      preLoaderRoute: typeof DevCrystallizationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/scenes': {
       id: '/admin/scenes'
       path: '/admin/scenes'
@@ -435,6 +455,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminScalesRoute: AdminScalesRoute,
   AdminScenesRoute: AdminScenesRoute,
   DevCrossingRoute: DevCrossingRoute,
+  DevCrystallizationRoute: DevCrystallizationRoute,
   DevGraphicsRoute: DevGraphicsRoute,
   DevJourneyRoute: DevJourneyRoute,
   DevLegacyRhythmRoute: DevLegacyRhythmRoute,

@@ -23,7 +23,6 @@ import { Route as DevPerformanceRouteImport } from './routes/dev.performance'
 import { Route as DevMovementRouteImport } from './routes/dev.movement'
 import { Route as DevLegacyRhythmRouteImport } from './routes/dev.legacy-rhythm'
 import { Route as DevCrossingRouteImport } from './routes/dev.crossing'
-import { Route as AdminUnlockRouteImport } from './routes/admin.unlock'
 import { Route as AdminScenesRouteImport } from './routes/admin.scenes'
 import { Route as AdminScalesRouteImport } from './routes/admin.scales'
 import { Route as AdminPacksRouteImport } from './routes/admin.packs'
@@ -98,11 +97,6 @@ const DevCrossingRoute = DevCrossingRouteImport.update({
   path: '/dev/crossing',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminUnlockRoute = AdminUnlockRouteImport.update({
-  id: '/admin/unlock',
-  path: '/admin/unlock',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AdminScenesRoute = AdminScenesRouteImport.update({
   id: '/admin/scenes',
   path: '/admin/scenes',
@@ -126,7 +120,6 @@ export interface FileRoutesByFullPath {
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
   '/admin/scenes': typeof AdminScenesRoute
-  '/admin/unlock': typeof AdminUnlockRoute
   '/dev/crossing': typeof DevCrossingRoute
   '/dev/legacy-rhythm': typeof DevLegacyRhythmRoute
   '/dev/movement': typeof DevMovementRoute
@@ -145,7 +138,6 @@ export interface FileRoutesByTo {
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
   '/admin/scenes': typeof AdminScenesRoute
-  '/admin/unlock': typeof AdminUnlockRoute
   '/dev/crossing': typeof DevCrossingRoute
   '/dev/legacy-rhythm': typeof DevLegacyRhythmRoute
   '/dev/movement': typeof DevMovementRoute
@@ -166,7 +158,6 @@ export interface FileRoutesById {
   '/admin/packs': typeof AdminPacksRoute
   '/admin/scales': typeof AdminScalesRoute
   '/admin/scenes': typeof AdminScenesRoute
-  '/admin/unlock': typeof AdminUnlockRoute
   '/dev/crossing': typeof DevCrossingRoute
   '/dev/legacy-rhythm': typeof DevLegacyRhythmRoute
   '/dev/movement': typeof DevMovementRoute
@@ -188,7 +179,6 @@ export interface FileRouteTypes {
     | '/admin/packs'
     | '/admin/scales'
     | '/admin/scenes'
-    | '/admin/unlock'
     | '/dev/crossing'
     | '/dev/legacy-rhythm'
     | '/dev/movement'
@@ -207,7 +197,6 @@ export interface FileRouteTypes {
     | '/admin/packs'
     | '/admin/scales'
     | '/admin/scenes'
-    | '/admin/unlock'
     | '/dev/crossing'
     | '/dev/legacy-rhythm'
     | '/dev/movement'
@@ -227,7 +216,6 @@ export interface FileRouteTypes {
     | '/admin/packs'
     | '/admin/scales'
     | '/admin/scenes'
-    | '/admin/unlock'
     | '/dev/crossing'
     | '/dev/legacy-rhythm'
     | '/dev/movement'
@@ -248,7 +236,6 @@ export interface RootRouteChildren {
   AdminPacksRoute: typeof AdminPacksRoute
   AdminScalesRoute: typeof AdminScalesRoute
   AdminScenesRoute: typeof AdminScenesRoute
-  AdminUnlockRoute: typeof AdminUnlockRoute
   DevCrossingRoute: typeof DevCrossingRoute
   DevLegacyRhythmRoute: typeof DevLegacyRhythmRoute
   DevMovementRoute: typeof DevMovementRoute
@@ -357,13 +344,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevCrossingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/unlock': {
-      id: '/admin/unlock'
-      path: '/admin/unlock'
-      fullPath: '/admin/unlock'
-      preLoaderRoute: typeof AdminUnlockRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/admin/scenes': {
       id: '/admin/scenes'
       path: '/admin/scenes'
@@ -414,7 +394,6 @@ const rootRouteChildren: RootRouteChildren = {
   AdminPacksRoute: AdminPacksRoute,
   AdminScalesRoute: AdminScalesRoute,
   AdminScenesRoute: AdminScenesRoute,
-  AdminUnlockRoute: AdminUnlockRoute,
   DevCrossingRoute: DevCrossingRoute,
   DevLegacyRhythmRoute: DevLegacyRhythmRoute,
   DevMovementRoute: DevMovementRoute,

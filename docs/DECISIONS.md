@@ -1217,6 +1217,8 @@ Account identity plus a database-owned role is auditable, revocable, and compati
 
 Supersedes the passcode as the intended My Studio and service-role authorization boundary. It does not remove the compatibility implementation and does not resolve the deferred Studio publication, archive, validation, or storage architecture.
 
+The temporary passcode-compatibility retention in this record is superseded by D039. The account-and-role authorization decision remains accepted.
+
 ### Source
 
 Explicit project-owner instruction, 2026-08-09; Reconciliation Step 7A.
@@ -1277,9 +1279,68 @@ Versioned deterministic exports provide a recoverable authoring inventory withou
 
 Resolves the R5 archive, publication-validation, legacy-preview, and storage-boundary reconciliation scope deferred by D037. It does not select final Trigger Engine geometry or tuning, define archive import semantics, remove passcodes, or alter the production rhythm scheduler.
 
+The temporary passcode-compatibility retention and later-removal deferral in this record are superseded by D039. Its authoring, publication, preview, and storage decisions remain accepted.
+
 ### Source
 
 Explicit project-owner instruction, 2026-08-09; Reconciliation Step 7B.
+
+---
+
+## D039 — My Studio has one account-and-role authorization model
+
+**Status:** ACCEPTED
+**Scope:** Removal of the superseded shared passcode authorization path
+**Date:** 2026-08-09
+
+### Context
+
+D037 replaced the browser-supplied six-digit passcode as My Studio's security boundary with authenticated Supabase identity and a database-verified administrator role. Step 7B confirmed that publication and storage operations also pass through the shared administrator middleware. The remaining keypad, provider, verification server function, constant-time matcher, environment-variable reads, and unlock redirect are orphaned compatibility code and protect no remaining privileged operation.
+
+### Decision
+
+Remove the six-digit passcode UI, browser state, verifier, server helper, `ADMIN_PASSCODE` reads, and `/admin/unlock` compatibility route. My Studio has one authorization path:
+
+authenticated Supabase user → verified database administrator role → protected privileged operation.
+
+The shared Studio administrator middleware, Supabase session verification, origin-based CSRF protection, RLS, publication validation, and storage boundaries remain unchanged. Existing `/admin/packs`, `/admin/scales`, and `/admin/scenes` redirects remain as non-authentication compatibility links into protected Studio routes. The subtle `AdminTrigger` remains a navigation affordance only and confers no access.
+
+### Rationale
+
+Keeping an unused shared-secret system creates misleading security expectations, unnecessary secret-management surface, and a possible future bypass pattern. Removing it makes the implemented authorization model match the accepted architecture and leaves route-level and operation-level enforcement explicit.
+
+### Consequences
+
+- the repository has no live shared-passcode authorization path;
+- `ADMIN_PASSCODE` is no longer read by application code;
+- `/admin/unlock` no longer exists;
+- anonymous and non-administrator users continue to fail closed;
+- authenticated administrators continue through the shared middleware;
+- deployment environments may remove any externally configured obsolete `ADMIN_PASSCODE` secret independently;
+- unrelated hexadecimal-color validation and gameplay progression terminology are unaffected.
+
+### Alternatives considered
+
+- **Keep the passcode as an emergency fallback:** rejected because this would recreate a second, weaker administrator authority.
+- **Keep only the unlock redirect:** rejected because it preserves an obsolete authentication concept without compatibility value.
+- **Replace the passcode with another shared secret:** rejected because Supabase identity plus verified role is the single accepted model.
+
+### Migration and verification
+
+- inventory every passcode component, hook, route, server function, environment read, type, test, client call, and document reference;
+- remove only orphaned passcode-specific code;
+- regenerate the route tree without `/admin/unlock`;
+- prove no live passcode references or stale imports remain;
+- rerun administrator authorization, CSRF, Studio build, and production-build checks;
+- verify migrations, generated Supabase types, RLS, publication validation, storage validation, rhythm/runtime, and SYS routes remain unchanged.
+
+### Supersedes / superseded by
+
+Supersedes only the temporary passcode-compatibility retention and removal deferrals in D037 and D038. It does not change their accepted account authorization, authoring, publication, preview, or storage decisions.
+
+### Source
+
+Explicit project-owner instruction, 2026-08-09; Reconciliation Step 7C.
 
 ---
 

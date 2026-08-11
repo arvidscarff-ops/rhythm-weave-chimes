@@ -163,9 +163,11 @@ destination, and recovery/verification plan.
 - The published UI did not expose a deployment commit identifier. The
   repository revision identifies the audited source snapshot, but exact
   deployment-to-commit identity was not independently verified.
-- My Studio content is protected by its passcode gate. No credential was used,
-  so authenticated Studio data and screens remain represented by source,
-  schema, and the data-preservation inventory rather than private screenshots.
+- At the R1 preservation snapshot, My Studio content was protected by the
+  now-superseded passcode gate. No credential was used, so authenticated Studio
+  data and screens remain represented by source, schema, and the
+  data-preservation inventory rather than private screenshots. D037 and D039
+  record the replacement account-and-role authorization model.
 - The current canvas recorder captures only the primary canvas and no audio; it
   was not treated as a complete preservation method.
 - Runtime performance, hidden-tab, suspension, and long-session baselines

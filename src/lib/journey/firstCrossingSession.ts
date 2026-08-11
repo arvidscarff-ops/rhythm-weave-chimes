@@ -59,8 +59,22 @@ export type FirstCrossingSession = Readonly<{
   suspendForBackground(): FirstCrossingSessionState;
   resumeFromBackground(): FirstCrossingSessionState;
   complete(): FirstCrossingSessionState;
+  /**
+   * Complete at an externally authoritative finite journey boundary. This may
+   * trim only time observed beyond that boundary by a sparse caller sample.
+   */
+  completeAt(activeElapsedSeconds: number): FirstCrossingSessionState;
   /** Settle active journey time through the supplied monotonic position. */
   sample(): FirstCrossingSessionState;
+  /**
+   * Settle active time without accepting time beyond a caller-owned finite
+   * journey boundary. The session does not own or interpret that boundary.
+   */
+  sampleThrough(activeElapsedCeiling: number): FirstCrossingSessionState;
+  /** Read accepted lifecycle state without consulting the TimeSource. */
+  peek(): FirstCrossingSessionState;
+  /** Compose a snapshot without consulting the TimeSource. */
+  peekSnapshot(): FirstCrossingSessionSnapshotV1;
   /** Settle time and return a deeply immutable, JSON-serializable snapshot. */
   snapshot(): FirstCrossingSessionSnapshotV1;
 }>;
@@ -187,6 +201,9 @@ function createSession(
 
   let lastObservedTimeSeconds: number | null = null;
   let activeSinceSeconds: number | null = null;
+  // Lowest value to which the most recently observed sparse interval may be
+  // trimmed when an external finite owner identifies its exact boundary.
+  let completionFloorSeconds = lifecycle.activeElapsedSeconds;
 
   function readMonotonicTime(): number {
     const value = timeSource();
@@ -216,10 +233,24 @@ function createSession(
     }
   }
 
-  function settleActiveTime(keepWindowOpen: boolean): void {
+  function settleActiveTime(keepWindowOpen: boolean, activeElapsedCeiling?: number): void {
     if (activeSinceSeconds === null) return;
+    if (activeElapsedCeiling !== undefined) {
+      assertElapsed(activeElapsedCeiling);
+      if (activeElapsedCeiling < lifecycle.activeElapsedSeconds) {
+        throw new Error(
+          "FirstCrossingSession active elapsed ceiling cannot regress accepted journey time.",
+        );
+      }
+    }
     const now = readMonotonicTime();
-    lifecycle.activeElapsedSeconds += now - activeSinceSeconds;
+    const unsettledSeconds = now - activeSinceSeconds;
+    completionFloorSeconds = lifecycle.activeElapsedSeconds;
+    const acceptedSeconds =
+      activeElapsedCeiling === undefined
+        ? unsettledSeconds
+        : Math.min(unsettledSeconds, activeElapsedCeiling - lifecycle.activeElapsedSeconds);
+    lifecycle.activeElapsedSeconds += acceptedSeconds;
     activeSinceSeconds = keepWindowOpen ? now : null;
   }
 
@@ -235,8 +266,7 @@ function createSession(
     });
   }
 
-  function snapshot(): FirstCrossingSessionSnapshotV1 {
-    settleActiveTime(true);
+  function peekSnapshot(): FirstCrossingSessionSnapshotV1 {
     return Object.freeze({
       schemaVersion: FIRST_CROSSING_SESSION_SNAPSHOT_VERSION,
       config,
@@ -248,6 +278,42 @@ function createSession(
         activeElapsedSeconds: lifecycle.activeElapsedSeconds,
       }),
     });
+  }
+
+  function snapshot(): FirstCrossingSessionSnapshotV1 {
+    settleActiveTime(true);
+    return peekSnapshot();
+  }
+
+  function finishAt(activeElapsedSeconds?: number): FirstCrossingSessionState {
+    if (!lifecycle.started) {
+      throw new Error("A FirstCrossingSession must start before it can complete.");
+    }
+    if (lifecycle.completed) return state();
+    const completionFloorBeforeSettle = completionFloorSeconds;
+    if (activeElapsedSeconds !== undefined) {
+      assertElapsed(activeElapsedSeconds);
+      if (activeElapsedSeconds < completionFloorBeforeSettle) {
+        throw new Error(
+          "FirstCrossingSession cannot complete before previously accepted journey time.",
+        );
+      }
+    }
+    settleActiveTime(false);
+    if (activeElapsedSeconds !== undefined) {
+      if (activeElapsedSeconds > lifecycle.activeElapsedSeconds) {
+        beginActiveWindow();
+        throw new Error(
+          "FirstCrossingSession cannot complete beyond observed active journey time.",
+        );
+      }
+      lifecycle.activeElapsedSeconds = activeElapsedSeconds;
+    }
+    completionFloorSeconds = lifecycle.activeElapsedSeconds;
+    lifecycle.completed = true;
+    lifecycle.explicitlyPaused = false;
+    lifecycle.backgroundSuspended = false;
+    return state();
   }
 
   // Hydrating a running session establishes "now" as its new baseline. Time
@@ -303,21 +369,26 @@ function createSession(
     },
 
     complete(): FirstCrossingSessionState {
-      if (!lifecycle.started) {
-        throw new Error("A FirstCrossingSession must start before it can complete.");
-      }
-      if (lifecycle.completed) return state();
-      settleActiveTime(false);
-      lifecycle.completed = true;
-      lifecycle.explicitlyPaused = false;
-      lifecycle.backgroundSuspended = false;
-      return state();
+      return finishAt();
+    },
+
+    completeAt(activeElapsedSeconds: number): FirstCrossingSessionState {
+      return finishAt(activeElapsedSeconds);
     },
 
     sample(): FirstCrossingSessionState {
       settleActiveTime(true);
       return state();
     },
+
+    sampleThrough(activeElapsedCeiling: number): FirstCrossingSessionState {
+      assertElapsed(activeElapsedCeiling);
+      settleActiveTime(true, activeElapsedCeiling);
+      return state();
+    },
+
+    peek: state,
+    peekSnapshot,
 
     snapshot,
   });

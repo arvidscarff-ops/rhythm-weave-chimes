@@ -1,9 +1,12 @@
-import type { FirstCrossingSession } from "./firstCrossingSession";
-
 export type FirstCrossingVisibilitySource = Readonly<{
   hidden: boolean;
   addEventListener(type: "visibilitychange", listener: () => void): void;
   removeEventListener(type: "visibilitychange", listener: () => void): void;
+}>;
+
+export type FirstCrossingVisibilityControls = Readonly<{
+  suspendForBackground(): unknown;
+  resumeFromBackground(): unknown;
 }>;
 
 /**
@@ -15,7 +18,7 @@ export type FirstCrossingVisibilitySource = Readonly<{
  */
 export function installFirstCrossingVisibility(
   source: FirstCrossingVisibilitySource,
-  session: Pick<FirstCrossingSession, "suspendForBackground" | "resumeFromBackground">,
+  session: FirstCrossingVisibilityControls,
 ): () => void {
   const onVisibilityChange = () => {
     if (source.hidden) session.suspendForBackground();
@@ -29,7 +32,7 @@ export function installFirstCrossingVisibility(
 }
 
 export function installDocumentFirstCrossingVisibility(
-  session: Pick<FirstCrossingSession, "suspendForBackground" | "resumeFromBackground">,
+  session: FirstCrossingVisibilityControls,
 ): () => void {
   if (typeof document === "undefined") return () => undefined;
   return installFirstCrossingVisibility(document, session);

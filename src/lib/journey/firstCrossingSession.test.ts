@@ -124,6 +124,40 @@ describe("FirstCrossingSession active journey time", () => {
     expect(session.sample().activeElapsedSeconds).toBe(50_000);
   });
 
+  it("can accept time only through an externally owned finite boundary", () => {
+    const { time, session } = makeSession();
+    session.start();
+    time.advance(12);
+
+    expect(session.sampleThrough(10).activeElapsedSeconds).toBe(10);
+    time.advance(1_000);
+    expect(session.sampleThrough(10).activeElapsedSeconds).toBe(10);
+    expect(session.completeAt(10)).toEqual(
+      expect.objectContaining({ status: "completed", activeElapsedSeconds: 10 }),
+    );
+  });
+
+  it("can complete at an exact boundary after a sparse observation overshoots it", () => {
+    const { time, session } = makeSession();
+    session.start();
+    time.advance(12);
+
+    expect(session.completeAt(10)).toEqual(
+      expect.objectContaining({ status: "completed", activeElapsedSeconds: 10 }),
+    );
+  });
+
+  it("does not trim time accepted before the latest sparse interval", () => {
+    const { time, session } = makeSession();
+    session.start();
+    time.advance(5);
+    session.sample();
+    time.advance(5);
+    session.sample();
+
+    expect(() => session.completeAt(4)).toThrow("previously accepted journey time");
+  });
+
   it("rejects a time source that moves backwards", () => {
     const { time, session } = makeSession(10);
     session.start();
@@ -208,6 +242,16 @@ describe("FirstCrossingSession identity and reconstruction", () => {
     expect(Object.isFrozen(snapshot)).toBe(true);
     expect(Object.isFrozen(snapshot.config)).toBe(true);
     expect(Object.isFrozen(snapshot.lifecycle)).toBe(true);
+  });
+
+  it("can peek accepted state and snapshot without consulting advancing time", () => {
+    const { time, session } = makeSession();
+    session.start();
+    time.advance(5);
+
+    expect(session.peek().activeElapsedSeconds).toBe(0);
+    expect(session.peekSnapshot().lifecycle.activeElapsedSeconds).toBe(0);
+    expect(session.snapshot().lifecycle.activeElapsedSeconds).toBe(5);
   });
 
   it("does not generate or replace run identity during hydration", () => {

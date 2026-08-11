@@ -3,7 +3,7 @@
 **Document role:** Canonical terminology and status guide  
 **Run:** 8 of the PHASE Project Bible documentation plan  
 **Authority:** Normalizes language; does not resolve entries marked unresolved  
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-11
 
 ---
 
@@ -344,13 +344,21 @@ The route’s expected duration before current conditions and approved modifiers
 
 The duration calculated for a particular transit after relevant authoritative conditions.
 
+### FirstCrossingSession
+
+**Status:** CANONICAL technical ownership concept; implementation pending
+
+The coordinator for one First Crossing run. It owns run identity, route-definition identity, freeze-aware active journey time, pause/visibility state, crossing state, ephemeral movement state, and reconstructable transmission state.
+
+It is not a musical clock. `engineClock` remains the separate sole live musical transport authority.
+
 ### Arrival
 
 **Status:** CANONICAL
 
 Completion of a transit at its destination through a designed state/formal transition.
 
-Its exact relationship to Phase Zero is unresolved.
+For the current First Crossing, finite route arrival is independent from Phase Zero. The higher-level musical/presentational form of arrival remains unresolved.
 
 ### Glider
 
@@ -589,6 +597,24 @@ Stable identity shared by audio and visual representations of the same musical e
 **Status:** CANONICAL technical concept
 
 Current renderable state derived from authoritative musical position and composition parameters.
+
+### Relationship candidate
+
+**Status:** STRONG SYS-001 DIRECTION; exact definition **UNRESOLVED**
+
+A possible exact mathematical relationship among authoritative voice phases that may be rendered or offered for optional interaction. Rendered geometry cannot create the candidate's musical authority.
+
+### Crystallization
+
+**Status:** STRONG EXPLORATORY DIRECTION
+
+Proposed optional curation or shaping of an exact relationship candidate into persistent-for-the-current-context audiovisual structure. The mechanic, selection model, sonic mapping, and ownership are unresolved and are not First Crossing requirements.
+
+### Crossing Form
+
+**Status:** EXPLORATORY / POST-MVP
+
+Proposed completed audiovisual structure associated with a crossing. Persistence, archive, reuse, sharing, progression, and player-facing authoring are deferred and not canonized product behavior.
 
 ### Chladni pattern/mode
 

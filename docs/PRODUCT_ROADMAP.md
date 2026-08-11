@@ -3,7 +3,7 @@
 **Document role:** Architecture-aware build sequencing  
 **Run:** 7 of the PHASE Project Bible documentation plan  
 **Authority:** Strategic sequencing; not a claim about repository implementation  
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-11
 
 ---
 
@@ -290,7 +290,7 @@ After the instrument and Studio foundation is stable, test:
 - WebGL and shader workflows;
 - procedural sky, cloud, fog, light, trail, and particle systems;
 - 2D, 2.5D, and restrained 3D approaches;
-- cockpit framing;
+- an unobstructed exterior-forward extreme-altitude atmosphere target;
 - open-source/licensed asset pipelines;
 - reduced motion;
 - long-session performance.
@@ -380,7 +380,7 @@ Select the rendering stack from prototypes, visual review, production feasibilit
 - one origin;
 - one destination;
 - one route;
-- one glider/cockpit context;
+- one coherent glider/transit context;
 - one Trigger Engine/composition;
 - one sound world and scale;
 - route progress;
@@ -395,12 +395,16 @@ Select the rendering stack from prototypes, visual review, production feasibilit
 
 - stable long-duration sky;
 - recognizable PHASE atmosphere;
-- cockpit framing;
+- unobstructed exterior-forward view;
+- extreme-altitude cloud geography mainly below the player;
+- open upper atmosphere, enormous sightlines, and a stable distant horizon;
 - rhythmic geometry;
 - calm state hierarchy;
 - daylight beauty;
 - one controlled sign of unease;
 - reduced-motion mode.
+
+Cockpit, canopy, wings, nose, dashboard, and other hardware framing are not required for the current MVP primary view. Long-term cockpit/glider presentation remains available for later design.
 
 ### Narrative proof
 
@@ -408,6 +412,21 @@ Select the rendering stack from prototypes, visual review, production feasibilit
 - human context;
 - one unusual transmission;
 - no lore dump.
+
+The content set should remain small and sparse. Silence is part of the crossing. WRLD owns voice/content/canon review; SYS-010 owns deterministic delivery.
+
+### Current implementation ownership
+
+Before First Crossing integration:
+
+1. document and define the `FirstCrossingSession` contract;
+2. make SYS-007 duration immutable and lifecycle-threshold delivery exactly once;
+3. make SYS-010 consume freeze-aware session time, support restoration and priority tiers, and fade/duck into arrival;
+4. keep SYS-006 movement ephemeral for MVP;
+5. bind route/composition/environment through SYS-009 without creating another musical transport;
+6. compose the result through SYS-008/SYS-011 while `engineClock` remains the sole musical transport.
+
+The repository contains no authoritative SYS-002 task definition. Do not invent one; reconcile it later only if the separate Command Center source of truth supplies it.
 
 ### Evaluation questions
 
@@ -1009,7 +1028,7 @@ GitHub is the code/history source of truth. Published PHASE remains a separate d
 - first sound world;
 - first environmental stack;
 - weather modulation model;
-- pause/failure policy;
+- general post-MVP pause/failure policy; the current First Crossing freeze policy is resolved by D041;
 - account timing;
 - progression structure;
 - Meridian decision;

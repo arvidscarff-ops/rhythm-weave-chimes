@@ -4,7 +4,7 @@
 **Run:** 3 of the PHASE Project Bible documentation plan  
 **Authority:** Governing target behavior for rhythm, timing, Trigger Engines, and audiovisual synchronization  
 **Evidence boundary:** Defines known invariants and safe contracts; it does not claim that the current repository already implements them  
-**Last updated:** 2026-08-09
+**Last updated:** 2026-08-11
 
 ---
 
@@ -452,7 +452,8 @@ PHASE will eventually contain several legitimate forms of time. They must be nam
 | **Musical position** | Canonical position in the composition | Rhythm authority |
 | **Macro-cycle phase** | Normalized position in the shared closure period | Derived from musical position |
 | **Voice phase** | Normalized position for one voice | Derived from musical position and voice definition |
-| **Transit elapsed time** | Elapsed duration of the in-world crossing | Transit system |
+| **Active journey time** | Freeze-aware elapsed time for the current First Crossing run | `FirstCrossingSession` |
+| **Transit elapsed time** | Elapsed duration of the in-world crossing | Transit system / `FirstCrossingSession` for the current MVP |
 | **Route progress** | Normalized completed portion of the crossing | Transit system, possibly derived from authoritative transit timing |
 | **Render time** | Timestamp of the current visual frame | Renderer only |
 
@@ -1030,15 +1031,17 @@ The composition layer receives a versioned/quantized modulation plan and applies
 
 ### 14.5 Arrival
 
-Whether arrival must coincide with macro Phase Zero is unresolved.
+**ACCEPTED CURRENT FIRST CROSSING POLICY — D041:** Finite route completion does not depend on Phase Zero. SYS-007 may reach arrival at any musical position. Route runtime owns the fact of arrival; it must not wait for a musical boundary.
 
-Recommended possibilities:
+A higher journey/composition presentation layer may stage an arrival coda or another formal transition at an appropriate musical boundary without changing route progress, delaying arrival, or making Phase Zero the route authority.
 
-- exact Phase Zero arrival;
-- completion at a higher-level formal boundary containing multiple macro-cycles;
-- a designed coda entered at the final valid boundary.
+The broader relationship between arrival presentation and musical form remains unresolved. Future presentation possibilities include:
 
-Arbitrary truncation of a composition at route completion should be avoided.
+- present the already-completed route arrival at a following Phase Zero;
+- use a higher-level formal boundary containing multiple macro-cycles;
+- enter a designed coda at the next valid boundary.
+
+Arbitrary audio truncation at route completion should be avoided. If a transmission is active when arrival begins, its presentation fades or ducks into arrival rather than delaying arrival or hard-cutting.
 
 ---
 
@@ -1243,7 +1246,7 @@ Separate:
 
 ### 18.2 Pause
 
-**ACCEPTED CURRENT FIRST CROSSING POLICY — D034:** Explicit pause freezes musical transport time. Resume continues from the exact preserved musical position; it does not catch up missed events in a burst.
+**ACCEPTED CURRENT FIRST CROSSING POLICY — D034/D041:** Explicit pause freezes musical transport time and the separate active journey time. Resume continues from both preserved positions; it does not catch up missed events in a burst. `FirstCrossingSession` coordinates the journey lifecycle but does not own or replace musical transport.
 
 If musical playback pauses:
 
@@ -1272,7 +1275,7 @@ The system must detect suspension and choose a declared recovery policy:
 
 It must not unknowingly continue with desynchronized local accumulators.
 
-**ACCEPTED CURRENT FIRST CROSSING POLICY — D034:** Hidden/background suspension freezes the existing live transport upstream. Returning to visibility resumes from the preserved musical position only if it had been playing before suspension. The pure live-timeline adapter has no visibility lifecycle. Active transmission duration freezes with crossing state under the same policy.
+**ACCEPTED CURRENT FIRST CROSSING POLICY — D034/D041:** Hidden/background suspension freezes the existing live transport upstream and freezes `FirstCrossingSession` active journey time. Returning to visibility resumes from the preserved positions only if they had been active before suspension. The pure live-timeline adapter has no visibility lifecycle. Active transmission duration freezes with crossing state under the same policy.
 
 ### 18.4 Seek and restore
 
@@ -1283,6 +1286,8 @@ Even if seeking is not exposed to players, test and restore tooling should be ab
 - normalized phases;
 - deterministic seeded state;
 - visual snapshot.
+
+Production restoration of the First Crossing reinstates persisted transmission state but does not retroactively fire transmissions from progress windows skipped before the restored position. Developer scrubbing is a separate diagnostic contract.
 
 ---
 
@@ -1631,7 +1636,7 @@ Confirmed implementation findings must remain separate from recommendations.
 | ARA-002 | Current bridge is logical-transport-led through the single `engineClock` | **RESOLVED BY D034** |
 | ARA-003 | Exact voice/rhythm data model | **PARTIALLY RESOLVED BY D033/D034** |
 | ARA-004 | Migrated Phase-Alignment snapshots explicitly own macro duration | **RESOLVED BY D034 FOR CURRENT BRIDGE** |
-| ARA-005 | Arrival relationship to Phase Zero/formal closure | **UNRESOLVED** |
+| ARA-005 | Route arrival is independent from Phase Zero; higher-level arrival presentation/formal closure | **ROUTE OWNERSHIP RESOLVED BY D041; PRESENTATION UNRESOLVED** |
 | ARA-006 | Weather-to-duration/composition mapping model | **UNRESOLVED** |
 | ARA-007 | Pause and hidden/background suspension freeze musical transport | **RESOLVED BY D034 FOR CURRENT FIRST CROSSING** |
 | ARA-008 | Exact 432 Hz reference pitch and temperament | **UNRESOLVED** |

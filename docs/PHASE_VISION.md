@@ -4,7 +4,7 @@
 **Run:** 2 of the PHASE Project Bible documentation plan  
 **Authority:** Governing creative north star, subordinate to explicit locked decisions in `CONTEXT_INDEX.md`  
 **Status:** Foundational vision; unresolved lore and mechanical details remain explicitly open  
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-11
 
 ---
 
@@ -63,7 +63,7 @@ A transit is not a loading screen, fast-travel animation, playlist wrapper, or p
 The result should feel simultaneously like:
 
 - operating an instrument;
-- inhabiting a cockpit;
+- inhabiting a glider-borne crossing;
 - listening to an album that will never recur in exactly the same way;
 - watching weather move across a living world;
 - performing necessary work for a distant civilization;
@@ -514,7 +514,7 @@ When attention returns, the player should be able to answer:
 - Did I receive anything important?
 - Is there something I now need to do?
 
-Re-entry should feel like looking back out of a cockpit window—not reopening a dashboard of missed notifications.
+Re-entry should feel like looking back out at the route—not reopening a dashboard of missed notifications.
 
 ---
 
@@ -549,7 +549,7 @@ However, environmental systems must not introduce a second musical clock or dest
 
 Trigger Engines and harmonic geometry may be abstract, but they should feel situated inside the world.
 
-The player should understand them as instrumentation, perception, navigation, calibration, or another coherent in-world function—not as an unrelated generative-art layer pasted over a cockpit.
+The player should understand them as instrumentation, perception, navigation, calibration, or another coherent in-world function—not as an unrelated generative-art layer pasted over the journey.
 
 The exact diegetic interpretation remains open.
 
@@ -1078,6 +1078,26 @@ An excellent crossing should:
 - make the player willing to begin another crossing.
 
 No amount of lore, progression, social infrastructure, or world scale can compensate if the crossing itself is not compelling.
+
+### 20.1 Current First Crossing experiential contract
+
+**ACCEPTED — D042**
+
+The current First Crossing is one narrow, coherent, approximately 10–20 minute proof. Inactivity is a supported play style, not a failure state. The same crossing must remain valid under active interaction, intermittent tending, mostly observational use, and peripheral attention.
+
+It is instrument-first, not instrument-only. A complete Trigger Engine seed must provide immediate audiovisual value while transit, environment, movement, transmissions, departure, and arrival imply a larger operating world. Mystery comes through coherent implication and unfamiliar references rather than explanation.
+
+Evaluate the experience across five timescales:
+
+1. **Seconds:** tactile and sensory pleasure.
+2. **One to five minutes:** optional light tending.
+3. **Five to twenty minutes:** evolving attention or meaningful choices.
+4. **One journey:** strategic and/or emotional arc.
+5. **Hours and days:** progression and attachment, deferred beyond this first proof.
+
+The First Crossing may simplify departure into route selection or a minimal transition into flight. It does not resolve the final movement mechanic, map, preparation depth, progression, economy, destination gameplay, or launch ritual.
+
+**ACCEPTED CURRENT MVP VIEW — D043:** The primary view is an unobstructed exterior-forward view across an extreme-altitude cloud world. Cockpit, canopy, wings, nose, dashboard, and other hardware framing are not required for this MVP. Long-term cockpit, glider, and alternate-camera possibilities remain open.
 
 ---
 

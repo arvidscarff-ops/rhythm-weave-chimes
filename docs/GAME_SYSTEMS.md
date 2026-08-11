@@ -4,7 +4,7 @@
 **Run:** 4 of the PHASE Project Bible documentation plan  
 **Authority:** Target mechanical intent, subordinate to locked canon in `CONTEXT_INDEX.md` and timing invariants in `AUDIO_RHYTHM_ARCHITECTURE.md`  
 **Evidence boundary:** Describes intended behavior and maturity; it does not claim that systems are implemented  
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-11
 
 ---
 
@@ -228,6 +228,8 @@ Duration may depend on:
 
 The authoritative relationship between duration and musical time is defined as unresolved in `AUDIO_RHYTHM_ARCHITECTURE.md`.
 
+**ACCEPTED CURRENT FIRST CROSSING POLICY — D041:** The effective crossing duration is fixed when the run launches and cannot be mutated during that run. This does not select a universal duration-to-composition mapping for later routes.
+
 ### 5.5 Attention modes
 
 **Maturity:** **LOCKED — CORE** as a product principle; exact rules **UNRESOLVED**
@@ -242,7 +244,7 @@ The game may adjust presentation or optional interaction density, but must not c
 
 ### 5.6 Pause, resume, and absence
 
-**Maturity:** **UNRESOLVED**
+**Maturity:** General policy **UNRESOLVED**; current First Crossing policy **ACCEPTED — D041**
 
 Open questions:
 
@@ -259,6 +261,8 @@ Any answer must respect:
 - persistent world state;
 - deterministic musical reconstruction;
 - low-dopamine/focus use.
+
+For the current First Crossing, explicit pause and hidden/background suspension freeze active journey time and the separate `engineClock` musical transport at their preserved positions. Resume continues without a catch-up burst. This scoped policy does not resolve all later offline, shared-world, failure, or persistence behavior.
 
 ### 5.7 Failure and death
 
@@ -304,6 +308,32 @@ On completion, the system may record:
 - deterministic seed where appropriate.
 
 The exact data model belongs to implementation planning.
+
+### 5.9 Current First Crossing session contract
+
+**Maturity:** **ACCEPTED TARGET — D041**; implementation pending
+
+`FirstCrossingSession` owns one run's journey/session lifecycle:
+
+- unique crossing run ID;
+- route-definition ID;
+- freeze-aware active journey time;
+- pause and visibility state;
+- crossing snapshot;
+- ephemeral movement state and supplied movement delta;
+- transmission state sufficient for deterministic reconstruction.
+
+It does not own musical transport. `engineClock` remains the sole live musical transport authority.
+
+For the MVP:
+
+- movement is ephemeral session gameplay state and does not require exact trajectory persistence across remounts;
+- crossing duration is immutable after launch;
+- every lifecycle threshold crossed by route progress is emitted exactly once, even across sparse updates;
+- arrival occurs when finite route progress completes and is independent from Phase Zero;
+- a higher presentation layer may stage arrival musically without changing route-runtime ownership;
+- production restoration reinstates persisted transmission state but does not retroactively fire skipped eligibility windows;
+- developer scrub behavior is separate from production restoration.
 
 ---
 
@@ -632,12 +662,14 @@ The glider is:
 
 One prototype glider must provide:
 
-- cockpit/POV context;
+- a coherent transit point of view;
 - readable route state;
 - space for Trigger Engine/harmonic instrumentation;
 - environmental visibility;
 - a coherent sound bed;
 - enough identity to make departure and arrival tangible.
+
+**CURRENT MVP CORRECTION — D043:** The First Crossing primary view is unobstructed and exterior-forward. Cockpit, canopy, wings, nose, dashboard, and other hardware framing are not required for this proof. Long-term cockpit/glider presentation remains planned but unresolved.
 
 ### 10.3 Glider properties
 
@@ -1041,6 +1073,23 @@ The system must eventually distinguish:
 - what characters believe;
 - what players infer;
 - what remains deliberately unknown.
+
+### 14.8 First Crossing voice and ownership boundary
+
+**Maturity:** **ACCEPTED CURRENT DIRECTION — D042**
+
+The First Crossing uses a small transmission set with a sparse, institutional, operational, functional, understated, and human voice. Silence matters. Transmissions should sound as though they already exist for practical reasons inside the world, not as narration written to explain the setting to the player.
+
+They may imply unfamiliar places, people, routes, incidents, infrastructure, terminology, and other Navigators. They should not become exposition dumps, constant radio chatter, or mandatory interactions. Draft lines and proper nouns remain non-canon until reviewed against current lore and naming authority.
+
+WRLD owns content, tone, density philosophy, and canon review. SYS-010 owns deterministic scheduling, eligibility windows, priority, seeded selection, once-per-crossing behavior, active duration, restoration, and runtime lifecycle.
+
+For the current production target:
+
+- active transmission time freezes with the First Crossing session;
+- multiple eligible transmissions are filtered to the highest authored priority tier before deterministic seeded weighting;
+- restoration does not retroactively fire skipped windows;
+- arrival is not delayed, and an active transmission fades or ducks into arrival rather than hard-cutting.
 
 ---
 
@@ -1735,7 +1784,7 @@ Monetization requires a separate decision record.
 
 **Required:**
 
-- one glider/cockpit context;
+- one coherent glider/transit context using the exterior-forward MVP view;
 - one route;
 - one origin/destination relationship;
 - one Trigger Engine/composition;
@@ -1746,6 +1795,8 @@ Monetization requires a separate decision record.
 - a small set of routine and unusual transmissions;
 - departure and arrival;
 - basic diagnostics and performance validation.
+
+Interaction must remain valid under active, intermittent, mostly observational, and peripheral attention. A simplified departure is acceptable. Final map, launch, movement, progression, economy, and destination mechanics are not required.
 
 **Not required:**
 
@@ -1859,6 +1910,8 @@ Weather supplies authoritative condition inputs and route modifiers.
 
 Transit supplies an approved duration/form/modulation plan. It does not create a competing musical clock.
 
+For the current First Crossing, `FirstCrossingSession` supplies freeze-aware journey state while `engineClock` remains the separate sole musical transport.
+
 ### 29.6 Rhythm → Trigger Engines/audio
 
 The centralized rhythm system supplies authoritative event and phase state.
@@ -1909,9 +1962,9 @@ Player contributions remain observations/theories until explicitly promoted by a
 | ID | Decision | Status |
 |---|---|---|
 | GS-001 | Exact transit interaction model | **UNRESOLVED** |
-| GS-002 | Pause/background/resume behavior | **UNRESOLVED** |
+| GS-002 | Pause/background/resume behavior | **RESOLVED BY D041 FOR CURRENT FIRST CROSSING; GENERAL POLICY UNRESOLVED** |
 | GS-003 | Failure, death, and long-session consequence | **UNRESOLVED** |
-| GS-004 | Route arrival/formal closure relationship | **UNRESOLVED** |
+| GS-004 | Route arrival/formal closure relationship | **ROUTE ARRIVAL INDEPENDENT FROM PHASE ZERO BY D041; PRESENTATION/FORMAL CLOSURE UNRESOLVED** |
 | GS-005 | Geographic ontology: Zone/region/destination/corridor | **UNRESOLVED** |
 | GS-006 | Navigator ranks and progression axes | **UNRESOLVED** |
 | GS-007 | Meaning of Meridian and player relationship to it | **UNRESOLVED** |
@@ -1939,7 +1992,7 @@ The smallest version that can truthfully demonstrate PHASE must provide:
 
 1. a Navigator context;
 2. a meaningful origin and destination;
-3. a glider/cockpit;
+3. a coherent glider/transit context through the unobstructed exterior-forward MVP view;
 4. a route with legible progress and duration;
 5. a long-form deterministic audiovisual composition;
 6. Trigger Engine geometry driven by shared rhythm;

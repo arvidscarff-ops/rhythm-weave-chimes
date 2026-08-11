@@ -4,7 +4,7 @@
 **Run:** 6 of the PHASE Project Bible documentation plan  
 **Authority:** Governing art-direction principles and anti-references  
 **Evidence boundary:** Several referenced/generated images are unavailable in the retrieved conversation; this document does not reconstruct image-dependent final designs  
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-11
 
 ---
 
@@ -49,21 +49,24 @@ The visual identity is not “post-apocalyptic sci-fi” in general. It is the c
 
 An ideal PHASE frame might show:
 
-- a quiet glider cockpit at extreme altitude;
+- an unobstructed exterior-forward view at extreme altitude;
 - a cold white-blue sky opening over a deep cloud field;
-- dark, repaired instrumentation carrying old MTC markings;
 - geometric harmonic forms moving with exact musical purpose;
-- small signs of human use—wear, tape, handwriting, a token, a replaced panel;
 - distant weather that appears serene before its scale or behavior becomes disturbing;
 - one saturated note of green, red, or signal color used with discipline;
 - no need for darkness to create fear.
 
 The frame should communicate:
 
-> This is beautiful.  
-> This is working equipment.  
-> This has existed longer than its current user.  
+> This is beautiful.
+>
+> This world is operational.
+>
+> Its systems and history extend beyond the current viewer.
+>
 > The sky is behaving according to rules I cannot fully read.
+
+**CURRENT FIRST CROSSING MVP — D043:** This primary view contains no required cockpit, canopy, wings, nose, dashboard, or other hardware framing. Cloud geography sits mainly below the player beneath an open upper atmosphere, enormous sightlines, and a stable distant horizon. Long-term cockpit/glider views may later restore maintained equipment, MTC markings, personal wear, and physical instrumentation once those designs are resolved.
 
 ---
 
@@ -1067,11 +1070,13 @@ Three glider references and proposed concept sheets are mentioned but not includ
 
 ## 15. Cockpit and transit point of view
 
+This section preserves a **LONG-TERM / POST-MVP POSSIBILITY**. It does not define the current First Crossing primary view, which is exterior-forward and unobstructed under D043.
+
 ### 15.1 Cockpit role
 
-**LOCKED PRINCIPLE**
+**STRONG LONG-TERM DIRECTION — NOT AN MVP REQUIREMENT**
 
-The cockpit is the bridge between:
+A future cockpit may become a bridge between:
 
 - world;
 - instrument;
@@ -1084,6 +1089,8 @@ The cockpit is the bridge between:
 The sky/environment must retain priority.
 
 Instrumentation should frame and interpret the view rather than cover it.
+
+For the current First Crossing MVP, the environment is not framed by cockpit, canopy, wings, nose, or dashboard hardware.
 
 ### 15.3 Layering
 
@@ -1748,7 +1755,7 @@ Support:
 - contrast modes;
 - subtitles/transcripts;
 - localization;
-- readable cockpit information;
+- readable route and instrument information;
 - long viewing comfort.
 
 ---
@@ -1806,7 +1813,7 @@ Art production should use shared:
 
 ### 27.5 Realtime proof
 
-Concepts for skies, anomalies, geometry, and cockpit UI must be tested in motion and at target duration.
+Concepts for skies, anomalies, geometry, and any future cockpit UI must be tested in motion and at target duration.
 
 A still image can hide:
 
@@ -1880,7 +1887,7 @@ Before approving a visual:
 | VD-007 | Navigator flight silhouette | **UNRESOLVED — missing images** |
 | VD-008 | Public attire and Meridian distinction | **UNRESOLVED** |
 | VD-009 | First glider silhouette and airframe logic | **UNRESOLVED — missing images** |
-| VD-010 | Cockpit physical/projected UI split | **UNRESOLVED** |
+| VD-010 | Post-MVP cockpit physical/projected UI split | **DEFERRED / UNRESOLVED** |
 | VD-011 | Trigger Engine visual taxonomy | **UNRESOLVED** |
 | VD-012 | Zone boundary language | **UNRESOLVED** |
 | VD-013 | Canon anomaly/organism designs | **UNRESOLVED** |
@@ -1894,15 +1901,17 @@ Before approving a visual:
 The first crossing should prove:
 
 1. a recognizable cold, living PHASE atmosphere;
-2. a glider/cockpit that feels maintained and necessary;
-3. an MTC presence without generic airline branding;
-4. exact rhythm expressed through Trigger Engine geometry;
-5. a sky capable of sustaining the full route duration;
-6. weather visible as system state;
-7. readable route progress and essential instrumentation;
-8. daylight beauty with latent unease;
-9. long-session visual comfort;
-10. arrival with a distinct change of place and atmosphere.
+2. an unobstructed exterior-forward view with no required vehicle-hardware framing;
+3. extreme altitude, enormous sightlines, and cloud geography mainly below;
+4. open upper atmosphere, a stable distant horizon, and multiple cloud scales;
+5. slow monumental motion and a cold blue/white baseline;
+6. exact rhythm expressed through Trigger Engine geometry;
+7. a sky capable of sustaining the full route duration;
+8. weather visible as system state;
+9. readable route progress and essential instrumentation;
+10. daylight beauty with latent unease;
+11. long-session visual comfort;
+12. arrival with a distinct change of place and atmosphere.
 
 It does not require final:
 
@@ -1913,6 +1922,8 @@ It does not require final:
 - destination city;
 - organism;
 - maximum visual effects.
+
+It also does not require a final cockpit, canopy, wings, nose, dashboard, or glider silhouette. Those remain available for later PHASE development and are not rejected as long-term directions.
 
 ---
 

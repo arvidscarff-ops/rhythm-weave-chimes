@@ -4,7 +4,7 @@
 **Run:** 5 of the PHASE Project Bible documentation plan  
 **Authority:** Canon and mystery framework for the fictional setting  
 **Working setting label:** Kashmer-Alterra — **UNRESOLVED**, not a locked final universe title  
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-11
 
 ---
 
@@ -1556,9 +1556,20 @@ Their baseline is:
 - professional;
 - routine;
 - human;
-- restrained.
+- restrained;
+- sparse;
+- institutional and operational;
+- functional and understated.
 
 A brief break in professionalism should be more powerful than constant panic.
+
+Silence matters. Transmissions are occasional intrusions into music, atmosphere, movement, environmental sound, and solitude—not a constant radio-show layer.
+
+They should sound as though they already exist for practical reasons inside the world. They may refer to places, people, routes, incidents, warnings, infrastructure, other Navigators, and operational terminology the player does not yet understand. Their purpose is to demonstrate that work and life continue beyond the visible route, not to explain the setting for the player's benefit.
+
+Avoid exposition dumps, immediate terminology explanations, lore monologues, constant chatter, and messages that exist only to teach the player. A small, tonally consistent content set is sufficient for the First Crossing.
+
+WRLD owns transmission voice, content, density philosophy, and canon review. SYS-010 owns runtime scheduling and delivery. Draft transmission lines and proper nouns do not become objective canon until reviewed against this world bible, `CONTEXT_INDEX.md`, `GLOSSARY.md`, and accepted decisions.
 
 ### 24.3 Communication technology
 

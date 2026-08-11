@@ -10,7 +10,7 @@
 
 **Product-canon effect:** None on fictional canon
 
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-11
 
 ---
 
@@ -287,7 +287,85 @@ Reset must not:
 
 ---
 
-## 8. Evaluation questions
+## 8. Crystallization and originality status boundary
+
+The Trigger Engine Evolution / Crystallization handoff is a **STRONG EXPLORATORY DIRECTION**, not a production specification. The status layers below must remain distinct.
+
+### 8.1 Accepted constraints
+
+- Geometry expresses authoritative rhythm and never determines it.
+- A Trigger Engine begins from a complete seed composition that already sounds good.
+- Passive observation remains valid for the full experience.
+- Visual complexity need not equal audible voice count.
+- Additional visual nodes or relationships do not automatically create additional rhythmic voices.
+
+These constraints extend the existing architecture and gateway decisions; they do not create a crystallization mechanic by themselves.
+
+### 8.2 Strong SYS-001 direction
+
+Exact phase relationships may produce temporary relationship candidates such as alignments, mirrored arrangements, chains, radial relationships, or transient lattices. SYS-001 may explore optional player curation or crystallization of such candidates.
+
+PHASE should seek originality through meaningful interaction, curation, audiovisual consequence, and world integration rather than replacing simple truthful geometry with arbitrary decorative paths.
+
+The safe conceptual direction is:
+
+```text
+authoritative rhythm
+        ↓
+exact relationship candidate
+        ↓
+optional player/system command
+        ↓
+versioned crystallization state
+        ↓
+approved visual/audio/movement projections
+```
+
+Rendered geometry and collision remain unable to create authoritative events. Any change to voice count, cadence, ratio, or event topology must use the immutable composition-revision policy and exact Phase-Zero transition in D034.
+
+### 8.3 Exploratory mechanics
+
+The following remain **EXPLORATORY** and require explicit approval before implementation as product behavior:
+
+- what mathematically constitutes a relationship candidate;
+- how a player notices, selects, shapes, or crystallizes one;
+- compositional grammar and growth operations;
+- exact visual-to-sonic mapping;
+- density and orchestration governor details;
+- glider-specific form grammar or “genetic code”;
+- composition-to-propulsion coupling;
+- Crossing Forms and arrival presentation;
+- large mature structures containing many visual nodes/relationships.
+
+### 8.4 Deferred / post-MVP
+
+The following are **DEFERRED / POST-MVP**:
+
+- persistence of crystallized structures after a crossing;
+- archive, reuse, sharing, or export of Crossing Forms;
+- crystallization-linked progression;
+- player-facing Trigger Engine or crystallization authoring;
+- My Studio support beyond private developer evidence/configuration.
+
+### 8.5 R4 laboratory boundary
+
+The Reset R4 Pendulum, Orbital, and String Network families remain comparative development laboratories. They demonstrate that distinct geometry families can consume the same authoritative snapshot and event identities. They are not selected production gateway engines, glider families, crystallization systems, tuning decisions, or public product directions.
+
+### 8.6 Unresolved questions
+
+- Which exact relationships are eligible and how are they represented without geometry becoming authority?
+- How does optional interaction remain legible during both focused and peripheral use?
+- How may visual structure affect sound without uncontrolled voice or event density?
+- Which properties, if any, belong to Trigger Engine, glider, sound pack, route, or player?
+- Does crystallization affect movement, and if so, how is the effect bounded without creating a “more notes equals faster” optimum?
+- Does any Crossing Form persist after arrival?
+- Which one-mechanic proof, if any, belongs in the First Crossing?
+
+The repository does not currently contain an authoritative SYS-002 task definition. Do not invent one. Reconcile SYS-002 only if the separate Command Center source of truth later provides its actual scope.
+
+---
+
+## 9. Evaluation questions
 
 For each PHASE reference engine:
 
@@ -306,7 +384,7 @@ For each PHASE reference engine:
 
 ---
 
-## 9. Open reference questions
+## 10. Open reference questions
 
 - Which exact time ranges within the six selected works best demonstrate the target behaviors?
 - Which reference should most strongly guide the first PHASE engine family?

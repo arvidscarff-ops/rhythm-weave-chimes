@@ -3,7 +3,7 @@
 **Document role:** Permanent architectural and creative decision memory  
 **Run:** 7 of the PHASE Project Bible documentation plan  
 **Authority:** Accepted decisions outrank general target descriptions where they directly conflict; unresolved items are not decisions  
-**Last updated:** 2026-08-09
+**Last updated:** 2026-08-11
 
 ---
 
@@ -1400,6 +1400,265 @@ Explicit project-owner instruction, 2026-08-11; Reconciliation Step 7D.
 
 ---
 
+## D041 — First Crossing session time is separate from musical transport
+
+**Status:** ACCEPTED
+**Scope:** First Crossing session ownership, lifecycle, movement, crossing, and transmissions
+**Date:** 2026-08-11
+
+### Context
+
+The SYS-006 movement, SYS-007 crossing, and SYS-010 transmission prototypes correctly avoid owning musical rhythm, but they do not yet share one production journey lifecycle. In particular, crossing duration can be changed after launch, sparse updates can skip lifecycle notifications, and transmission duration can continue while the crossing is paused. Production composition needs a session owner without creating another musical transport.
+
+### Decision
+
+`FirstCrossingSession` owns the First Crossing run identity and journey/session lifecycle. Its production state includes:
+
+- a unique crossing run ID;
+- a route-definition ID;
+- freeze-aware active journey time;
+- explicit pause and visibility state;
+- the crossing snapshot;
+- ephemeral movement state and supplied movement delta;
+- transmission state sufficient for deterministic reconstruction.
+
+`FirstCrossingSession` is not a musical transport. The existing `engineClock` remains separate and is the sole live musical transport authority. Explicit pause and hidden/background suspension freeze both the current First Crossing's active journey time and `engineClock` at their preserved positions; resume continues without a catch-up burst.
+
+For the First Crossing MVP, movement is ephemeral session gameplay state. Exact trajectory persistence, replay, and canonical progression provenance are not required.
+
+Crossing duration becomes immutable when a run launches. Every lifecycle threshold crossed by finite route progress must be emitted exactly once, including when one update crosses multiple thresholds. Route arrival occurs when the finite crossing runtime reaches its destination and does not depend on Phase Zero.
+
+If arrival begins while a transmission is active, arrival is not delayed and the transmission is not hard-cut. Its presentation fades or ducks into the arrival transition. Production restoration reinstates persisted transmission state but does not retroactively fire transmissions from eligibility windows skipped before the restored position. Developer scrubbing remains a separate diagnostic behavior.
+
+When multiple transmissions are eligible, authored priority selects the highest eligible tier first. Deterministic seeded weighting selects within that tier.
+
+### Rationale
+
+One freeze-aware journey lifecycle prevents crossing, movement, and transmissions from disagreeing after pause or suspension while keeping finite route time distinct from wrapped musical time. Immutable launch configuration and exactly-once lifecycle enumeration make sparse updates deterministic. The transmission policies preserve authored intent and calm arrival pacing without allowing polling cadence or restoration to manufacture content.
+
+### Consequences
+
+- SYS-008 is the future orchestration owner for `FirstCrossingSession`; it remains unimplemented at this checkpoint;
+- SYS-007 must expose immutable production run configuration and exactly-once threshold events;
+- SYS-010 must consume supplied freeze-aware session time, support reconstruction, priority tiers, and arrival fade/duck signaling;
+- SYS-006 may remain lightweight because MVP movement is not persistent authoritative progression state;
+- route arrival may occur at any musical position;
+- a higher composition/presentation layer may stage arrival at a musically appropriate boundary without changing route-runtime ownership;
+- no journey system may replace, wrap, or compete with `engineClock` as musical authority.
+
+### Alternatives considered
+
+- **Use `engineClock` as journey progress:** rejected because route progress is finite and must remain independent from wrapped musical position and musical speed.
+- **Give each prototype its own pause policy:** rejected because hidden/background behavior would diverge across the experience.
+- **Catch up hidden journey/transmission time on resume:** rejected for the current First Crossing freeze policy.
+- **Delay arrival until Phase Zero:** rejected because SYS-007 route completion owns arrival and may occur at arbitrary musical position.
+- **Hard-cut an active transmission at arrival:** rejected in favor of a graceful fade/duck presentation.
+- **Replay every skipped transmission window after restore:** rejected because restoration must not create retroactive content bursts.
+
+### Migration and verification
+
+- define the pure `FirstCrossingSession` contract before broad integration;
+- update SYS-007, SYS-010, and SYS-006 through separately approved implementation tasks;
+- test sparse threshold crossing, immutable launch duration, freeze/resume, restoration, priority selection, and arrival presentation;
+- verify the session creates no musical clock and `engineClock` remains the only live musical transport.
+
+### Supersedes / superseded by
+
+Resolves the current First Crossing portion of GS-002 and ARA-005 while leaving general post-MVP failure, pause, and composition-form policies open. It supersedes the SYS-010 prototype's hard-cut arrival and independently advancing transmission-duration behavior.
+
+### Source
+
+Explicit project-owner decisions, Catch-up Step 9; approved Relay reconciliation, Catch-up Step 10A.
+
+---
+
+## D042 — The First Crossing has a narrow experiential and transmission contract
+
+**Status:** ACCEPTED
+**Scope:** First Crossing experience, attention, departure, mystery, and transmission voice
+**Date:** 2026-08-11
+
+### Context
+
+WRLD-001 and WRLD-002 consolidate the intended experience while preserving unresolved mechanics. Without a bounded contract, the First Crossing risks becoming either disconnected prototypes or an over-scoped attempt to solve the full game before proving one coherent journey.
+
+### Decision
+
+The First Crossing is one coherent approximately 10–20 minute product proof built around a musically complete audiovisual instrument, one narrow journey context, and a restrained world presentation.
+
+Inactivity is a supported play style, not a failure state. The experience must remain valid under active, intermittent, mostly observational, and peripheral attention. It is instrument-first, not instrument-only: the Trigger Engine must provide immediate standalone value while transit, environment, movement, transmissions, departure, and arrival reveal that the composition belongs to a larger world.
+
+Evaluation uses five attention timescales:
+
+- seconds: tactile and sensory pleasure;
+- one to five minutes: optional light tending;
+- five to twenty minutes: evolving attention or meaningful choices;
+- one journey: a strategic and/or emotional arc;
+- hours and days: progression and attachment, which are not required for the First Crossing proof.
+
+Mystery comes through implication, unfamiliar references, and coherent systems rather than exposition. A simplified departure from route selection or a minimal transition into flight is acceptable; final launch ritual, map, preparation, movement, progression, economy, and destination mechanics remain unresolved.
+
+First Crossing transmissions use a small content set. Their voice is sparse, institutional, operational, functional, understated, and human. Silence is part of the composition. Transmissions suggest work, infrastructure, places, people, routes, and incidents beyond the visible crossing without explaining the setting for the player's benefit. They do not require response or complete understanding during the First Crossing.
+
+WRLD owns transmission content, tone, density philosophy, and canon review. SYS-010 owns deterministic scheduling, eligibility, priority, seeded selection, once-per-crossing behavior, active duration, and runtime lifecycle. Draft lines and proper nouns remain non-canon until reviewed against the current lore authority.
+
+### Rationale
+
+Narrow coherence tests PHASE's actual thesis: a complete instrument can become a journey and world without losing long-form, low-demand value. Routine operational communication and meaningful silence make the world feel independent of the player while preserving solitude and mystery.
+
+### Consequences
+
+- a full hub, progression loop, economy, and final tactile piloting model cannot block the First Crossing;
+- passive observation remains valid for the full run;
+- transmissions cannot become a radio-show layer or exposition channel;
+- content authoring and runtime scheduling remain separate responsibilities;
+- the standalone gateway still precedes any requirement to understand routes, lore, or progression.
+
+### Alternatives considered
+
+- **Require constant interaction:** rejected because it conflicts with foreground/peripheral coexistence.
+- **Explain the world during the first crossing:** rejected because curiosity should precede exposition.
+- **Build broad world systems before one coherent route:** rejected by D027 and the narrow First Crossing scope.
+- **Treat transmission writing as scheduler configuration:** rejected because content authority and delivery mechanics have different owners.
+
+### Migration and verification
+
+- evaluate the integrated crossing at all five attention timescales;
+- verify several uninterrupted quiet stretches and a small reviewed transmission set;
+- confirm no unresolved movement, map, progression, economy, or destination mechanic is silently promoted;
+- validate both foreground and peripheral completion.
+
+### Supersedes / superseded by
+
+Clarifies D001, D002, D027, and D031 for the current First Crossing. It does not resolve the general interaction, progression, economy, destination, or narrative-response systems.
+
+### Source
+
+WRLD-001 and WRLD-002 Relay handoffs; approved reconciliation, Catch-up Steps 9 and 10A.
+
+---
+
+## D043 — The First Crossing MVP uses an unobstructed exterior-forward primary view
+
+**Status:** ACCEPTED
+**Scope:** Current First Crossing MVP camera and visual target
+**Date:** 2026-08-11
+
+### Context
+
+Older Project Bible language required cockpit or glider hardware framing in the first proof. The current graphics direction needs to establish the extreme-altitude cloud world before final glider, cockpit, canopy, and instrumentation designs exist. Those vehicle designs remain unresolved and depend partly on missing reference images.
+
+### Decision
+
+The First Crossing MVP primary view is an unobstructed exterior-forward view with:
+
+- an extreme-altitude cloud world;
+- enormous sightlines;
+- cloud geography mainly below the player;
+- open upper atmosphere;
+- a stable distant horizon;
+- multiple cloud scales;
+- slow monumental motion;
+- a cold blue/white baseline.
+
+Cockpit, canopy, wings, nose, dashboard, and other hardware framing are not required in this primary MVP view.
+
+This is a scoped MVP decision, not a rejection of long-term cockpit, glider, exterior craft, or alternate-camera possibilities.
+
+### Rationale
+
+An unobstructed view lets the first graphics proof establish scale, atmosphere, performance, comfort, and environmental identity without inventing unresolved vehicle hardware. It also keeps the current R7 comparison evidence aligned with the First Crossing target.
+
+### Consequences
+
+- older cockpit-required MVP language is superseded;
+- essential route state and Trigger Engine presentation must remain legible without relying on a dashboard frame;
+- final cockpit, glider silhouette, physical controls, and projected UI remain later visual decisions;
+- the final renderer remains unresolved.
+
+### Alternatives considered
+
+- **Require cockpit framing for the MVP:** rejected because it couples the first environment proof to unresolved vehicle design.
+- **Remove cockpit/glider possibilities from PHASE:** rejected because the decision applies only to the current primary MVP view.
+
+### Migration and verification
+
+- update the First Crossing scope and minimum visual contract;
+- retain long-term cockpit/glider sections with explicit post-MVP or unresolved status;
+- validate sightlines, horizon stability, reduced motion, route legibility, and full-duration comfort through SYS-005.
+
+### Supersedes / superseded by
+
+Supersedes cockpit-required language only for the current First Crossing MVP primary view. D040 remains the graphics-laboratory boundary; no renderer is selected.
+
+### Source
+
+Explicit project-owner graphics direction, Reconciliation Step 7D; approved Relay reconciliation, Catch-up Step 10A.
+
+---
+
+## D044 — Trigger Engine crystallization remains status-separated exploration
+
+**Status:** ACCEPTED
+**Scope:** SYS-001 Trigger Engine originality direction and maturity boundary
+**Date:** 2026-08-11
+
+### Context
+
+The crystallization handoff proposes a way for PHASE to become more original through interaction with emergent mathematical relationships. Some principles restate accepted rhythm architecture, while glider grammar, propulsion, persistence, progression, and player authoring remain unresolved. Treating the full handoff as one feature requirement would silently promote exploratory ideas.
+
+### Decision
+
+The following are accepted constraints:
+
+- geometry expresses rhythm and never determines authoritative rhythm;
+- a Trigger Engine begins from a complete seed composition that already sounds good;
+- passive observation remains valid for the full experience;
+- visual complexity need not equal audible voice count, and additional visual structure does not automatically create another rhythmic voice.
+
+The strong SYS-001 direction is to explore exact phase relationships as relationship candidates and optional player curation or crystallization. PHASE's originality should come from meaningful interaction and world integration rather than arbitrary decorative geometry.
+
+Crystallization mechanics themselves remain exploratory. Candidate relationship definitions, selection, shaping, sonic mapping, density/orchestration governance, glider grammar, propulsion coupling, Crossing Forms, and large mature structures require explicit design and approval. Persistence, archive, sharing, progression integration, and player-facing authoring are deferred until after the First Crossing MVP.
+
+Any future crystallization path must flow from authoritative rhythm to an exact relationship candidate to an explicit player/system command and then to versioned projections. Rendered collision or geometry cannot create events. Structural rhythm changes require the immutable composition-revision policy in D034.
+
+The R4 Pendulum, Orbital, and String Network families remain comparative development laboratories. They are not selected production gateway engines, glider families, or crystallization implementations.
+
+### Rationale
+
+Status separation preserves a distinctive design opportunity without weakening the rhythm invariants, over-scoping the First Crossing, or allowing a brainstorm to become canon through implementation pressure.
+
+### Consequences
+
+- SYS-001 may define and test a bounded relationship-candidate or optional-curation proof only after explicit scope approval;
+- SYS-006, SYS-009, graphics, progression, and My Studio must not assume glider grammar, propulsion coupling, persistence, or Crossing Forms;
+- R4 evidence remains reusable without selecting a final geometry;
+- the repository currently contains no authoritative SYS-002 task definition, and none may be invented here.
+
+### Alternatives considered
+
+- **Canonize the complete crystallization handoff:** rejected because most mechanics and ownership questions remain unresolved.
+- **Differentiate PHASE through arbitrary path complexity:** rejected because mathematical truth and meaningful interaction are the stronger originality direction.
+- **Let visual growth add unrestricted voices:** rejected because visual and sonic complexity have different budgets.
+- **Discard crystallization entirely:** rejected because it is a promising SYS-001 direction compatible with accepted architecture when properly bounded.
+
+### Migration and verification
+
+- add status-separated guidance to the Trigger Engine reference;
+- keep R4 archive/lab metadata development-only;
+- require a future decision before production crystallization, glider grammar, propulsion coupling, persistence, or player authoring;
+- verify any future proof consumes authoritative snapshots/events and cannot generate musical events from geometry.
+
+### Supersedes / superseded by
+
+Does not supersede D003–D009, D031–D035, D038, or D040. It constrains how the exploratory concept may be investigated.
+
+### Source
+
+Trigger Engine Evolution / Crystallization Relay handoff; approved reconciliation, Catch-up Steps 9 and 10A.
+
+---
+
 ## 2. Rejected decision register
 
 The following have been explicitly rejected or superseded:
@@ -1424,6 +1683,7 @@ The following have been explicitly rejected or superseded:
 | R016 | Darkness/gore/jump scares as primary horror | Beautiful daylight horror |
 | R017 | Degradation/corruption as universal transformation | Convergence |
 | R018 | Arbitrary global musical tick grid | Exact rational macro position plus integer event indices |
+| R019 | Cockpit/hardware framing required for the First Crossing MVP | Unobstructed exterior-forward primary view; cockpit/glider possibilities deferred |
 
 ---
 
@@ -1438,7 +1698,7 @@ The following must not be assigned an accepted decision number until selected:
 - visitor motive;
 - exact harmony physics;
 - exact 432 Hz reference/temperament;
-- transit failure/pause behavior;
+- general post-MVP transit failure/pause behavior; the current First Crossing freeze policy is resolved by D034/D041;
 - weather-to-composition model;
 - progression ranks/trees/currencies;
 - economy;
@@ -1496,10 +1756,4 @@ Why?
 
 ## 5. Run boundary
 
-`PRODUCT_ROADMAP.md` and this file complete **Run 7 only**.
-
-Run 8 still needs to create:
-
-- `GLOSSARY.md`;
-- root `AGENTS.md`;
-- the full cross-document consistency audit and revisions.
+The original D001–D030 decision set and `PRODUCT_ROADMAP.md` completed **Run 7** of the Project Bible documentation plan. D031–D044 were added through later explicitly approved project checkpoints. `GLOSSARY.md`, root `AGENTS.md`, and the governing documentation set now exist; this historical run boundary does not describe pending work.

@@ -3,7 +3,8 @@
 **Document role:** Run 1 project archaeology and canon classification  
 **Authority:** Provisional source-of-truth index for later Project Bible runs  
 **Source:** The referenced conversation `Kashmer-Alterra / Tomorrow's Forecast` (`6a50f785-0ac0-83eb-810f-8b1901da6a8f`) as retrieved for this run  
-**Last classified:** 2026-08-02  
+**Last classified:** 2026-08-11
+
 **Scope limit:** This document classifies conversation-established intent. It does not claim that any feature is implemented in the current repository.
 
 ---
@@ -88,7 +89,8 @@ This selection is **LOCKED / CANON** as project-development provenance and produ
 2. **Transit is the central experiential unit.**
    - A crossing is not fast travel.
    - It unfolds as a long-form audiovisual composition.
-   - The player travels from a cockpit/pilot-point-of-view through skies, clouds, changing weather, and anomalous conditions.
+   - The source conversation proposed a cockpit/pilot-point-of-view through skies, clouds, changing weather, and anomalous conditions.
+   - **SUPERSEDED FOR THE CURRENT FIRST CROSSING MVP BY D043:** the primary view is unobstructed and exterior-forward, with no required cockpit, canopy, wings, nose, dashboard, or other hardware framing. Long-term cockpit/glider views remain open.
    - Long duration is part of the intended identity, not automatically a pacing defect.
 
 3. **The world and instrument are one design.**

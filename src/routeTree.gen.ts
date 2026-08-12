@@ -9,31 +9,31 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthRouteImport } from './routes/auth'
 import { Route as StudioRouteImport } from './routes/studio'
-import { Route as AdminPacksRouteImport } from './routes/admin.packs'
-import { Route as AdminScalesRouteImport } from './routes/admin.scales'
-import { Route as AdminScenesRouteImport } from './routes/admin.scenes'
-import { Route as DevCrossingRouteImport } from './routes/dev.crossing'
-import { Route as DevCrystallizationRouteImport } from './routes/dev.crystallization'
-import { Route as DevFirstCrossingRouteImport } from './routes/dev.first-crossing'
-import { Route as DevGraphicsRouteImport } from './routes/dev.graphics'
-import { Route as DevJourneyRouteImport } from './routes/dev.journey'
-import { Route as DevLegacyRhythmRouteImport } from './routes/dev.legacy-rhythm'
-import { Route as DevMovementRouteImport } from './routes/dev.movement'
-import { Route as DevPerformanceRouteImport } from './routes/dev.performance'
-import { Route as DevTransmissionsRouteImport } from './routes/dev.transmissions'
-import { Route as DevTriggerEnginesRouteImport } from './routes/dev.trigger-engines'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
-import { Route as StudioBuilderRouteImport } from './routes/studio.builder'
-import { Route as StudioPacksRouteImport } from './routes/studio.packs'
-import { Route as StudioScalesRouteImport } from './routes/studio.scales'
 import { Route as StudioScenesRouteImport } from './routes/studio.scenes'
+import { Route as StudioScalesRouteImport } from './routes/studio.scales'
+import { Route as StudioPacksRouteImport } from './routes/studio.packs'
+import { Route as StudioBuilderRouteImport } from './routes/studio.builder'
+import { Route as DevTriggerEnginesRouteImport } from './routes/dev.trigger-engines'
+import { Route as DevTransmissionsRouteImport } from './routes/dev.transmissions'
+import { Route as DevPerformanceRouteImport } from './routes/dev.performance'
+import { Route as DevMovementRouteImport } from './routes/dev.movement'
+import { Route as DevLegacyRhythmRouteImport } from './routes/dev.legacy-rhythm'
+import { Route as DevJourneyRouteImport } from './routes/dev.journey'
+import { Route as DevGraphicsRouteImport } from './routes/dev.graphics'
+import { Route as DevFirstCrossingRouteImport } from './routes/dev.first-crossing'
+import { Route as DevCrystallizationRouteImport } from './routes/dev.crystallization'
+import { Route as DevCrossingRouteImport } from './routes/dev.crossing'
+import { Route as AdminScenesRouteImport } from './routes/admin.scenes'
+import { Route as AdminScalesRouteImport } from './routes/admin.scales'
+import { Route as AdminPacksRouteImport } from './routes/admin.packs'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const StudioRoute = StudioRouteImport.update({
+  id: '/studio',
+  path: '/studio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -41,74 +41,9 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const StudioRoute = StudioRouteImport.update({
-  id: '/studio',
-  path: '/studio',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminPacksRoute = AdminPacksRouteImport.update({
-  id: '/admin/packs',
-  path: '/admin/packs',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminScalesRoute = AdminScalesRouteImport.update({
-  id: '/admin/scales',
-  path: '/admin/scales',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminScenesRoute = AdminScenesRouteImport.update({
-  id: '/admin/scenes',
-  path: '/admin/scenes',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevCrossingRoute = DevCrossingRouteImport.update({
-  id: '/dev/crossing',
-  path: '/dev/crossing',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevCrystallizationRoute = DevCrystallizationRouteImport.update({
-  id: '/dev/crystallization',
-  path: '/dev/crystallization',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevFirstCrossingRoute = DevFirstCrossingRouteImport.update({
-  id: '/dev/first-crossing',
-  path: '/dev/first-crossing',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevGraphicsRoute = DevGraphicsRouteImport.update({
-  id: '/dev/graphics',
-  path: '/dev/graphics',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevJourneyRoute = DevJourneyRouteImport.update({
-  id: '/dev/journey',
-  path: '/dev/journey',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevLegacyRhythmRoute = DevLegacyRhythmRouteImport.update({
-  id: '/dev/legacy-rhythm',
-  path: '/dev/legacy-rhythm',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevMovementRoute = DevMovementRouteImport.update({
-  id: '/dev/movement',
-  path: '/dev/movement',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevPerformanceRoute = DevPerformanceRouteImport.update({
-  id: '/dev/performance',
-  path: '/dev/performance',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevTransmissionsRoute = DevTransmissionsRouteImport.update({
-  id: '/dev/transmissions',
-  path: '/dev/transmissions',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevTriggerEnginesRoute = DevTriggerEnginesRouteImport.update({
-  id: '/dev/trigger-engines',
-  path: '/dev/trigger-engines',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StudioIndexRoute = StudioIndexRouteImport.update({
@@ -116,14 +51,9 @@ const StudioIndexRoute = StudioIndexRouteImport.update({
   path: '/',
   getParentRoute: () => StudioRoute,
 } as any)
-const StudioBuilderRoute = StudioBuilderRouteImport.update({
-  id: '/builder',
-  path: '/builder',
-  getParentRoute: () => StudioRoute,
-} as any)
-const StudioPacksRoute = StudioPacksRouteImport.update({
-  id: '/packs',
-  path: '/packs',
+const StudioScenesRoute = StudioScenesRouteImport.update({
+  id: '/scenes',
+  path: '/scenes',
   getParentRoute: () => StudioRoute,
 } as any)
 const StudioScalesRoute = StudioScalesRouteImport.update({
@@ -131,10 +61,80 @@ const StudioScalesRoute = StudioScalesRouteImport.update({
   path: '/scales',
   getParentRoute: () => StudioRoute,
 } as any)
-const StudioScenesRoute = StudioScenesRouteImport.update({
-  id: '/scenes',
-  path: '/scenes',
+const StudioPacksRoute = StudioPacksRouteImport.update({
+  id: '/packs',
+  path: '/packs',
   getParentRoute: () => StudioRoute,
+} as any)
+const StudioBuilderRoute = StudioBuilderRouteImport.update({
+  id: '/builder',
+  path: '/builder',
+  getParentRoute: () => StudioRoute,
+} as any)
+const DevTriggerEnginesRoute = DevTriggerEnginesRouteImport.update({
+  id: '/dev/trigger-engines',
+  path: '/dev/trigger-engines',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevTransmissionsRoute = DevTransmissionsRouteImport.update({
+  id: '/dev/transmissions',
+  path: '/dev/transmissions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevPerformanceRoute = DevPerformanceRouteImport.update({
+  id: '/dev/performance',
+  path: '/dev/performance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevMovementRoute = DevMovementRouteImport.update({
+  id: '/dev/movement',
+  path: '/dev/movement',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevLegacyRhythmRoute = DevLegacyRhythmRouteImport.update({
+  id: '/dev/legacy-rhythm',
+  path: '/dev/legacy-rhythm',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevJourneyRoute = DevJourneyRouteImport.update({
+  id: '/dev/journey',
+  path: '/dev/journey',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevGraphicsRoute = DevGraphicsRouteImport.update({
+  id: '/dev/graphics',
+  path: '/dev/graphics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevFirstCrossingRoute = DevFirstCrossingRouteImport.update({
+  id: '/dev/first-crossing',
+  path: '/dev/first-crossing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevCrystallizationRoute = DevCrystallizationRouteImport.update({
+  id: '/dev/crystallization',
+  path: '/dev/crystallization',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevCrossingRoute = DevCrossingRouteImport.update({
+  id: '/dev/crossing',
+  path: '/dev/crossing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminScenesRoute = AdminScenesRouteImport.update({
+  id: '/admin/scenes',
+  path: '/admin/scenes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminScalesRoute = AdminScalesRouteImport.update({
+  id: '/admin/scales',
+  path: '/admin/scales',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminPacksRoute = AdminPacksRouteImport.update({
+  id: '/admin/packs',
+  path: '/admin/packs',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -298,11 +298,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/studio': {
+      id: '/studio'
+      path: '/studio'
+      fullPath: '/studio'
+      preLoaderRoute: typeof StudioRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -312,102 +312,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/studio': {
-      id: '/studio'
-      path: '/studio'
-      fullPath: '/studio'
-      preLoaderRoute: typeof StudioRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/packs': {
-      id: '/admin/packs'
-      path: '/admin/packs'
-      fullPath: '/admin/packs'
-      preLoaderRoute: typeof AdminPacksRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/scales': {
-      id: '/admin/scales'
-      path: '/admin/scales'
-      fullPath: '/admin/scales'
-      preLoaderRoute: typeof AdminScalesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/scenes': {
-      id: '/admin/scenes'
-      path: '/admin/scenes'
-      fullPath: '/admin/scenes'
-      preLoaderRoute: typeof AdminScenesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dev/crossing': {
-      id: '/dev/crossing'
-      path: '/dev/crossing'
-      fullPath: '/dev/crossing'
-      preLoaderRoute: typeof DevCrossingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dev/crystallization': {
-      id: '/dev/crystallization'
-      path: '/dev/crystallization'
-      fullPath: '/dev/crystallization'
-      preLoaderRoute: typeof DevCrystallizationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dev/first-crossing': {
-      id: '/dev/first-crossing'
-      path: '/dev/first-crossing'
-      fullPath: '/dev/first-crossing'
-      preLoaderRoute: typeof DevFirstCrossingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dev/graphics': {
-      id: '/dev/graphics'
-      path: '/dev/graphics'
-      fullPath: '/dev/graphics'
-      preLoaderRoute: typeof DevGraphicsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dev/journey': {
-      id: '/dev/journey'
-      path: '/dev/journey'
-      fullPath: '/dev/journey'
-      preLoaderRoute: typeof DevJourneyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dev/legacy-rhythm': {
-      id: '/dev/legacy-rhythm'
-      path: '/dev/legacy-rhythm'
-      fullPath: '/dev/legacy-rhythm'
-      preLoaderRoute: typeof DevLegacyRhythmRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dev/movement': {
-      id: '/dev/movement'
-      path: '/dev/movement'
-      fullPath: '/dev/movement'
-      preLoaderRoute: typeof DevMovementRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dev/performance': {
-      id: '/dev/performance'
-      path: '/dev/performance'
-      fullPath: '/dev/performance'
-      preLoaderRoute: typeof DevPerformanceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dev/transmissions': {
-      id: '/dev/transmissions'
-      path: '/dev/transmissions'
-      fullPath: '/dev/transmissions'
-      preLoaderRoute: typeof DevTransmissionsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dev/trigger-engines': {
-      id: '/dev/trigger-engines'
-      path: '/dev/trigger-engines'
-      fullPath: '/dev/trigger-engines'
-      preLoaderRoute: typeof DevTriggerEnginesRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/studio/': {
@@ -417,18 +326,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioIndexRouteImport
       parentRoute: typeof StudioRoute
     }
-    '/studio/builder': {
-      id: '/studio/builder'
-      path: '/builder'
-      fullPath: '/studio/builder'
-      preLoaderRoute: typeof StudioBuilderRouteImport
-      parentRoute: typeof StudioRoute
-    }
-    '/studio/packs': {
-      id: '/studio/packs'
-      path: '/packs'
-      fullPath: '/studio/packs'
-      preLoaderRoute: typeof StudioPacksRouteImport
+    '/studio/scenes': {
+      id: '/studio/scenes'
+      path: '/scenes'
+      fullPath: '/studio/scenes'
+      preLoaderRoute: typeof StudioScenesRouteImport
       parentRoute: typeof StudioRoute
     }
     '/studio/scales': {
@@ -438,12 +340,110 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioScalesRouteImport
       parentRoute: typeof StudioRoute
     }
-    '/studio/scenes': {
-      id: '/studio/scenes'
-      path: '/scenes'
-      fullPath: '/studio/scenes'
-      preLoaderRoute: typeof StudioScenesRouteImport
+    '/studio/packs': {
+      id: '/studio/packs'
+      path: '/packs'
+      fullPath: '/studio/packs'
+      preLoaderRoute: typeof StudioPacksRouteImport
       parentRoute: typeof StudioRoute
+    }
+    '/studio/builder': {
+      id: '/studio/builder'
+      path: '/builder'
+      fullPath: '/studio/builder'
+      preLoaderRoute: typeof StudioBuilderRouteImport
+      parentRoute: typeof StudioRoute
+    }
+    '/dev/trigger-engines': {
+      id: '/dev/trigger-engines'
+      path: '/dev/trigger-engines'
+      fullPath: '/dev/trigger-engines'
+      preLoaderRoute: typeof DevTriggerEnginesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/transmissions': {
+      id: '/dev/transmissions'
+      path: '/dev/transmissions'
+      fullPath: '/dev/transmissions'
+      preLoaderRoute: typeof DevTransmissionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/performance': {
+      id: '/dev/performance'
+      path: '/dev/performance'
+      fullPath: '/dev/performance'
+      preLoaderRoute: typeof DevPerformanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/movement': {
+      id: '/dev/movement'
+      path: '/dev/movement'
+      fullPath: '/dev/movement'
+      preLoaderRoute: typeof DevMovementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/legacy-rhythm': {
+      id: '/dev/legacy-rhythm'
+      path: '/dev/legacy-rhythm'
+      fullPath: '/dev/legacy-rhythm'
+      preLoaderRoute: typeof DevLegacyRhythmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/journey': {
+      id: '/dev/journey'
+      path: '/dev/journey'
+      fullPath: '/dev/journey'
+      preLoaderRoute: typeof DevJourneyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/graphics': {
+      id: '/dev/graphics'
+      path: '/dev/graphics'
+      fullPath: '/dev/graphics'
+      preLoaderRoute: typeof DevGraphicsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/first-crossing': {
+      id: '/dev/first-crossing'
+      path: '/dev/first-crossing'
+      fullPath: '/dev/first-crossing'
+      preLoaderRoute: typeof DevFirstCrossingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/crystallization': {
+      id: '/dev/crystallization'
+      path: '/dev/crystallization'
+      fullPath: '/dev/crystallization'
+      preLoaderRoute: typeof DevCrystallizationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/crossing': {
+      id: '/dev/crossing'
+      path: '/dev/crossing'
+      fullPath: '/dev/crossing'
+      preLoaderRoute: typeof DevCrossingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/scenes': {
+      id: '/admin/scenes'
+      path: '/admin/scenes'
+      fullPath: '/admin/scenes'
+      preLoaderRoute: typeof AdminScenesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/scales': {
+      id: '/admin/scales'
+      path: '/admin/scales'
+      fullPath: '/admin/scales'
+      preLoaderRoute: typeof AdminScalesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/packs': {
+      id: '/admin/packs'
+      path: '/admin/packs'
+      fullPath: '/admin/packs'
+      preLoaderRoute: typeof AdminPacksRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }

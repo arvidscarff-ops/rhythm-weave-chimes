@@ -131,6 +131,10 @@ function createHarness(initialSession = createCompositionRevisionSession(composi
       transportTime = sceneTime;
       audioState.currentTime = 10 + sceneTime;
     },
+    setPositionWithAudioTime(sceneTime: number, audioTime: number) {
+      transportTime = sceneTime;
+      audioState.currentTime = audioTime;
+    },
     setPaused(value: boolean) {
       paused = value;
     },
@@ -178,6 +182,17 @@ describe("authoritative production scheduler", () => {
     expect(new Set(harness.audioEvents.map((event) => event.id)).size).toBe(
       harness.audioEvents.length,
     );
+  });
+
+  it("keeps immediate late events valid when a resumed AudioContext has not advanced", () => {
+    const harness = createHarness();
+    harness.scheduler.resync({ secondsNumerator: 0n, secondsDenominator: 1n });
+    harness.setPositionWithAudioTime(0.05, 0);
+    harness.scheduler.tickNow();
+
+    expect(harness.audioEvents.length).toBeGreaterThan(0);
+    expect(harness.audioEvents.every((event) => event.audioContextTime >= 0)).toBe(true);
+    expect(harness.audioEvents[0]?.audioContextTime).toBe(0);
   });
 
   it("keeps adjacent half-open windows duplicate-free and shares identity with rendering", () => {

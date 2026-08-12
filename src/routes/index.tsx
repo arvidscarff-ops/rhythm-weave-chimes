@@ -46,6 +46,10 @@ import { voidSheetsScene, type VoidSheetsState } from "@/lib/scenes/voidSheets";
 import { customScene, type CustomSceneState } from "@/lib/scenes/customScene";
 import { engineClock } from "@/lib/engine/clock";
 import { installEngineClockVisibilityFreeze } from "@/lib/engine/visibilityFreeze";
+import {
+  createProductionAudioGraph,
+  type ProductionAudioGraph,
+} from "@/lib/engine/productionAudioGraph";
 import { createFireLayer } from "@/lib/visuals/fireShaderLayer";
 import { engineScheduler } from "@/lib/engine/scheduler";
 import {
@@ -279,36 +283,6 @@ type EngineState = {
   phaseAlignRings: PhaseAlignRingsState | null;
   voidSheets: VoidSheetsState | null;
   custom: CustomSceneState | null;
-};
-
-type AudioGraph = {
-  ctx: AudioContext;
-  master: GainNode;
-  busTrim: GainNode;
-  highpass: BiquadFilterNode;
-  limiter: DynamicsCompressorNode;
-  preFx: GainNode; // input bus
-  filter: BiquadFilterNode;
-  shelf: BiquadFilterNode;
-  chorusMix: GainNode;
-  chorusRate: AudioParam; // proxy: control both chorus LFOs
-  delayL: DelayNode;
-  delayR: DelayNode;
-  delayFeedback: GainNode;
-  wet: GainNode;
-  dryToMaster: GainNode;
-  grainDelay: DelayNode;
-  grainFeedback: GainNode;
-  grainMix: GainNode;
-  convolver: ConvolverNode;
-  reverbWet: GainNode;
-  reverbSend: GainNode;
-  irSeconds: number;
-  _chorusRateB: AudioParam;
-  _chorusDepthA: GainNode;
-  _chorusDepthB: GainNode;
-  _reverbDamp: BiquadFilterNode;
-  _reverbPredelay: DelayNode;
 };
 
 /* ============================================================
@@ -1020,7 +994,7 @@ export function PhaseApp({ sceneAccess }: { sceneAccess: RhythmSceneAccess }) {
   const packRef = useRef<RuntimePack>(activePack);
   packRef.current = activePack;
 
-  const audioRef = useRef<AudioGraph | null>(null);
+  const audioRef = useRef<ProductionAudioGraph | null>(null);
   const engineRef = useRef<EngineState>({
     w: 0,
     h: 0,
@@ -1609,209 +1583,16 @@ export function PhaseApp({ sceneAccess }: { sceneAccess: RhythmSceneAccess }) {
     window.setTimeout(() => setShareToast(null), 2200);
   }, [buildSessionState]);
 
-  /* ---- Audio graph init ---- */
-  const ensureAudio = useCallback((): AudioGraph => {
+  /* ---- Shared production audio graph init ---- */
+  const ensureAudio = useCallback((): ProductionAudioGraph => {
     if (audioRef.current) return audioRef.current;
-    const Ctx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    // 48 kHz + interactive latency for a noticeably cleaner top end.
-    let ctx: AudioContext;
-    try {
-      ctx = new Ctx({ sampleRate: 48000, latencyHint: "interactive" });
-    } catch {
-      ctx = new Ctx();
-    }
-
-    const master = ctx.createGain();
-    master.gain.value = knobsRef.current.mainVol * 0.7;
-
-    const preFx = ctx.createGain();
-    preFx.gain.value = 1;
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = knobsRef.current.fx1;
-    filter.Q.value = 0.6;
-
-    // tone: high-shelf right after filter
-    const shelf = ctx.createBiquadFilter();
-    shelf.type = "highshelf";
-    shelf.frequency.value = 4000;
-    shelf.gain.value = 0;
-
-    /* ---- True stereo chorus: dual delay lines, quadrature LFOs, hard-panned ---- */
-    const chorusSplit = ctx.createChannelSplitter(2);
-    const chorusMerge = ctx.createChannelMerger(2);
-    const chorusDelayL = ctx.createDelay(0.05);
-    const chorusDelayR = ctx.createDelay(0.05);
-    chorusDelayL.delayTime.value = 0.011;
-    chorusDelayR.delayTime.value = 0.017;
-    const chorusLFO_A = ctx.createOscillator();
-    const chorusLFO_B = ctx.createOscillator();
-    chorusLFO_A.frequency.value = 0.35;
-    chorusLFO_B.frequency.value = 0.35;
-    // Phase B by 90° via cosine wavetable
-    const cosTable = ctx.createPeriodicWave(new Float32Array([0, 0]), new Float32Array([0, 1]));
-    chorusLFO_B.setPeriodicWave(cosTable);
-    const chorusDepthA = ctx.createGain();
-    chorusDepthA.gain.value = 0.004;
-    const chorusDepthB = ctx.createGain();
-    chorusDepthB.gain.value = 0.004;
-    chorusLFO_A.connect(chorusDepthA);
-    chorusDepthA.connect(chorusDelayL.delayTime);
-    chorusLFO_B.connect(chorusDepthB);
-    chorusDepthB.connect(chorusDelayR.delayTime);
-    chorusLFO_A.start();
-    chorusLFO_B.start();
-    const chorusMix = ctx.createGain();
-    chorusMix.gain.value = 0.08;
-
-    /* ---- Ping-pong delay (true stereo) ---- */
-    const delayL = ctx.createDelay(2.5);
-    const delayR = ctx.createDelay(2.5);
-    delayL.delayTime.value = knobsRef.current.revSize;
-    delayR.delayTime.value = knobsRef.current.revSize * 1.5;
-    const delayFeedback = ctx.createGain();
-    delayFeedback.gain.value = 0.36;
-    const wet = ctx.createGain();
-    wet.gain.value = knobsRef.current.revMix * 0.35;
-    const dryToMaster = ctx.createGain();
-    dryToMaster.gain.value = 0.78;
-
-    /* ---- Convolution reverb (procedural stereo IR) ---- */
-    const irSeconds = 3.2;
-    const convolver = ctx.createConvolver();
-    convolver.normalize = true;
-    {
-      const sr = ctx.sampleRate;
-      const len = Math.floor(sr * irSeconds);
-      const ir = ctx.createBuffer(2, len, sr);
-      const dL = ir.getChannelData(0);
-      const dR = ir.getChannelData(1);
-      // Exponentially decaying noise — classic ambient hall IR
-      for (let i = 0; i < len; i++) {
-        const t = i / sr;
-        const env = Math.pow(1 - i / len, 2.6) * Math.exp(-t * 1.4);
-        // Slight stereo decorrelation
-        dL[i] = (Math.random() * 2 - 1) * env;
-        dR[i] = (Math.random() * 2 - 1) * env;
-      }
-      convolver.buffer = ir;
-    }
-    const reverbSend = ctx.createGain();
-    reverbSend.gain.value = 1;
-    // Pre-delay + damping LP before convolver for a smoother tail
-    const reverbPredelay = ctx.createDelay(0.2);
-    reverbPredelay.delayTime.value = 0.02;
-    const reverbDamp = ctx.createBiquadFilter();
-    reverbDamp.type = "lowpass";
-    reverbDamp.frequency.value = 5200;
-    reverbDamp.Q.value = 0.5;
-    const reverbWet = ctx.createGain();
-    reverbWet.gain.value = knobsRef.current.revMix * 0.45;
-
-    // grain: secondary delay tap
-    const grainDelay = ctx.createDelay(0.4);
-    grainDelay.delayTime.value = 0.06;
-    const grainFeedback = ctx.createGain();
-    grainFeedback.gain.value = 0.0;
-    const grainMix = ctx.createGain();
-    grainMix.gain.value = 0.0;
-
-    // bus trim + master limiter give headroom for parallel sends
-    const busTrim = ctx.createGain();
-    busTrim.gain.value = 0.26;
-    const highpass = ctx.createBiquadFilter();
-    highpass.type = "highpass";
-    highpass.frequency.value = 42;
-    highpass.Q.value = 0.7;
-    const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = -16;
-    limiter.knee.value = 4;
-    limiter.ratio.value = 20;
-    limiter.attack.value = 0.002;
-    limiter.release.value = 0.12;
-
-    /* ---- Routing ---- */
-    preFx.connect(filter);
-    filter.connect(shelf);
-
-    // Dry
-    shelf.connect(dryToMaster);
-
-    // Stereo chorus: split → modulated delays → merge → mix
-    shelf.connect(chorusSplit);
-    chorusSplit.connect(chorusDelayL, 0);
-    chorusSplit.connect(chorusDelayR, 1);
-    chorusDelayL.connect(chorusMerge, 0, 0);
-    chorusDelayR.connect(chorusMerge, 0, 1);
-    chorusMerge.connect(chorusMix);
-    chorusMix.connect(dryToMaster);
-
-    dryToMaster.connect(busTrim);
-
-    // Ping-pong delay: cross-fed L/R
-    shelf.connect(delayL);
-    delayL.connect(delayFeedback);
-    delayFeedback.connect(delayR);
-    delayR.connect(delayFeedback); // soft cross-feedback
-    const ppMerge = ctx.createChannelMerger(2);
-    delayL.connect(ppMerge, 0, 0);
-    delayR.connect(ppMerge, 0, 1);
-    ppMerge.connect(wet);
-    wet.connect(busTrim);
-
-    // Convolution reverb send
-    shelf.connect(reverbSend);
-    reverbSend.connect(reverbPredelay);
-    reverbPredelay.connect(reverbDamp);
-    reverbDamp.connect(convolver);
-    convolver.connect(reverbWet);
-    reverbWet.connect(busTrim);
-
-    shelf.connect(grainDelay);
-    grainDelay.connect(grainFeedback);
-    grainFeedback.connect(grainDelay);
-    grainDelay.connect(grainMix);
-    grainMix.connect(busTrim);
-
-    busTrim.connect(master);
-    master.connect(highpass);
-    highpass.connect(limiter);
-    limiter.connect(ctx.destination);
-
-    audioRef.current = {
-      ctx,
-      master,
-      busTrim,
-      highpass,
-      limiter,
-      preFx,
-      filter,
-      shelf,
-      chorusMix,
-      chorusRate: chorusLFO_A.frequency,
-      delayL,
-      delayR,
-      delayFeedback,
-      wet,
-      dryToMaster,
-      grainDelay,
-      grainFeedback,
-      grainMix,
-      convolver,
-      reverbWet,
-      reverbSend,
-      irSeconds,
-      // Internal handles for fxState (kept on the object for chorus depth + LFO B rate)
-      _chorusRateB: chorusLFO_B.frequency,
-      _chorusDepthA: chorusDepthA,
-      _chorusDepthB: chorusDepthB,
-      _reverbDamp: reverbDamp,
-      _reverbPredelay: reverbPredelay,
-    };
-    return audioRef.current!;
+    audioRef.current = createProductionAudioGraph({
+      mainVolume: knobsRef.current.mainVol,
+      filterCutoffHz: knobsRef.current.fx1,
+      delaySeconds: knobsRef.current.revSize,
+      reverbMix: knobsRef.current.revMix,
+    });
+    return audioRef.current;
   }, []);
 
   /* ---- Sync knobs -> audio params ---- */
@@ -2432,7 +2213,7 @@ function decayWheelFlashes(wh: WheelState, dt: number) {
 function updateWheel(
   wh: WheelState,
   dt: number,
-  audio: AudioGraph,
+  audio: ProductionAudioGraph,
   bpm: number,
   voices: VoiceSel,
   knobs: Knobs,
@@ -2834,7 +2615,7 @@ function decayPendulumFlashes(pend: PendulumState, dt: number) {
 function updatePendulum(
   pend: PendulumState,
   dt: number,
-  audio: AudioGraph,
+  audio: ProductionAudioGraph,
   bpm: number,
   knobs: Knobs,
   pack: RuntimePack,
@@ -2952,7 +2733,7 @@ function decayBarsFlashes(bars: BarsState, dt: number) {
 function updateBars(
   bars: BarsState,
   dt: number,
-  audio: AudioGraph,
+  audio: ProductionAudioGraph,
   bpm: number,
   knobs: Knobs,
   pack: RuntimePack,

@@ -182,7 +182,14 @@ export function createProductionScheduler(dependencies: SchedulerDependencies) {
     if (consumedIds.has(timelineEvent.id)) return;
     const presentation = applyOverlay(binding.project(timelineEvent));
     const occurrence = transportSecondsToNumber(timelineEvent.suppliedTransportOccurrence);
-    const audioContextTime = transport.sceneToAudioTime(occurrence);
+    const translatedAudioTime = transport.sceneToAudioTime(occurrence);
+    if (!Number.isFinite(translatedAudioTime)) {
+      throw new RangeError(`Invalid Web Audio time for authoritative event ${timelineEvent.id}.`);
+    }
+    // Web Audio treats past events as immediate, but its scheduling methods
+    // reject negative timestamps. Preserve the existing immediate-late-event
+    // behavior while keeping the timestamp valid on newly resumed contexts.
+    const audioContextTime = Math.max(0, binding.audioCtx.currentTime, translatedAudioTime);
     const scheduled = Object.freeze({
       id: timelineEvent.id,
       timelineEvent,

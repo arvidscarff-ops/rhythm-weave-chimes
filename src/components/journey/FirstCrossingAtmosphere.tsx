@@ -14,9 +14,11 @@ export type FirstCrossingAtmosphereFrame = Readonly<{
 export function FirstCrossingAtmosphere({
   backend,
   readFrame,
+  onBackendUnavailable,
 }: {
   backend: GraphicsLabBackend;
   readFrame(): FirstCrossingAtmosphereFrame;
+  onBackendUnavailable?(backend: GraphicsLabBackend, error: unknown): void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const readFrameRef = useRef(readFrame);
@@ -30,6 +32,7 @@ export function FirstCrossingAtmosphere({
       renderer = createAtmosphereRenderer(backend, canvas);
     } catch (error) {
       console.warn("[first-crossing] provisional atmosphere unavailable", error);
+      onBackendUnavailable?.(backend, error);
       return;
     }
 
@@ -74,7 +77,7 @@ export function FirstCrossingAtmosphere({
       cancelAnimationFrame(animationFrame);
       renderer.dispose();
     };
-  }, [backend]);
+  }, [backend, onBackendUnavailable]);
 
   return (
     <canvas

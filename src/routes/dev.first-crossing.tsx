@@ -120,6 +120,7 @@ function FirstCrossingVerticalSlice() {
   const [restoreNote, setRestoreNote] = useState("No run snapshot captured.");
   const [diagnostics, setDiagnostics] = useState(false);
   const [backend, setBackend] = useState<GraphicsLabBackend>("canvas-2d");
+  const [rendererNotice, setRendererNotice] = useState<string | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const instrumentRef = useRef<FirstCrossingInstrumentHandle>(null);
   const keyboardRef = useRef<KeyboardInputAdapter | null>(null);
@@ -151,6 +152,20 @@ function FirstCrossingVerticalSlice() {
 
   const publishReadout = useCallback(() => {
     setReadout({ ...readoutRef.current });
+  }, []);
+
+  const selectBackend = useCallback((nextBackend: GraphicsLabBackend) => {
+    setRendererNotice(null);
+    setBackend(nextBackend);
+  }, []);
+
+  const handleBackendUnavailable = useCallback((unavailableBackend: GraphicsLabBackend) => {
+    if (unavailableBackend === "webgl-2") {
+      setRendererNotice("WebGL 2 is unavailable in this browser. Canvas 2D is active instead.");
+      setBackend((current) => (current === "webgl-2" ? "canvas-2d" : current));
+      return;
+    }
+    setRendererNotice("Canvas 2D is unavailable in this browser; the atmosphere cannot render.");
   }, []);
 
   useEffect(() => {
@@ -280,7 +295,11 @@ function FirstCrossingVerticalSlice() {
 
   return (
     <main className="relative h-[100svh] min-h-[38rem] overflow-hidden bg-[#06141b] text-white">
-      <FirstCrossingAtmosphere backend={backend} readFrame={readAtmosphereFrame} />
+      <FirstCrossingAtmosphere
+        backend={backend}
+        readFrame={readAtmosphereFrame}
+        onBackendUnavailable={handleBackendUnavailable}
+      />
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,12,18,0.06),transparent_38%,rgba(2,10,15,0.3)_70%,rgba(2,8,12,0.72))]"
@@ -327,8 +346,8 @@ function FirstCrossingVerticalSlice() {
       </header>
 
       {!session.started ? (
-        <section className="absolute inset-0 z-30 grid place-items-center bg-[#041016]/18 px-6 backdrop-blur-[1px]">
-          <div className="w-full max-w-sm border border-white/18 bg-[#07171d]/82 px-6 py-6 text-center shadow-[0_30px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+        <section className="pointer-events-none absolute inset-0 z-30 grid place-items-center bg-[#041016]/18 px-6 backdrop-blur-[1px]">
+          <div className="pointer-events-auto w-full max-w-sm border border-white/18 bg-[#07171d]/82 px-6 py-6 text-center shadow-[0_30px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl">
             <p className="font-mono text-[8px] uppercase tracking-[0.28em] text-white/42">
               One route · one composition · one run
             </p>
@@ -440,7 +459,7 @@ function FirstCrossingVerticalSlice() {
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setBackend(value)}
+                  onClick={() => selectBackend(value)}
                   className={`border px-2 py-1 ${backend === value ? "border-white/35 text-white" : "border-white/12"}`}
                 >
                   {value}
@@ -484,6 +503,11 @@ function FirstCrossingVerticalSlice() {
             <dt className="text-white/32">renderer</dt>
             <dd>{backend} · provisional</dd>
           </dl>
+          {rendererNotice ? (
+            <p className="mt-3 normal-case leading-relaxed tracking-normal text-amber-100/62">
+              {rendererNotice}
+            </p>
+          ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"

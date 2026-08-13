@@ -378,3 +378,14 @@ The following require explicit product-owner approval:
 - abandoning deterministic closure;
 - copying a reference’s surface language directly.
 
+---
+
+## 16. PHASE Agent System activation
+
+- When Shane explicitly approves a PHASE mission, the main Codex task acts as Supervisor and follows `.agents/skills/phase-supervisor/SKILL.md` plus the Operations v1 documents.
+- Load specialist Skills only when the current checkpoint needs them; do not preload the full roster or full Project Bible.
+- Engineer is the only implementation writer. Supervisor may append operational receipts to `docs/phase-agent-missions.jsonl`; Reviewer and Researcher remain independent and read-only.
+- Reviewer verifies the actual diff, files, and checks rather than trusting worker summaries. Use Researcher only when repository or external evidence is genuinely required.
+- Accepted decisions and current governing documents remain authoritative. Historical, reset, prototype, and raw handoff material is evidence only unless current canon explicitly adopts it.
+- Stop at any Shane gate defined by the Supervisor Skill or approved task brief. A Shane gate always overrides autonomous continuation.
+- Agent mission receipts belong only in `docs/phase-agent-missions.jsonl`; never reinterpret or modify `docs/phase-progress.jsonl` for agent orchestration.

@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://phase.local/schemas/phase-agent-missions.schema.json",
+  "title": "PHASE agent mission receipt",
+  "description": "One append-only execution, review, gate, or completion receipt. File order is authoritative; existing lines are immutable.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mission_id",
+    "objective",
+    "checkpoint_id",
+    "checkpoint_index",
+    "status",
+    "branch",
+    "base_commit",
+    "head_commit",
+    "worker_role",
+    "correction_attempt",
+    "reviewer_verdict",
+    "completed",
+    "remaining",
+    "verification",
+    "human_gate",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "mission_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "objective": {
+      "type": "string",
+      "minLength": 1
+    },
+    "checkpoint_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "checkpoint_index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "status": {
+      "enum": [
+        "MISSION_STARTED",
+        "CHECKPOINT_STARTED",
+        "CHECKPOINT_WORKING",
+        "RESEARCH_COMPLETE",
+        "IMPLEMENTATION_COMPLETE",
+        "IN_REVIEW",
+        "REVIEW_FAILED",
+        "CORRECTION_STARTED",
+        "REVIEW_PASSED",
+        "CHECKPOINT_COMPLETE",
+        "MISSION_COMPLETE",
+        "NEEDS_SHANE",
+        "BLOCKED",
+        "CANCELLED"
+      ]
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "base_commit": {
+      "$ref": "#/$defs/commit"
+    },
+    "head_commit": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/commit"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "worker_role": {
+      "enum": [
+        "supervisor",
+        "researcher",
+        "engineer",
+        "reviewer"
+      ]
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tier"
+      ],
+      "properties": {
+        "tier": {
+          "enum": [
+            "T0",
+            "T1",
+            "T2",
+            "T3"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reasoning_effort": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "correction_attempt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "reviewer_verdict": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        null
+      ]
+    },
+    "completed": {
+      "$ref": "#/$defs/stringList"
+    },
+    "remaining": {
+      "$ref": "#/$defs/stringList"
+    },
+    "verification": {
+      "$ref": "#/$defs/stringList"
+    },
+    "human_gate": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "reason"
+          ],
+          "properties": {
+            "category": {
+              "enum": [
+                "CANON_STATUS",
+                "PRODUCT_GAMEPLAY",
+                "FINAL_ART_DIRECTION",
+                "FINAL_TRIGGER_ENGINE",
+                "FINAL_RENDERER",
+                "ARCHITECTURE_INVARIANT",
+                "SCOPE_EXPANSION",
+                "PURCHASE",
+                "LICENSING",
+                "SECRETS_CREDENTIALS",
+                "DATABASE_SECURITY_POLICY",
+                "PRODUCTION_DATA",
+                "EXTERNAL_ACTION",
+                "DESTRUCTIVE_GIT",
+                "MERGE_MAIN",
+                "REVIEW_DISAGREEMENT",
+                "CORRECTION_LIMIT",
+                "OWNER_CHECKPOINT"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "notes": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    }
+  }
+}

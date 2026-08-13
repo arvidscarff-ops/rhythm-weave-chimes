@@ -75,6 +75,11 @@ import {
 } from "@/lib/rhythm/productionComposition";
 import { transportSecondsToNumber } from "@/lib/rhythm/liveTimelineAdapter";
 import {
+  presentRootGatewayRuntime,
+  rootGatewayEnginePresentation,
+  type RootGatewayRuntimePresentation,
+} from "@/lib/rhythm/rootGatewayPresentation";
+import {
   composerAdvance,
   resetComposerSources,
   loadComposerSettings,
@@ -91,45 +96,6 @@ import {
   type NeuralSettings,
 } from "@/lib/neural/palette";
 
-/**
- * Resolve "how many notes will actually play" for the active scene from the
- * dock's universal density (multiply) knob. Mirrors each scene's internal
- * count formula so the dock can display an honest number.
- */
-function resolveNotesCount(scene: SceneKind, density: number, noteCount: number = 8): number {
-  switch (scene) {
-    case "stringNet": {
-      const n = Math.max(3, Math.min(6, Math.round(3 + (density - 2) * 0.3)));
-      // C(n,2) strings × 2 particles each.
-      return (n * (n - 1)) / 2 * 2;
-    }
-    case "pendulumFan":
-      return Math.max(5, Math.min(14, Math.round(5 + (density - 2) * 0.9)));
-    case "spiralArp":
-      return 3;
-    case "radialSweep":
-      return Math.max(6, Math.min(16, Math.round(6 + (density - 2) * 1)));
-    case "mandalaMatrix":
-      return Math.max(6, Math.min(30, Math.round((6 + (density - 2) * 2.4) / 6) * 6));
-    case "metatronLattice":
-      return 25;
-    case "fractalNebula":
-      return 50;
-    case "radialResonator":
-      return 24;
-    case "phaseAlignRings":
-      return Math.max(4, Math.min(24, noteCount));
-    case "voidSheets":
-      return Math.max(4, Math.min(24, noteCount));
-    case "custom":
-      return Math.max(4, Math.min(48, noteCount));
-    case "wheel":
-    case "pendulum":
-    case "bars":
-    default:
-      return density;
-  }
-}
 import {
   buildShareUrl,
   copyShareUrl,
@@ -913,10 +879,19 @@ export function PhaseApp({ sceneAccess }: { sceneAccess: RhythmSceneAccess }) {
     sceneAccess === "legacy" ? DEFAULT_LEGACY_RHYTHM_SCENE : DEFAULT_PRODUCTION_RHYTHM_SCENE,
   );
   const setScene = useCallback(
-    (next: SceneKind) => setSceneState(resolveRhythmSceneAccess(next, sceneAccess)),
+    (next: SceneKind) => {
+      const resolved = resolveRhythmSceneAccess(next, sceneAccess);
+      setSceneState(
+        sceneAccess === "production" && !isProductionPhaseAlignedEngineId(resolved)
+          ? DEFAULT_PRODUCTION_RHYTHM_SCENE
+          : resolved,
+      );
+    },
     [sceneAccess],
   );
   const [bpm, setBpm] = useState(90);
+  const [productionRuntimePresentation, setProductionRuntimePresentation] =
+    useState<RootGatewayRuntimePresentation | null>(null);
   const [fxState, setFxState] = useState<FxState>(DEFAULT_FX_STATE);
   const [selectedPack, setSelectedPack] = useState<string>("moss");
   const [customPacks, setCustomPacks] = useState<RuntimePack[]>([]);
@@ -1075,6 +1050,19 @@ export function PhaseApp({ sceneAccess }: { sceneAccess: RhythmSceneAccess }) {
     else if (engineId === "voidSheets") state.voidSheets = null;
   }, []);
 
+  const refreshProductionRuntimePresentation = useCallback(() => {
+    const session = productionSessionRef.current;
+    if (!session) {
+      setProductionRuntimePresentation(null);
+      return;
+    }
+    setProductionRuntimePresentation(
+      presentRootGatewayRuntime(session, engineClock.t(), (revision) =>
+        productionConfigsRef.current.get(revision),
+      ),
+    );
+  }, []);
+
   const cycleForComposition = resolveGlobalCycle();
   const productionStructure = isProductionPhaseAlignedEngineId(scene)
     ? `${scene}|${knobs.multiply}|${cycleForComposition.baseLaps}|${cycleForComposition.macroCycleSeconds}|${cycleForComposition.noteCount}`
@@ -1087,6 +1075,7 @@ export function PhaseApp({ sceneAccess }: { sceneAccess: RhythmSceneAccess }) {
       productionProjectionStatesRef.current.clear();
       lastProductionStructureRef.current = null;
       initialProductionWindowPendingRef.current = false;
+      setProductionRuntimePresentation(null);
       return;
     }
     if (lastProductionStructureRef.current === productionStructure) return;
@@ -1124,7 +1113,28 @@ export function PhaseApp({ sceneAccess }: { sceneAccess: RhythmSceneAccess }) {
     }
     lastProductionStructureRef.current = productionStructure;
     engineScheduler.resync();
-  }, [knobs.multiply, productionStructure, resetMigratedSceneState, resolveGlobalCycle, scene]);
+    refreshProductionRuntimePresentation();
+  }, [
+    knobs.multiply,
+    productionStructure,
+    refreshProductionRuntimePresentation,
+    resetMigratedSceneState,
+    resolveGlobalCycle,
+    scene,
+  ]);
+
+  useEffect(() => {
+    if (sceneAccess !== "production") return;
+    refreshProductionRuntimePresentation();
+    if (!playing || productionRuntimePresentation?.pending?.revision == null) return;
+    const timer = window.setInterval(refreshProductionRuntimePresentation, 500);
+    return () => window.clearInterval(timer);
+  }, [
+    playing,
+    productionRuntimePresentation?.pending?.revision,
+    refreshProductionRuntimePresentation,
+    sceneAccess,
+  ]);
 
   /* ---- Authoritative production scheduler binding -------------------
    * Only migrated Phase-Alignment engines bind here. Their scene modules
@@ -1320,6 +1330,7 @@ export function PhaseApp({ sceneAccess }: { sceneAccess: RhythmSceneAccess }) {
       },
       setSession: (session) => {
         productionSessionRef.current = session;
+        refreshProductionRuntimePresentation();
       },
       project: (event) => {
         const { config, globals, occurrenceSceneTime } = globalsForEvent(event);
@@ -1415,6 +1426,7 @@ export function PhaseApp({ sceneAccess }: { sceneAccess: RhythmSceneAccess }) {
           if (revision !== activeRevision) productionProjectionStatesRef.current.delete(revision);
         }
         bumpTopo();
+        refreshProductionRuntimePresentation();
       },
     });
 
@@ -1423,7 +1435,7 @@ export function PhaseApp({ sceneAccess }: { sceneAccess: RhythmSceneAccess }) {
       initialProductionWindowPendingRef.current = false;
     }
     return () => engineScheduler.setActive(null);
-  }, [bumpTopo, playing, resetMigratedSceneState, scene]);
+  }, [bumpTopo, playing, refreshProductionRuntimePresentation, resetMigratedSceneState, scene]);
 
   /* ---- Session URL: share + restore ---- */
   const buildSessionState = useCallback(
@@ -1871,6 +1883,11 @@ export function PhaseApp({ sceneAccess }: { sceneAccess: RhythmSceneAccess }) {
   const togglePlay = async () => {
     const a = ensureAudio();
     engineClock.attachAudio(a.ctx);
+    // The dock restores/displays the requested transport rate before the
+    // singleton clock has necessarily received a rate-change interaction.
+    // Synchronize it at the playback boundary so displayed and actual
+    // musical time cannot diverge on the first play.
+    engineClock.setSpeed(knobsRef.current.speed);
     applyFxState(a, fxState);
     if (a.ctx.state === "suspended") await a.ctx.resume();
     if (playingRef.current) resetComposerSources();
@@ -2072,21 +2089,28 @@ export function PhaseApp({ sceneAccess }: { sceneAccess: RhythmSceneAccess }) {
           a Trigger Engine template
         </aside>
       ) : null}
-      <PhaseReadout
-        scene={scene}
-        wheel={engineRef.current.wheel}
-        pendulum={engineRef.current.pendulum}
-        bars={engineRef.current.bars}
-        bpm={bpm}
-        hoverRingId={hoverRing}
-        topo={topo}
-      />
+      {sceneAccess === "legacy" ? (
+        <LegacyPhaseReadout
+          scene={scene}
+          wheel={engineRef.current.wheel}
+          pendulum={engineRef.current.pendulum}
+          bars={engineRef.current.bars}
+          bpm={bpm}
+          hoverRingId={hoverRing}
+          topo={topo}
+        />
+      ) : productionRuntimePresentation ? (
+        <ProductionPhaseReadout runtime={productionRuntimePresentation} />
+      ) : null}
       <AdminTrigger />
       {/* CANVAS */}
       <main className="flex-1 relative" style={{ minHeight: 0 }}>
         <canvas
           ref={canvasRef}
           data-scene-canvas
+          data-active-engine={productionRuntimePresentation?.active.engineId}
+          data-active-revision={productionRuntimePresentation?.active.revision}
+          data-pending-engine={productionRuntimePresentation?.pending?.engineId}
           className="absolute inset-0 w-full h-full block"
           style={{ background: "transparent", cursor: isWheel ? "crosshair" : "default" }}
           onPointerDown={onCanvasPointerDown}
@@ -2118,9 +2142,9 @@ export function PhaseApp({ sceneAccess }: { sceneAccess: RhythmSceneAccess }) {
         onTogglePlay={togglePlay}
         scene={scene}
         onScene={setScene}
+        productionRuntime={productionRuntimePresentation}
         multiply={knobs.multiply}
         onMultiply={(n) => setKnobs((k) => ({ ...k, multiply: n }))}
-        notesCount={resolveNotesCount(scene, knobs.multiply, resolveGlobalCycle().noteCount)}
         cycleOverride={cycleOverrideRef.current}
         cycleActiveScene={{
           baseLaps: getActiveScene()?.base_laps ?? 10,
@@ -3115,7 +3139,47 @@ function LineHandle({
  * PhaseChrome — page-level HUD: wordmark, live clock, rail, meta
  * ============================================================ */
 
-function PhaseReadout({
+function ProductionPhaseReadout({ runtime }: { runtime: RootGatewayRuntimePresentation }) {
+  const active = runtime.active;
+  const activeTopology = rootGatewayEnginePresentation(active.engineId).topologyControl;
+  const pending = runtime.pending;
+  return (
+    <div className="pointer-events-none absolute left-7 z-10" style={{ top: 260 }}>
+      <div className="pr-label text-white/30 mb-2">AUTHORITATIVE RHYTHM</div>
+      <div className="flex flex-col gap-1 tabular-nums">
+        <div className="pr-label text-white/75">ACTIVE · {active.label.toUpperCase()}</div>
+        <div className="pr-label text-white/35">REVISION · {active.revision}</div>
+        <div className="pr-label text-white/35">VOICES · {active.voiceCount}</div>
+        <div className="pr-label text-white/35">
+          {activeTopology === "density"
+            ? `TOPOLOGY DENSITY · ${active.density}`
+            : activeTopology === "note-count"
+              ? `CONFIGURED VOICES · ${active.configuredNoteCount}`
+              : "TOPOLOGY · FIXED"}
+        </div>
+        <div className="pr-label text-white/35">BASE LAPS · {active.baseLaps}</div>
+        <div className="pr-label text-white/35">
+          MACRO-CYCLE · {active.macroCycleSeconds.toFixed(2)} MUSICAL S
+        </div>
+        {pending ? (
+          <div className="mt-2 border-l border-amber-200/25 pl-2">
+            <div className="pr-label text-amber-100/75">
+              PENDING · {pending.label.toUpperCase()}
+            </div>
+            <div className="pr-label text-amber-100/40">
+              REVISION {pending.revision} · {pending.voiceCount} VOICES
+            </div>
+            <div className="pr-label text-amber-100/40">
+              PHASE ZERO · ≈{Math.ceil(pending.musicalSecondsUntilActivation)} MUSICAL S
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function LegacyPhaseReadout({
   scene,
   wheel,
   pendulum,
@@ -3146,7 +3210,7 @@ function PhaseReadout({
       label: `P${i + 1}`,
       period: pendPeriodSec(b, bpm),
     }));
-  } else {
+  } else if (scene === "bars") {
     rows = bars.lanes.map((l) => {
       const r = BAR_RATIOS[l.ratioIndex % BAR_RATIOS.length];
       return { id: l.id, label: `${r.num}/${r.den}`, period: barPeriodSec(l, bpm) };

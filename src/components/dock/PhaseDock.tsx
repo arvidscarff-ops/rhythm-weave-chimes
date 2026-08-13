@@ -28,6 +28,7 @@ import {
   Image as ImageIcon,
   Video,
   Loader2,
+  Clock3,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -76,6 +77,12 @@ import type {
   RhythmSceneAccess,
   RhythmSceneId,
 } from "@/lib/engine/rhythmSceneAccess";
+import {
+  ROOT_GATEWAY_ENGINES,
+  rootGatewayEnginePresentation,
+  type RootGatewayRuntimePresentation,
+} from "@/lib/rhythm/rootGatewayPresentation";
+import type { ProductionPhaseAlignedEngineId } from "@/lib/rhythm/productionComposition";
 
 export type SceneKind = RhythmSceneId;
 
@@ -86,10 +93,9 @@ type Props = {
 
   scene: SceneKind;
   onScene: (s: SceneKind) => void;
+  productionRuntime: RootGatewayRuntimePresentation | null;
   multiply: number;
   onMultiply: (n: number) => void;
-  /** Resolved number of notes that will actually play in the current scene. */
-  notesCount: number;
 
   bpm: number;
   onBpm: (n: number) => void;
@@ -126,9 +132,9 @@ const DOCK_BTN =
   "group relative inline-flex h-10 items-center gap-2 rounded-full px-3 text-[11px] font-medium uppercase tracking-[0.16em] text-foreground/70 hover:text-foreground transition-colors";
 
 export function PhaseDock(p: Props) {
-  const sceneShort =
-    ENGINE_SCENES.find((s) => s.id === p.scene)?.short ??
-    p.scene.slice(0, 3).toUpperCase();
+  const activeRuntime = p.productionRuntime?.active ?? null;
+  const pendingRuntime = p.productionRuntime?.pending ?? null;
+  const sceneShort = activeRuntime?.short ?? p.scene.slice(0, 3).toUpperCase();
   const [recState, setRecState] = useState<{ recording: boolean; left: number }>({
     recording: false,
     left: 0,
@@ -178,14 +184,36 @@ export function PhaseDock(p: Props) {
           "select-none",
         )}
       >
-        <span>SCN·{sceneShort}</span>
-        <span aria-hidden>·</span>
-        <span>{p.bpm} BPM</span>
-        <span aria-hidden>·</span>
-        <span>{p.speed.toFixed(2)}×</span>
-        <span aria-hidden>·</span>
-        <span>{p.notesCount} NOTES</span>
+        {activeRuntime ? (
+          <div className="contents">
+            <span>ACTIVE·{sceneShort}</span>
+            <span aria-hidden>·</span>
+            <span>REV·{activeRuntime.revision}</span>
+            <span aria-hidden>·</span>
+            <span>{p.speed.toFixed(2)}×</span>
+            <span aria-hidden>·</span>
+            <span>{activeRuntime.voiceCount} VOICES</span>
+          </div>
+        ) : (
+          <span>AUTHORITY·INITIALIZING</span>
+        )}
       </div>
+      {pendingRuntime ? (
+        <div
+          className="pointer-events-auto mx-auto mb-1.5 flex w-fit items-center gap-2 rounded-full border border-amber-200/20 bg-neutral-950/75 px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] text-amber-100/75 backdrop-blur-xl"
+          role="status"
+          aria-live="polite"
+        >
+          <Clock3 className="h-3 w-3" />
+          <span>
+            Active {activeRuntime?.short} · Pending {pendingRuntime.short}
+          </span>
+          <span className="text-amber-100/45">
+            Phase Zero · ≈{Math.ceil(pendingRuntime.musicalSecondsUntilActivation)} musical sec
+          </span>
+          {!p.playing ? <span className="text-amber-100/45">· paused</span> : null}
+        </div>
+      ) : null}
       <div
         className={cn(
           "pointer-events-auto relative flex items-center gap-1 rounded-full",
@@ -221,13 +249,22 @@ export function PhaseDock(p: Props) {
           onScene={p.onScene}
           multiply={p.multiply}
           onMultiply={p.onMultiply}
-          notesCount={p.notesCount}
+          productionRuntime={p.productionRuntime}
         />
         {p.sceneAccess === "production" ? (
-          <SceneChips scene={p.scene} onScene={p.onScene} />
+          <SceneChips
+            requestedScene={p.scene}
+            activeScene={activeRuntime?.engineId ?? null}
+            pendingScene={pendingRuntime?.engineId ?? null}
+            onScene={p.onScene}
+          />
         ) : null}
         <FxMenu fx={p.fx} onFx={p.onFx} />
-        <ScalesMenu composer={p.composer} onComposer={p.onComposer} authed={p.authed} />
+        {p.sceneAccess === "production" ? (
+          <UnavailableScalesControl />
+        ) : (
+          <ScalesMenu composer={p.composer} onComposer={p.onComposer} authed={p.authed} />
+        )}
         <PacksMenu packs={p.packs} packId={p.packId} onPackId={p.onPackId} />
         <VisualsMenu neural={p.neural} onNeural={p.onNeural} />
         <BackdropMenu />
@@ -235,19 +272,29 @@ export function PhaseDock(p: Props) {
           override={p.cycleOverride}
           defaults={p.cycleActiveScene}
           onOverride={p.onCycleOverride}
+          noteCountSupported={
+            p.sceneAccess !== "production" ||
+            (p.sceneAccess === "production" &&
+              rootGatewayEnginePresentation(p.scene as ProductionPhaseAlignedEngineId)
+                .topologyControl === "note-count")
+          }
         />
 
         <Divider />
 
-        <InlineSlider
-          label="BPM"
-          value={p.bpm}
-          min={20}
-          max={180}
-          step={1}
-          onChange={p.onBpm}
-          suffix=""
-        />
+        {p.sceneAccess === "production" ? (
+          <UnavailableBpmControl />
+        ) : (
+          <InlineSlider
+            label="BPM"
+            value={p.bpm}
+            min={20}
+            max={180}
+            step={1}
+            onChange={p.onBpm}
+            suffix=""
+          />
+        )}
         <InlineSlider
           label="SPD"
           value={p.speed}
@@ -323,44 +370,44 @@ function Divider() {
 }
 
 /* =================== Engine scene chips =================== */
-const ENGINE_SCENES: { id: SceneKind; label: string; short: string }[] = [
-  { id: "stringNet", label: "String Network", short: "STR" },
-  { id: "pendulumFan", label: "Pendulum Fan", short: "PEN" },
-  { id: "spiralArp", label: "Spiral Arpeggiator", short: "SPI" },
-  { id: "radialSweep", label: "Radial Sweep", short: "RAD" },
-  { id: "mandalaMatrix", label: "Mandala Matrix", short: "MND" },
-  { id: "metatronLattice", label: "Metatron Lattice", short: "MTN" },
-  { id: "fractalNebula", label: "Fractal Nebula", short: "NEB" },
-  { id: "radialResonator", label: "Radial Resonator", short: "RES" },
-  { id: "phaseAlignRings", label: "Phase-Align Rings", short: "PHZ" },
-  { id: "voidSheets", label: "Void Sheets", short: "VOD" },
-  { id: "custom", label: "Custom (Builder)", short: "CST" },
-];
-
 function SceneChips({
-  scene,
+  requestedScene,
+  activeScene,
+  pendingScene,
   onScene,
 }: {
-  scene: SceneKind;
+  requestedScene: SceneKind;
+  activeScene: ProductionPhaseAlignedEngineId | null;
+  pendingScene: ProductionPhaseAlignedEngineId | null;
   onScene: (s: SceneKind) => void;
 }) {
   return (
     <div className="flex items-center gap-1 rounded-full bg-white/[0.03] p-0.5">
-      {ENGINE_SCENES.map((s) => {
-        const active = scene === s.id;
+      {ROOT_GATEWAY_ENGINES.map((s) => {
+        const active = activeScene === s.id;
+        const pending = pendingScene === s.id;
+        const requested = requestedScene === s.id;
         return (
           <button
             key={s.id}
             onClick={() => onScene(s.id)}
-            title={s.label}
+            title={`${s.label}${active ? " · active" : pending ? " · pending Phase Zero" : ""}`}
+            aria-pressed={requested}
+            data-active={active || undefined}
+            data-pending={pending || undefined}
             className={cn(
-              "rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] transition-all",
+              "relative rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] transition-all",
               active
                 ? "bg-white/[0.10] text-foreground shadow-[0_0_18px_-6px_rgba(255,255,255,0.45)] ring-1 ring-white/15"
-                : "text-foreground/45 hover:text-foreground/80 hover:bg-white/[0.04]",
+                : pending
+                  ? "bg-amber-200/[0.07] text-amber-100/85 ring-1 ring-amber-200/30"
+                  : "text-foreground/45 hover:text-foreground/80 hover:bg-white/[0.04]",
             )}
           >
             {s.short}
+            {pending ? (
+              <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-200" />
+            ) : null}
           </button>
         );
       })}
@@ -414,16 +461,25 @@ function SceneMenu({
   onScene,
   multiply,
   onMultiply,
-  notesCount,
+  productionRuntime,
 }: {
   sceneAccess: RhythmSceneAccess;
   scene: SceneKind;
   onScene: (s: SceneKind) => void;
   multiply: number;
   onMultiply: (n: number) => void;
-  notesCount: number;
+  productionRuntime: RootGatewayRuntimePresentation | null;
 }) {
   const [open, setOpen] = useState(false);
+  const requestedEngine =
+    sceneAccess === "production" && productionRuntime
+      ? (scene as ProductionPhaseAlignedEngineId)
+      : null;
+  const topologyControl = requestedEngine
+    ? rootGatewayEnginePresentation(requestedEngine).topologyControl
+    : null;
+  const displayedVoiceCount =
+    productionRuntime?.pending?.voiceCount ?? productionRuntime?.active.voiceCount ?? multiply;
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger className={DOCK_BTN}>
@@ -432,27 +488,30 @@ function SceneMenu({
       <DropdownMenuContent side="top" align="center">
         <DropdownMenuPage id="main">
           {sceneAccess === "production" ? (
-            <>
+            <div className="contents">
               <DropdownMenuLabel>Engine</DropdownMenuLabel>
               <DropdownMenuRadioGroup
                 value={scene}
                 onValueChange={(v) => onScene(v as SceneKind)}
               >
-                <DropdownMenuRadioItem value="stringNet">String Network</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="pendulumFan">Pendulum Fan</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="spiralArp">Spiral Arpeggiator</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="radialSweep">Radial Sweep</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="mandalaMatrix">Mandala Matrix</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="metatronLattice">Metatron Lattice</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="fractalNebula">Fractal Nebula</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="radialResonator">Radial Resonator</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="phaseAlignRings">Phase-Align Rings</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="voidSheets">Void Sheets</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="custom">Custom (Builder)</DropdownMenuRadioItem>
+                {ROOT_GATEWAY_ENGINES.map((engine) => (
+                  <DropdownMenuRadioItem key={engine.id} value={engine.id}>
+                    {engine.label}
+                    {productionRuntime?.active.engineId === engine.id ? (
+                      <span className="ml-auto text-[9px] uppercase tracking-[0.16em] text-foreground/40">
+                        active
+                      </span>
+                    ) : productionRuntime?.pending?.engineId === engine.id ? (
+                      <span className="ml-auto text-[9px] uppercase tracking-[0.16em] text-amber-200/65">
+                        pending
+                      </span>
+                    ) : null}
+                  </DropdownMenuRadioItem>
+                ))}
               </DropdownMenuRadioGroup>
-            </>
+            </div>
           ) : (
-            <>
+            <div className="contents">
               <DropdownMenuLabel>Historical engine · non-authoritative</DropdownMenuLabel>
               <DropdownMenuRadioGroup
                 value={scene}
@@ -462,27 +521,57 @@ function SceneMenu({
                 <DropdownMenuRadioItem value="pendulum">Pendulum</DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="bars">Bars</DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
-            </>
+            </div>
           )}
-          <DropdownMenuSeparator />
-          <DropdownMenuPageTrigger targetId="multiply">
-            Notes <span className="ml-auto text-foreground/50">{notesCount}</span>
-          </DropdownMenuPageTrigger>
+          {sceneAccess !== "production" || topologyControl === "density" ? (
+            <div className="contents">
+              <DropdownMenuSeparator />
+              <DropdownMenuPageTrigger targetId="multiply">
+                {sceneAccess === "production" ? "Topology density" : "Notes"}
+                <span className="ml-auto text-foreground/50">
+                  {sceneAccess === "production"
+                    ? `${multiply} · ${displayedVoiceCount} voices`
+                    : displayedVoiceCount}
+                </span>
+              </DropdownMenuPageTrigger>
+            </div>
+          ) : null}
+          {sceneAccess === "production" && topologyControl === "fixed" ? (
+            <div className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-foreground/40">
+              Fixed topology · {displayedVoiceCount} authoritative voices
+            </div>
+          ) : null}
+          {sceneAccess === "production" && topologyControl === "note-count" ? (
+            <div className="px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-foreground/40">
+              Voice count is configured under Cycle
+            </div>
+          ) : null}
         </DropdownMenuPage>
 
-        <DropdownMenuPage id="multiply">
-          <DropdownMenuLabel>Notes ({notesCount} playing)</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={String(multiply)}
-            onValueChange={(v) => onMultiply(Number(v))}
-          >
-            {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
-              <DropdownMenuRadioItem key={n} value={String(n)}>
-                {n}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuPage>
+        {sceneAccess !== "production" || topologyControl === "density" ? (
+          <DropdownMenuPage id="multiply">
+            <DropdownMenuLabel>
+              {sceneAccess === "production"
+                ? "Topology density"
+                : `Notes (${displayedVoiceCount} playing)`}
+            </DropdownMenuLabel>
+            {sceneAccess === "production" ? (
+              <div className="px-3 pb-2 text-[10px] leading-relaxed text-foreground/45">
+                Changes engine structure and queues for the next exact Phase Zero.
+              </div>
+            ) : null}
+            <DropdownMenuRadioGroup
+              value={String(multiply)}
+              onValueChange={(v) => onMultiply(Number(v))}
+            >
+              {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
+                <DropdownMenuRadioItem key={n} value={String(n)}>
+                  {n}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuPage>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -493,10 +582,12 @@ function CycleMenu({
   override,
   defaults,
   onOverride,
+  noteCountSupported,
 }: {
   override: CycleOverride;
   defaults: { baseLaps: number; macroCycleSeconds: number; noteCount: number };
   onOverride: (o: CycleOverride) => void;
+  noteCountSupported: boolean;
 }) {
   const [open, setOpen] = useState(false);
   // Override state is restored client-side, so the indicator dot must not be
@@ -554,21 +645,26 @@ function CycleMenu({
                   : undefined
               }
             />
-            <CycleSlider
-              label="Notes"
-              value={effN}
-              min={4}
-              max={24}
-              step={1}
-              suffix=""
-              muted={override.noteCount === null}
-              onChange={(v) => onOverride({ ...override, noteCount: v })}
-              onReset={
-                override.noteCount !== null
-                  ? () => onOverride({ ...override, noteCount: null })
-                  : undefined
-              }
-            />
+            {noteCountSupported ? (
+              <CycleSlider
+                label="Voices"
+                value={effN}
+                min={4}
+                max={24}
+                step={1}
+                suffix=""
+                muted={override.noteCount === null}
+                onChange={(v) => onOverride({ ...override, noteCount: v })}
+                onReset={
+                  override.noteCount !== null
+                    ? () => onOverride({ ...override, noteCount: null })
+                    : undefined
+                }
+              />
+            ) : null}
+            <div className="text-[9px] uppercase tracking-[0.13em] text-foreground/35">
+              Structural changes activate at the next exact Phase Zero.
+            </div>
           </div>
           {overridden && (
             <DropdownMenuItem
@@ -582,6 +678,29 @@ function CycleMenu({
         </DropdownMenuPage>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function UnavailableScalesControl() {
+  return (
+    <button
+      disabled
+      title="Production pitch and tuning controls are not connected yet"
+      className={cn(DOCK_BTN, "cursor-not-allowed opacity-35")}
+    >
+      <ListMusic className="h-4 w-4" /> Scales · unavailable
+    </button>
+  );
+}
+
+function UnavailableBpmControl() {
+  return (
+    <span
+      title="Production cadence is currently defined by macro-cycle duration and transport speed"
+      className="inline-flex h-10 cursor-help items-center rounded-full px-3 text-[10px] uppercase tracking-[0.16em] text-foreground/30"
+    >
+      BPM · unavailable
+    </span>
   );
 }
 

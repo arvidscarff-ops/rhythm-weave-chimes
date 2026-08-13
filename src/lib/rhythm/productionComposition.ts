@@ -27,7 +27,7 @@ export type ProductionPhaseAlignedEngineId =
   | "phaseAlignRings"
   | "voidSheets";
 
-const PRODUCTION_PHASE_ALIGNED_ENGINE_IDS: readonly ProductionPhaseAlignedEngineId[] = [
+export const PRODUCTION_PHASE_ALIGNED_ENGINE_IDS: readonly ProductionPhaseAlignedEngineId[] = [
   "stringNet",
   "pendulumFan",
   "spiralArp",

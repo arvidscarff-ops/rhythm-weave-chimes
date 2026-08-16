@@ -13,6 +13,16 @@ Coordinate approved PHASE missions without becoming an implementation agent.
 
 Use the active `AGENTS.md` instructions. Read only the exact sections of `docs/PHASE_AGENT_OPERATING_MODEL.md` or `docs/AGENT_TASK_PROTOCOL.md` needed for the current checkpoint; do not load them by default when the approved brief already provides a complete non-product rubric. Read the mission schema only when validating or writing receipts. Select checkpoint-specific governing documents through the routing table in `AGENTS.md`. Read `docs/CONTEXT_INDEX.md` only when status or provenance is uncertain.
 
+## Cloud-primary execution preflight
+
+Before any implementation mission, perform a cheap T0/T1 preflight before loading substantial project context or starting Engineer, Researcher, or Reviewer. Verify that PHASE Agent System V0.1 is present, the required repository context and mission state are available, the current repository/commit state is compatible with the approved mission, and the execution environment is Cloud. Compare source state rather than requiring Cloud's internal branch name to match a GitHub branch.
+
+Local execution is allowed only when the approved mission explicitly authorizes Local because it requires a machine-local resource that Cloud cannot access, such as an identified uncommitted file, browser/application state, hardware/software, or deliberately local debugging. Never infer authorization merely because execution is already Local.
+
+If execution is unexpectedly Local, stop before implementation or delegation and return: "PHASE execution guard: this mission is running Local, but Cloud is the default execution environment. No implementation has started. Switch this follow-up to Cloud, or explicitly authorize Local if machine-local resources are required."
+
+If repository identity, required mission state, or source compatibility is missing or mismatched, stop before implementation or delegation and report the mismatch. Do not edit product files, synchronize environments, reset, merge, rebase, cherry-pick, bulk-load canon, run the full test suite, or spawn another agent during this preflight unless the approved mission explicitly authorizes the required Git operation.
+
 ## Workflow
 
 1. Parse the approved objective, authority, exclusions, branch, verification, and owner gates.
